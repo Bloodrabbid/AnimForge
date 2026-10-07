@@ -1,41 +1,52 @@
 {
-  "recipe": "curl",
-  "presets": [
+ "recipe": "curl",
+ "presets": [
+  {
+   "name": "tentacle-curl",
+   "help": "Щупальце загнуто к кончику и медленно «дышит» загибом.",
+   "params": {
+    "plane": "vertical",
+    "angle": 70,
+    "growth": 2,
+    "pulse": 0.35,
+    "period": 3.2,
+    "phase": 0
+   },
+   "provenance": [
     {
-      "name": "tentacle-curl",
-      "help": "Щупальце загнуто к кончику и медленно «дышит» загибом.",
-      "params": {
-        "plane": "vertical",
-        "angle": 70,
-        "growth": 2,
-        "pulse": 0.35,
-        "period": 3.2,
-        "phase": 0
-      },
-      "provenance": [
-        {
-          "source": "hand-tuned",
-          "ref": "на глаз"
-        }
+     "source": "hand-tuned",
+     "ref": "на глаз"
+    }
+   ]
+  },
+  {
+   "name": "breathe-spine",
+   "help": "Дыхание: спина еле заметно выгибается с периодом вдоха.",
+   "params": {
+    "plane": "vertical",
+    "angle": 3,
+    "growth": 0,
+    "pulse": 1,
+    "period": 1.75,
+    "phase": 0
+   },
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "02 §3.1 «Робот в меню»: BOY_Idle 1.0 с, Girl_idle_modify 1.67 с; 02 §3.2: Bipedboy_2dAnim_waiting 2.0 с",
+     "ranges": {
+      "period": [
+       1.0,
+       2.0
       ]
+     },
+     "note": "в Biped дышит корень (вертикальный сдвиг 3–6 % высоты), а не изгиб спины"
     },
     {
-      "name": "breathe-spine",
-      "help": "Дыхание: спина еле заметно выгибается с периодом вдоха.",
-      "params": {
-        "plane": "vertical",
-        "angle": 3,
-        "growth": 0,
-        "pulse": 1,
-        "period": 3.5,
-        "phase": 0
-      },
-      "provenance": [
-        {
-          "source": "hand-tuned",
-          "ref": "на глаз; заменить замерами idle-клипов"
-        }
-      ]
+     "source": "hand-tuned",
+     "ref": "angle 3° — на глаз; изгиба спины при дыхании ещё нет ни в одном разборе"
     }
-  ]
+   ]
+  }
+ ]
 }

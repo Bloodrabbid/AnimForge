@@ -1,0 +1,172 @@
+{
+ "presets": [
+  {
+   "name": "biped_menu_sway",
+   "help": "Камера меню медленно поводит головой: рысканье ±2.5° за 10 с, бесконечно.",
+   "target": "camera",
+   "duration": 10,
+   "loop": true,
+   "tracks": [
+    {
+     "prop": "yaw",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 5,
+       "from": 2.5,
+       "to": -2.5,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 5,
+       "t1": 10,
+       "from": -2.5,
+       "to": 2.5,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "02 §3.4, 03 §5.4: клип Camera"
+    }
+   ]
+  },
+  {
+   "name": "biped_level_intro",
+   "help": "Въезд в уровень: наезд 11.4 м и наклон 10°→30° за 6.78 с, тормозит к концу.",
+   "target": "camera",
+   "duration": 6.78,
+   "tracks": [
+    {
+     "prop": "pitch",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 6.78,
+       "from": 0,
+       "to": -20,
+       "ease": {
+        "hermite": [
+         1.0,
+         0
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "prop": "dolly",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 4.73,
+       "from": 0,
+       "to": 8.94,
+       "ease": {
+        "hermite": [
+         0,
+         1.1
+        ]
+       }
+      },
+      {
+       "t0": 4.73,
+       "t1": 6.78,
+       "from": 8.94,
+       "to": 11.43,
+       "ease": {
+        "hermite": [
+         1.7,
+         0
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "03 §3.5 «Катсцены»: Recorded_0 (Level*_CutsceneEnter), rotation.x 10→30, position.z −16.9→−7.96→−5.47",
+     "note": "ещё спуск по y 15.4→11.8 — в формате нет отдельного prop; dolly взят как ход по z; pitch переведён в Godot (вверх = +)"
+    }
+   ]
+  },
+  {
+   "name": "biped_finale_crane",
+   "help": "Финал уровня: взгляд медленно поднимается на 66° за 16 с, к середине FOV 50→60.",
+   "target": "camera",
+   "duration": 15.9,
+   "tracks": [
+    {
+     "prop": "pitch",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 7.23,
+       "from": 0,
+       "to": 6.24,
+       "ease": {
+        "hermite": [
+         0,
+         3.4
+        ]
+       }
+      },
+      {
+       "t0": 7.23,
+       "t1": 8.58,
+       "from": 6.24,
+       "to": 45.9,
+       "ease": {
+        "hermite": [
+         0.1,
+         0.2
+        ]
+       }
+      },
+      {
+       "t0": 8.58,
+       "t1": 15.9,
+       "from": 45.9,
+       "to": 66.3,
+       "ease": {
+        "hermite": [
+         2.5,
+         0
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "prop": "fov",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 7.93,
+       "t1": 14,
+       "from": 0,
+       "to": 10,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "03 §3.5: Recorded_3 (финал уровня)",
+     "note": "у других финалов (Recorded_5/10/27/28) подъём до −84° и FOV до 70 — по сводке, вручную не перепроверял; pitch переведён в Godot (вверх = +)"
+    }
+   ]
+  }
+ ]
+}

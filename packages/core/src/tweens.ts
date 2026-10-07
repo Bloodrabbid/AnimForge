@@ -23,7 +23,9 @@ export interface ShakeSpec {
 }
 
 export interface TweenTrack {
-  prop: string; // ui: alpha, scale, scale_x, scale_y, x, y, rotation · camera: fov, yaw, pitch, dolly, shake
+  // ui: alpha, scale, scale_x, scale_y, x, y (px, вниз = +), rotation (°) · camera: fov (°), yaw, pitch (°, вверх = +),
+  // dolly (м вперёд по взгляду камеры), shake. Оси — как в Godot; при переносе из Unity y и pitch меняют знак.
+  prop: string;
   mode?: "abs" | "add" | "mul"; // abs — значение как есть; add — к исходному; mul — множитель исходного
   segments?: Segment[];
   shake?: ShakeSpec;

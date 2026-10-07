@@ -1,0 +1,806 @@
+{
+ "presets": [
+  {
+   "name": "biped_bubble_in",
+   "help": "Пузырь-подсказка: проявление и рост 0.8→1 за 0.2 с smoothstep.",
+   "target": "ui",
+   "duration": 0.2,
+   "tracks": [
+    {
+     "prop": "alpha",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.2,
+       "from": 0,
+       "to": 1,
+       "ease": "smoothstep"
+      }
+     ]
+    },
+    {
+     "prop": "scale",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.2,
+       "from": 0.8,
+       "to": 1,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "02 §3.3 «Диалоги-пузыри»: objectdialog_appear_default"
+    }
+   ]
+  },
+  {
+   "name": "biped_bubble_out",
+   "help": "Пузырь уходит: 1→0.8 и гаснет за 0.2 с.",
+   "target": "ui",
+   "duration": 0.2,
+   "tracks": [
+    {
+     "prop": "alpha",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.2,
+       "from": 1,
+       "to": 0,
+       "ease": "smoothstep"
+      }
+     ]
+    },
+    {
+     "prop": "scale",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.2,
+       "from": 1,
+       "to": 0.8,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "02 §3.3: objectdialog_disappear_default"
+    }
+   ]
+  },
+  {
+   "name": "biped_icon_pop",
+   "help": "Иконка выпрыгивает 0→1 за 0.2 с с перелётом 4.4 % (Hermite 2.6/−0.5).",
+   "target": "ui",
+   "duration": 0.2,
+   "tracks": [
+    {
+     "prop": "scale",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.2,
+       "from": 0,
+       "to": 1,
+       "ease": {
+        "hermite": [
+         2.6,
+         -0.5
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "02 §3.3, §5.1: icondialog_icon_appear, overlaydialog_button_appear",
+     "note": "пик 1.044 в 0.165 с — расчёт по формуле tweens.ts:42–48"
+    }
+   ]
+  },
+  {
+   "name": "biped_star_double_kick",
+   "help": "Звезда/значок: 0→1.5→1→1.25→1 за 0.15 с (двойной отскок за 9 кадров).",
+   "target": "ui",
+   "duration": 0.15,
+   "tracks": [
+    {
+     "prop": "scale",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.0833,
+       "from": 0,
+       "to": 1.5,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.0833,
+       "t1": 0.1167,
+       "from": 1.5,
+       "to": 1,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.1167,
+       "t1": 0.1333,
+       "from": 1,
+       "to": 1.25,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.1333,
+       "t1": 0.15,
+       "from": 1.25,
+       "to": 1,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "02 §3.3 «Пинок звезды»: FinshStar_Fill, FinishTime_Fill, FinishDead_fill"
+    }
+   ]
+  },
+  {
+   "name": "biped_pop_settle",
+   "help": "Появление с перелётом и недолётом: 0→1.1 (0.383) →0.9 (0.4) →1 (0.417 с).",
+   "target": "ui",
+   "duration": 0.417,
+   "tracks": [
+    {
+     "prop": "scale",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.383,
+       "from": 0,
+       "to": 1.1,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.383,
+       "t1": 0.4,
+       "from": 1.1,
+       "to": 0.9,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.4,
+       "t1": 0.417,
+       "from": 0.9,
+       "to": 1,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "02 §3.3: Littlerobo_appear"
+    }
+   ]
+  },
+  {
+   "name": "biped_tab_spring_in",
+   "help": "Вкладка влетает справа за 0.167 с и пружинит −30/+15/−4.5/+1.5 px с шагом 0.083 с.",
+   "target": "ui",
+   "duration": 0.5,
+   "tracks": [
+    {
+     "prop": "x",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.1667,
+       "from": 550,
+       "to": -30,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.1667,
+       "t1": 0.25,
+       "from": -30,
+       "to": 15,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.25,
+       "t1": 0.3333,
+       "from": 15,
+       "to": -4.5,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.3333,
+       "t1": 0.4167,
+       "from": -4.5,
+       "to": 1.5,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.4167,
+       "t1": 0.5,
+       "from": 1.5,
+       "to": 0,
+       "ease": "smoothstep"
+      }
+     ]
+    },
+    {
+     "prop": "scale_x",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.0833,
+       "from": 0,
+       "to": 1,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "02 §3.3 «Въезд с ручной дотяжкой», §5.2: TabRotatedFadeIn",
+     "note": "затухание соседних отклонений ×(−0.5, −0.3, −0.33) — ручная пружина ≈6 Гц"
+    }
+   ]
+  },
+  {
+   "name": "biped_board_slide_settle",
+   "help": "Большая доска въезжает за 0.767 с smoothstep и дрожит +14/−9/+10/0/+4/0 px шагом 2–3 кадра.",
+   "target": "ui",
+   "duration": 0.9833,
+   "tracks": [
+    {
+     "prop": "x",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.7667,
+       "from": -1913,
+       "to": 14,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.7667,
+       "t1": 0.8,
+       "from": 14,
+       "to": -9,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.8,
+       "t1": 0.85,
+       "from": -9,
+       "to": 10,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.85,
+       "t1": 0.8833,
+       "from": 10,
+       "to": 0,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.8833,
+       "t1": 0.9333,
+       "from": 0,
+       "to": 4,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.9333,
+       "t1": 0.9833,
+       "from": 4,
+       "to": 0,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "02 §3.3, §5.2: FaceBookFadein, BipedboardBoard.m_AnchoredPosition.x (−2775 → −862)",
+     "note": "значения — смещения от конечной точки −862; для экрана другой ширины масштабировать ход, дрожь держать 0.5–0.8 % хода"
+    }
+   ]
+  },
+  {
+   "name": "biped_button_highlight",
+   "help": "Кнопка под курсором: 1→1.2 за 0.083 с и оседает на 1.1.",
+   "target": "ui",
+   "duration": 0.167,
+   "tracks": [
+    {
+     "prop": "scale",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.083,
+       "from": 1,
+       "to": 1.2,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.083,
+       "t1": 0.167,
+       "from": 1.2,
+       "to": 1.1,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "02 §3.3 «Кнопки»: Highlighted_0/1/2/4/12/16 (1→1.2→1.1); вариант 1→1.1→1.0 — Highlighted, Highlighted_13",
+     "note": "форма сегментов не проверена по касательным, взята smoothstep как у 71.6 % unity-сегментов"
+    }
+   ]
+  },
+  {
+   "name": "biped_invalid_shake",
+   "help": "«Нельзя»: x 0→+38→−69→+24→−28→0 px за 0.517 с, главный толчок назад.",
+   "target": "ui",
+   "duration": 0.517,
+   "tracks": [
+    {
+     "prop": "x",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.05,
+       "from": 0,
+       "to": 38,
+       "ease": {
+        "hermite": [
+         1.0,
+         -0.1
+        ]
+       }
+      },
+      {
+       "t0": 0.05,
+       "t1": 0.167,
+       "from": 38,
+       "to": -68.7,
+       "ease": {
+        "hermite": [
+         0.1,
+         0.2
+        ]
+       }
+      },
+      {
+       "t0": 0.167,
+       "t1": 0.317,
+       "from": -68.7,
+       "to": 24.4,
+       "ease": {
+        "hermite": [
+         -0.2,
+         0.1
+        ]
+       }
+      },
+      {
+       "t0": 0.317,
+       "t1": 0.417,
+       "from": 24.4,
+       "to": -28,
+       "ease": {
+        "hermite": [
+         -0.1,
+         0.2
+        ]
+       }
+      },
+      {
+       "t0": 0.417,
+       "t1": 0.517,
+       "from": -28,
+       "to": 0,
+       "ease": {
+        "hermite": [
+         -0.4,
+         1.0
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "02 §3.3, §5.5: Invalid (Pin.controller)"
+    }
+   ]
+  },
+  {
+   "name": "biped_zone_pulse",
+   "help": "Зона «ждёт»: масштаб 1↔0.9 и яркость 1↔0.45, полупериод 0.5 с; активная зона — 0.25 с.",
+   "target": "ui",
+   "duration": 1.0,
+   "loop": true,
+   "tracks": [
+    {
+     "prop": "scale",
+     "mode": "mul",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.5,
+       "from": 1,
+       "to": 0.9,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.5,
+       "t1": 1.0,
+       "from": 0.9,
+       "to": 1,
+       "ease": "smoothstep"
+      }
+     ]
+    },
+    {
+     "prop": "alpha",
+     "mode": "mul",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.5,
+       "from": 1,
+       "to": 0.447,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.5,
+       "t1": 1.0,
+       "from": 0.447,
+       "to": 1,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "02 §3.3 «Пульс», §5.8: ChallengeAreaInit; вдвое быстрее — ChallengeAreaActive"
+    }
+   ]
+  },
+  {
+   "name": "biped_error_blink",
+   "help": "Мигание текста ошибки: alpha 0↔1 по 0.25 с.",
+   "target": "ui",
+   "duration": 0.5,
+   "loop": true,
+   "tracks": [
+    {
+     "prop": "alpha",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.25,
+       "from": 0,
+       "to": 1,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.25,
+       "t1": 0.5,
+       "from": 1,
+       "to": 0,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "02 §3.3: ErrorPulse, SR_Text"
+    }
+   ]
+  },
+  {
+   "name": "biped_countdown_digit",
+   "help": "Цифра отсчёта: проявление 0.5 с, сжатие до 0.35 с недолётом 10 % и возвратом, гаснет за 0.067 с перед следующей.",
+   "target": "ui",
+   "duration": 1.0,
+   "tracks": [
+    {
+     "prop": "alpha",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.5,
+       "from": 0,
+       "to": 1,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.9333,
+       "t1": 1.0,
+       "from": 1,
+       "to": 0,
+       "ease": "smoothstep"
+      }
+     ]
+    },
+    {
+     "prop": "scale",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.4167,
+       "from": 1,
+       "to": 0.349,
+       "ease": {
+        "hermite": [
+         0,
+         0.2
+        ]
+       }
+      },
+      {
+       "t0": 0.4167,
+       "t1": 0.5,
+       "from": 0.349,
+       "to": 0.314,
+       "ease": {
+        "hermite": [
+         0.7,
+         0
+        ]
+       }
+      },
+      {
+       "t0": 0.5,
+       "t1": 0.6,
+       "from": 0.314,
+       "to": 0.349,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "02 §3.3 «Счётчик старта»: HUD_count down, объект 1"
+    }
+   ]
+  },
+  {
+   "name": "biped_letterbox_bar_in",
+   "help": "Киношная полоса заезжает на 110 px за 1.5 с smoothstep (уходит за 2 с).",
+   "target": "ui",
+   "duration": 1.5,
+   "tracks": [
+    {
+     "prop": "y",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 1.5,
+       "from": -110,
+       "to": 0,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "02 §3.3 «Киношные полосы»: HideHUD (CinematicUI/Up 620→510 за 1.5 с), ShowHUD (510→620 за 2 с)",
+     "note": "y переведён в Godot (вниз = +)"
+    }
+   ]
+  },
+  {
+   "name": "biped_touch_tremble",
+   "help": "Дрожь при касании: сжатие до 0.8 за 12 мс и возврат за 68 мс.",
+   "target": "ui",
+   "duration": 0.08,
+   "tracks": [
+    {
+     "prop": "scale",
+     "mode": "mul",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.012,
+       "from": 1,
+       "to": 0.8,
+       "ease": {
+        "hermite": [
+         2.87,
+         0
+        ]
+       }
+      },
+      {
+       "t0": 0.012,
+       "t1": 0.08,
+       "from": 0.8,
+       "to": 1,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "03 §4.4: SimpleDisplayScaleTremble.cs:58–62; Resources/BreakBlock.prefab:315–349 (0.08 с, ×0.8, ключи (0,0,s19.1)(0.15,1)(1,0))",
+     "note": "в игре только по XZ (Y зафиксирован); 1626 экземпляров"
+    }
+   ]
+  },
+  {
+   "name": "biped_number_bump",
+   "help": "Подскок цифры: ×1.25 за 2 кадра и возврат за 6 (8 кадров).",
+   "target": "ui",
+   "duration": 0.1333,
+   "tracks": [
+    {
+     "prop": "scale",
+     "mode": "mul",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.0333,
+       "from": 1,
+       "to": 1.25,
+       "ease": {
+        "hermite": [
+         2.44,
+         0
+        ]
+       }
+      },
+      {
+       "t0": 0.0333,
+       "t1": 0.1333,
+       "from": 1.25,
+       "to": 1,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "03 §4.4: SimpleDisplayText.cs:27, 30, 61–65 (8 кадров, ×1.25), кривая (0,0,s9.68)(0.25,1)(1,0)",
+     "note": "в игре счёт по кадрам Update; форма второго сегмента не проверена по касательным"
+    }
+   ]
+  },
+  {
+   "name": "biped_trampoline_wobble",
+   "help": "Батут: затухающее колебание ≈7 Гц, пик +0.61, каждый следующий ×−0.7, 0.6 с.",
+   "target": "ui",
+   "duration": 0.6,
+   "tracks": [
+    {
+     "prop": "scale_y",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.0381,
+       "from": 0,
+       "to": 0.6065,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.0381,
+       "t1": 0.1102,
+       "from": 0.6065,
+       "to": -0.4243,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.1102,
+       "t1": 0.1866,
+       "from": -0.4243,
+       "to": 0.3132,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.1866,
+       "t1": 0.2546,
+       "from": 0.3132,
+       "to": -0.2416,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.2546,
+       "t1": 0.3108,
+       "from": -0.2416,
+       "to": 0.1502,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.3108,
+       "t1": 0.3649,
+       "from": 0.1502,
+       "to": -0.0895,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.3649,
+       "t1": 0.4169,
+       "from": -0.0895,
+       "to": 0.0615,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.4169,
+       "t1": 0.4627,
+       "from": 0.0615,
+       "to": -0.028,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.4627,
+       "t1": 0.6,
+       "from": -0.028,
+       "to": 0,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "03 §4.4: TrampolineEffect.cs:75–84; Scenes/Level_00_Training.unity:390969–71 (bounceTime 0.6, bounceScale 0.6, 13 ключей)",
+     "note": "значения = кривая × 0.6; в игре добавляется к scale.x кости (вдоль кости) и сглаживается Lerp 0.2 за кадр — здесь без сглаживания; хвост 0.84–0.97 упрощён до 0; касательные в пиках не проверены, взят smoothstep"
+    }
+   ]
+  }
+ ]
+}

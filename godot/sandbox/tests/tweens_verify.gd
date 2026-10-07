@@ -25,6 +25,8 @@ func _initialize() -> void:
 	print("SAMPLES %d, худшее расхождение %.7f %s" % [n, worst, where])
 	await process_frame  # до первого кадра корень ещё не в дереве и твины узлов не шагают
 	var live := _live_check()
+	if live.begins_with("LIVE_OK"):
+		live = _live_camera()
 	print(live)
 	print("TWEENS_OK" if worst <= TOL and live.begins_with("LIVE_OK") else "TWEENS_FAIL")
 	quit()
@@ -53,3 +55,21 @@ func _live_check() -> String:
 		if absf(c.position.y - 60) < 1e-3 and absf(c.scale.x) < 1e-4:
 			return "LIVE_OK pivot=%s" % [c.pivot_offset]
 	return "LIVE_FAIL в конце y=%s scale=%s" % [c.position.y, c.scale.x]
+
+
+# Камера: наклон и наезд (pitch, dolly) от исходного положения.
+func _live_camera() -> String:
+	var cam := Camera3D.new()
+	cam.position = Vector3(0, 2, 5)
+	cam.rotation_degrees = Vector3(-10, 0, 0)
+	root.add_child(cam)
+	var p := AF.preset("biped_level_intro")
+	var fwd := -cam.transform.basis.z
+	var tw: Tween = AF.play(cam, "biped_level_intro")
+	tw.pause()
+	tw.custom_step(3.0)
+	var s := AF.sample(p, 3.0)
+	var exp_pos := Vector3(0, 2, 5) + fwd * float(s["dolly"])
+	if absf(cam.rotation_degrees.x - (-10 + float(s["pitch"]))) > 1e-3 or cam.position.distance_to(exp_pos) > 1e-3:
+		return "LIVE_FAIL камера pitch=%s pos=%s (ждали %s, %s)" % [cam.rotation_degrees.x, cam.position, -10 + float(s["pitch"]), exp_pos]
+	return "LIVE_OK камера: pitch %.2f°, наезд %.2f м" % [cam.rotation_degrees.x, s["dolly"]]

@@ -45,7 +45,7 @@
             "angle": 3,
             "growth": 0,
             "pulse": 1,
-            "period": 3.5,
+            "period": 1.75,
             "phase": 0
           },
           "preset": "breathe-spine"

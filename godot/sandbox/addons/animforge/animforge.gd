@@ -136,7 +136,7 @@ static func _capture(node: Node) -> Dictionary:
 			"rotation": node.rotation_degrees, "alpha": node.modulate.a}
 	if node is Camera3D:
 		return {"fov": node.fov, "yaw": node.rotation_degrees.y, "pitch": node.rotation_degrees.x,
-			"roll": node.rotation_degrees.z, "h": node.h_offset, "v": node.v_offset}
+			"roll": node.rotation_degrees.z, "h": node.h_offset, "v": node.v_offset, "pos": node.position, "fwd": -node.transform.basis.z}
 	if node is Camera2D:
 		return {"x": node.offset.x, "y": node.offset.y, "rotation": node.rotation_degrees, "zoom": node.zoom.x}
 	push_error("AnimForge: пресеты умеют Control, Camera3D и Camera2D, а не %s" % node.get_class())
@@ -169,6 +169,8 @@ static func apply(node: Node, base: Dictionary, modes: Dictionary, s: Dictionary
 		if s.has("fov"): cam.fov = _mix(base["fov"], s["fov"], modes["fov"])
 		if s.has("yaw"): cam.rotation_degrees.y = _mix(base["yaw"], s["yaw"], modes["yaw"])
 		if s.has("pitch"): cam.rotation_degrees.x = _mix(base["pitch"], s["pitch"], modes["pitch"])
+		if s.has("dolly"):  # метры вперёд по исходному направлению взгляда
+			cam.position = base["pos"] + base["fwd"] * float(s["dolly"])
 		if s.has("shake_x"):
 			cam.h_offset = base["h"] + s["shake_x"]
 			cam.v_offset = base["v"] + s["shake_y"]
