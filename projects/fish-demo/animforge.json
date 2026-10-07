@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "name": "fish-demo",
+  "model": "assets/fish.glb",
+  "up": [
+    0,
+    1,
+    0
+  ],
+  "chains": {
+    "body": [
+      "spine_0",
+      "spine_1",
+      "spine_2",
+      "spine_3",
+      "spine_4",
+      "spine_5"
+    ]
+  },
+  "clips": [
+    {
+      "name": "swim",
+      "duration": 2.4,
+      "fps": 30,
+      "loop": true,
+      "layers": [
+        {
+          "id": "wave",
+          "type": "recipe",
+          "recipe": "wave",
+          "target": {
+            "chain": "body"
+          },
+          "params": {
+            "plane": "lateral",
+            "period": 1.2,
+            "tipAmp": 11,
+            "growth": 1.5,
+            "bodyDelay": 160,
+            "headAmp": 8,
+            "headLead": 90
+          },
+          "preset": "fish-fast"
+        },
+        {
+          "id": "edits",
+          "type": "keys",
+          "tracks": [
+            {
+              "bone": "spine_5",
+              "axis": "lateral",
+              "keys": [
+                {
+                  "t": 0.8,
+                  "v": 0
+                },
+                {
+                  "t": 1,
+                  "v": 25
+                },
+                {
+                  "t": 1.25,
+                  "v": 0
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

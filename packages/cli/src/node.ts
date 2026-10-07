@@ -1,0 +1,195 @@
+// Адаптеры под Node: файлы проекта, glb, библиотека пресетов, Blender. Используются CLI и MCP-сервером.
+import { NodeIO } from "@gltf-transform/core";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { COMMANDS, Ctx, Project, RECIPES, buildRig, emptyProject, poseAt, readSkeleton, runCommand, writeClips } from "../../core/src/index.ts";
+
+export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+export const GODOT = process.env.GODOT ?? "/Applications/Godot.app/Contents/MacOS/Godot";
+export const BLENDER = process.env.BLENDER ?? "/Applications/Blender.app/Contents/MacOS/Blender";
+const io = new NodeIO();
+
+export const projectFile = (dir: string) => join(dir, "animforge.json");
+
+export async function loadCtx(dir: string): Promise<Ctx & { dir: string }> {
+  const project: Project = JSON.parse(readFileSync(projectFile(dir), "utf8"));
+  const doc = await io.read(join(dir, project.model));
+  return { project, skeleton: readSkeleton(doc), dir };
+}
+
+export function saveProject(dir: string, p: Project) {
+  writeFileSync(projectFile(dir), JSON.stringify(p, null, 2) + "\n");
+}
+
+interface Preset {
+  name: string;
+  help: string;
+  params: Record<string, unknown>;
+  provenance: unknown[];
+}
+
+export function loadPresets(): { recipe: string; presets: Preset[] }[] {
+  const d = join(ROOT, "library/presets");
+  return readdirSync(d).filter((f) => f.endsWith(".json")).map((f) => JSON.parse(readFileSync(join(d, f), "utf8")));
+}
+
+export function findPreset(name: string) {
+  for (const lib of loadPresets()) {
+    const p = lib.presets.find((p) => p.name === name);
+    if (p) return { recipe: lib.recipe, preset: p };
+  }
+  throw new Error(`нет пресета «${name}». Есть: ${loadPresets().flatMap((l) => l.presets.map((p) => p.name)).join(", ")}`);
+}
+
+/** Запекает все клипы в glb. Рядом кладёт <out>.samples.json — эталонные повороты для проверки в Godot. */
+export async function exportGlb(ctx: Ctx & { dir: string }, out: string) {
+  const doc = await io.read(join(ctx.dir, ctx.project.model));
+  const rig = buildRig(ctx.skeleton);
+  const report = writeClips(doc, ctx.project, rig);
+  mkdirSync(dirname(out), { recursive: true });
+  await io.write(out, doc);
+  const samples = ctx.project.clips.map((clip) => ({
+    clip: clip.name,
+    duration: clip.duration,
+    checks: [0.13, 0.37, 0.71].map((u) => {
+      const t = +(u * clip.duration).toFixed(4);
+      return { t, rotations: Object.fromEntries(poseAt(ctx.project, rig, clip, t)) };
+    }),
+  }));
+  writeFileSync(out.replace(/\.glb$/, ".samples.json"), JSON.stringify(samples, null, 1));
+  return { out, clips: report };
+}
+
+/** «Глаза»: рендер клипа в Blender → лист кадров PNG. */
+export async function renderSheet(ctx: Ctx & { dir: string }, clip: string, frames: number, view: string, out: string) {
+  const tmp = mkdtempSync(join(tmpdir(), "af-sheet-"));
+  try {
+    const glb = join(tmp, "clip.glb");
+    await exportGlb(ctx, glb);
+    const log = execFileSync(BLENDER, ["-b", "--python", join(ROOT, "bridge/blender/render_sheet.py"), "--", glb, clip, tmp, String(frames), view], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    if (!log.includes("SHEET_OK")) throw new Error("Blender не отрендерил кадры:\n" + log.split("\n").filter((l) => /SHEET|Error|Traceback/.test(l)).join("\n"));
+    const pngs = readdirSync(tmp).filter((f) => f.endsWith(".png")).sort().map((f) => join(tmp, f));
+    mkdirSync(dirname(out), { recursive: true });
+    const cols = Math.min(4, pngs.length);
+    // ряды по cols кадров: ( a b c d +append ) ( e f g h +append ) -append — без шрифтов, в отличие от montage
+    const rows: string[] = [];
+    for (let i = 0; i < pngs.length; i += cols) rows.push("(", ...pngs.slice(i, i + cols), "-bordercolor", "#c4c8cf", "-border", "1", "+append", ")");
+    execFileSync("magick", [...rows, "-append", out]);
+    return { out, frames: pngs.length, view };
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+/** Шаблон тела через Blender: меш + кости + автоматические веса. */
+export function makeTemplate(type: string, out: string, bones = 6) {
+  const script = join(ROOT, `bridge/blender/template_${type}.py`);
+  if (!existsSync(script)) throw new Error(`нет шаблона «${type}»`);
+  mkdirSync(dirname(out), { recursive: true });
+  const log = execFileSync(BLENDER, ["-b", "--python", script, "--", out, String(bones)], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const ok = log.split("\n").find((l) => l.includes("_OK"));
+  if (!ok) throw new Error("шаблон не собрался");
+  return { out, log: ok };
+}
+
+/** Команды адаптера (файлы, Blender) — того же вида, что и команды ядра, чтобы CLI и MCP видели единый список. */
+export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, { type: string; required?: boolean; help: string }>; run(dir: string, a: Record<string, any>): Promise<unknown> }> = {
+  init: {
+    help: "Создать проект в папке: модель (glb) копируется не будет — указывается путь относительно папки.",
+    args: { model: { type: "string", required: true, help: "путь к glb относительно папки проекта" }, name: { type: "string", help: "имя проекта" } },
+    async run(dir, a) {
+      if (existsSync(projectFile(dir))) throw new Error("проект уже есть");
+      const p = emptyProject(a.name ?? dir.split("/").pop(), a.model);
+      saveProject(dir, p);
+      return p;
+    },
+  },
+  "template.make": {
+    help: "Собрать модель по шаблону тела в Blender (сейчас: fish).",
+    args: { type: { type: "string", required: true, help: "fish" }, out: { type: "string", required: true, help: "куда положить glb" }, bones: { type: "number", help: "число костей тела" } },
+    run: async (dir, a) => makeTemplate(a.type, resolve(dir, a.out), a.bones ?? 6),
+  },
+  "preset.list": {
+    help: "Пресеты библиотеки с происхождением параметров.",
+    args: {},
+    run: async () => loadPresets().map((l) => ({ recipe: l.recipe, presets: l.presets.map((p) => ({ name: p.name, help: p.help, params: p.params })) })),
+  },
+  "preset.apply": {
+    help: "Добавить рецепт из пресета на цепочку (или переписать параметры существующего слоя, если указан layer).",
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      preset: { type: "string", required: true, help: "имя пресета" },
+      chain: { type: "string", help: "цепочка (для нового слоя)" },
+      layer: { type: "string", help: "id существующего слоя" },
+    },
+    async run(dir, a) {
+      const { recipe, preset } = findPreset(a.preset);
+      const ctx = await loadCtx(dir);
+      const r = a.layer
+        ? runCommand(ctx, "recipe.set", { clip: a.clip, layer: a.layer, params: preset.params })
+        : runCommand(ctx, "recipe.add", { clip: a.clip, recipe, chain: a.chain, params: { ...preset.params }, preset: preset.name, id: recipe });
+      if (a.layer) {
+        const l = ctx.project.clips.find((c) => c.name === a.clip)!.layers.find((l) => l.id === a.layer);
+        if (l && l.type === "recipe") l.preset = preset.name;
+      }
+      saveProject(dir, ctx.project);
+      const clip = ctx.project.clips.find((c) => c.name === a.clip)!;
+      const period = Number(preset.params.period);
+      const cycles = clip.duration / period;
+      return { layer: r, warning: clip.loop && period && Math.abs(cycles - Math.round(cycles)) > 1e-3 ? `длительность ${clip.duration} с не кратна периоду ${period} с — стык цикла будет рваным` : undefined };
+    },
+  },
+  export: {
+    help: "Запечь все клипы в glb (+ .samples.json для проверки в Godot).",
+    args: { out: { type: "string", required: true, help: "путь к glb" } },
+    run: async (dir, a) => exportGlb(await loadCtx(dir), resolve(dir, a.out)),
+  },
+  verify: {
+    help: "Проверка в Godot без окна: экспорт → загрузка glb в Godot → сверка поворотов костей с ядром.",
+    args: { out: { type: "string", help: "куда экспортировать glb, по умолчанию out/<имя>.glb" } },
+    async run(dir, a) {
+      const ctx = await loadCtx(dir);
+      const glb = resolve(dir, a.out ?? `out/${ctx.project.name}.glb`);
+      await exportGlb(ctx, glb);
+      let log = "";
+      try {
+        log = execFileSync(GODOT, ["--headless", "--path", join(ROOT, "godot/verify"), "--script", "verify.gd", "--", glb, glb.replace(/\.glb$/, ".samples.json")], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+      } catch (e: any) {
+        log = String(e.stdout ?? "") + String(e.stderr ?? "");
+      }
+      const lines = log.split("\n").filter((l) => /CLIP|VERIFY/.test(l));
+      return { ok: lines.some((l) => l.includes("VERIFY_OK")), godot: lines };
+    },
+  },
+  sheet: {
+    help: "Глаза агента: отрендерить клип в лист кадров PNG через Blender.",
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      out: { type: "string", required: true, help: "png" },
+      frames: { type: "number", help: "сколько кадров, по умолчанию 8" },
+      view: { type: "string", help: "side | top | three_quarter (по умолчанию)" },
+    },
+    run: async (dir, a) => renderSheet(await loadCtx(dir), a.clip, a.frames ?? 8, a.view ?? "three_quarter", resolve(dir, a.out)),
+  },
+};
+
+/** Единая точка вызова любой команды: и ядра, и адаптера. Команды ядра, меняющие проект, сохраняют его. */
+export async function call(dir: string, name: string, args: Record<string, any>) {
+  if (NODE_COMMANDS[name]) return NODE_COMMANDS[name].run(dir, args);
+  const ctx = await loadCtx(dir);
+  const res = runCommand(ctx, name, args);
+  if (COMMANDS[name].mutates) saveProject(dir, ctx.project);
+  return res;
+}
+
+export function listAll() {
+  return [
+    ...Object.values(COMMANDS).map((c) => ({ name: c.name, help: c.help, args: c.args })),
+    ...Object.entries(NODE_COMMANDS).map(([name, c]) => ({ name, help: c.help, args: c.args })),
+  ];
+}
+
+export { RECIPES };

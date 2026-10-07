@@ -1,0 +1,23 @@
+{
+  "recipe": "wave",
+  "presets": [
+    {
+      "name": "fish-fast",
+      "help": "Лёгкая быстрая рыба: частый чистый синус, почти полволны по телу.",
+      "params": { "plane": "lateral", "period": 1.2, "tipAmp": 11, "growth": 1.5, "bodyDelay": 160, "headAmp": 8, "headLead": 90 },
+      "provenance": [{ "source": "research/dredge", "ref": "02-clip-anatomy.md §5.1, столбец «лёгкая быстрая рыба»", "ranges": { "period": [0.8, 1.7], "tipAmp": [9, 13], "headAmp": [8, 8], "bodyDelay": [140, 180] } }]
+    },
+    {
+      "name": "fish-medium",
+      "help": "Средняя рыба, скат, крокодил: медленнее, задержка меньше, хвост гнётся дугой.",
+      "params": { "plane": "lateral", "period": 3.0, "tipAmp": 13.5, "growth": 2, "bodyDelay": 78, "headAmp": 7, "headLead": 90 },
+      "provenance": [{ "source": "research/dredge", "ref": "02-clip-anatomy.md §5.1, столбец «средняя»", "ranges": { "period": [2.7, 3.3], "tipAmp": [12, 15], "headAmp": [4.6, 9.7], "bodyDelay": [64, 92] } }]
+    },
+    {
+      "name": "whale-large",
+      "help": "Крупный кит: очень медленный вертикальный взмах, маленькая амплитуда, голова почти неподвижна.",
+      "params": { "plane": "vertical", "period": 5.2, "tipAmp": 7, "growth": 2, "bodyDelay": 53, "headAmp": 1.3, "headLead": 90 },
+      "provenance": [{ "source": "research/dredge", "ref": "02-clip-anatomy.md §5.1, столбец «крупный кит»", "ranges": { "period": [5.2, 5.2], "tipAmp": [7, 7], "headAmp": [1.3, 1.3], "bodyDelay": [53, 53] } }]
+    }
+  ]
+}

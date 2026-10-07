@@ -1,0 +1,44 @@
+// Минимальная математика кватернионов и векторов. Кватернион — [x, y, z, w], как в glTF.
+export type Vec3 = [number, number, number];
+export type Quat = [number, number, number, number];
+
+export const QI: Quat = [0, 0, 0, 1];
+export const DEG = Math.PI / 180;
+
+export function qmul(a: Quat, b: Quat): Quat {
+  const [ax, ay, az, aw] = a;
+  const [bx, by, bz, bw] = b;
+  return [
+    aw * bx + ax * bw + ay * bz - az * by,
+    aw * by - ax * bz + ay * bw + az * bx,
+    aw * bz + ax * by - ay * bx + az * bw,
+    aw * bw - ax * bx - ay * by - az * bz,
+  ];
+}
+
+export const qinv = (q: Quat): Quat => [-q[0], -q[1], -q[2], q[3]];
+
+export function qnorm(q: Quat): Quat {
+  const l = Math.hypot(q[0], q[1], q[2], q[3]) || 1;
+  return [q[0] / l, q[1] / l, q[2] / l, q[3] / l];
+}
+
+export function qaxis(axis: Vec3, angle: number): Quat {
+  const [x, y, z] = vnorm(axis);
+  const s = Math.sin(angle / 2);
+  return [x * s, y * s, z * s, Math.cos(angle / 2)];
+}
+
+export function qrot(q: Quat, v: Vec3): Vec3 {
+  const r = qmul(qmul(q, [v[0], v[1], v[2], 0]), qinv(q));
+  return [r[0], r[1], r[2]];
+}
+
+export function vnorm(v: Vec3): Vec3 {
+  const l = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / l, v[1] / l, v[2] / l];
+}
+
+export const vsub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+export const vadd = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+export const vcross = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];

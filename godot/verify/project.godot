@@ -1,0 +1,5 @@
+; AnimForge: проект-проверка экспорта (запускается без окна)
+config_version=5
+
+[application]
+config/name="AnimForge verify"

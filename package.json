@@ -1,0 +1,16 @@
+{
+  "name": "animforge",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "af": "tsx packages/cli/src/main.ts",
+    "test": "tsx --test packages/core/src/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@gltf-transform/core": "^4.5.1",
+    "@types/node": "^26.6.4",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
