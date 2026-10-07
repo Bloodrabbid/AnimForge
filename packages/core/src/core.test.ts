@@ -131,3 +131,29 @@ test("тряска: огибающая нарастает, держит и га�
   close(shakeAt(sh, 0.7).x, 2 * n(0.7)); // удержание: env = 1
   close(shakeAt(sh, 1.5).x, 2 * 0.25 * n(1.5)); // середина затухания: (1−0.5)² = 0.25
 });
+
+test("шаг циркулем: цикл замкнут, ноги в противофазе, жёсткая пружина догоняет позу", () => {
+  const c = RECIPES["compass-step"];
+  const p = withDefaults(c, { period: 1.2, springHz: 1.6, damping: 0.47 });
+  const v = (q: any, t: number) => c.evaluate(q, 0, 2, t).vertical!;
+  close(v(p, 0.37), v(p, 0.37 + 1.2), 1e-9, "период");
+  const r = withDefaults(c, { role: "leg_right", period: 1.2 });
+  close(v(r, 0.2), v(p, 0.8), 1e-9, "правая = левая через полпериода");
+  assert.deepEqual(c.evaluate(p, 1, 2, 0.3), {}, "вторая кость ноги неподвижна");
+  // пружина 7 Гц критическая: к концу полупериода нога почти на reach, к концу цикла — почти на −support
+  const s = withDefaults(c, { springHz: 7, damping: 1, period: 2, openTime: 0.1 });
+  close(v(s, 0.999), 90, 0.5, "мах");
+  close(v(s, 1.999), -36, 0.5, "опора");
+  // опорная нога уходит назад по рампе, а не скачком: жёсткая пружина отстаёт от рампы на 2ζ/ω
+  const ramp = withDefaults(c, { springHz: 7, damping: 1, period: 4, openTime: 1 });
+  close(v(ramp, 2.5), -36 * (0.5 - 2 / (2 * Math.PI * 7)), 0.3, "рампа опоры");
+  // перелёт ступенчатого отклика = exp(−πζ/√(1−ζ²)) — проверяет, что ζ в формуле именно ζ
+  const z = 0.3, step = withDefaults(c, { springHz: 3, damping: z, period: 8, openTime: 0.001 });
+  let peak = -Infinity;
+  for (let t = 0; t < 1; t += 0.001) peak = Math.max(peak, v(step, t));
+  close(peak, 90 + 126 * Math.exp((-Math.PI * z) / Math.sqrt(1 - z * z)), 1.5, "перелёт");
+  // мягкая пружина с ζ < 1 перелетает цель: где-то в цикле мах больше reach
+  let max = -Infinity;
+  for (let t = 0; t < 1.2; t += 0.005) max = Math.max(max, v(withDefaults(c, { period: 1.2, springHz: 3, damping: 0.3 }), t));
+  assert.ok(max > 90, `перелёт ${max}`);
+});

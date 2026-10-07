@@ -1,0 +1,68 @@
+{
+ "recipe": "compass-step",
+ "presets": [
+  {
+   "name": "biped-waddle",
+   "help": "Неуклюжий робот: нога 90°, опорная −36°, крен корпуса 36°, раскрытие 0.28 с.",
+   "params": {
+    "period": 1.2,
+    "reach": 90,
+    "support": 36,
+    "coreRoll": 36,
+    "openTime": 0.28,
+    "springHz": 1.6,
+    "damping": 0.47,
+    "gain": 0.4
+   },
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "03 §1.5 «Целевая поза и шаг-циркуль»: CreatureBodyGoodMotion.cs:145–175, CreatureGoodMotion.cs:776–918",
+     "ranges": {
+      "reach": [
+       90,
+       108
+      ],
+      "support": [
+       36,
+       45
+      ],
+      "openTime": [
+       0.083,
+       0.28
+      ]
+     },
+     "note": "support 45 — старая модель CreatureBodyDefaultMotion.cs:67; period в игре задаёт игрок стиком (взят на глаз); springHz/damping — оценка из k и τ PD-пружин (03 §1.7), не замер"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "gain 0.4 — на глаз по листу кадров: в игре видимый мах ноги не замерен (нужна запись игры)"
+    }
+   ]
+  },
+  {
+   "name": "biped-skate",
+   "help": "Шаг на льду: нога 108°, раскрытие 0.083 с, пружина жёстче (кручение стика).",
+   "params": {
+    "period": 1.0,
+    "reach": 108,
+    "support": 36,
+    "coreRoll": 36,
+    "openTime": 0.083,
+    "springHz": 3.9,
+    "damping": 0.45,
+    "gain": 0.4
+   },
+   "provenance": [
+    {
+     "source": "research/biped",
+     "ref": "03 §1.5: CreatureBodyGoodMotion.cs:149–151, 159, 173; пружина 3.9 Гц ζ 0.45 — 03 §1.7 (оценка)"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "gain 0.4 — на глаз по листу кадров: в игре видимый мах ноги не замерен (нужна запись игры)"
+    }
+   ]
+  }
+ ]
+}

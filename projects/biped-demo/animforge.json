@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "name": "biped-demo",
+  "model": "assets/biped.glb",
+  "up": [
+    0,
+    1,
+    0
+  ],
+  "chains": {
+    "spine": [
+      "spine_0",
+      "spine_1"
+    ],
+    "leg_l": [
+      "leg_l_0",
+      "leg_l_1"
+    ],
+    "leg_r": [
+      "leg_r_0",
+      "leg_r_1"
+    ]
+  },
+  "clips": [
+    {
+      "name": "waddle",
+      "duration": 2.4,
+      "fps": 30,
+      "loop": true,
+      "layers": [
+        {
+          "id": "leg_l",
+          "type": "recipe",
+          "recipe": "compass-step",
+          "target": {
+            "chain": "leg_l"
+          },
+          "params": {
+            "period": 1.2,
+            "reach": 90,
+            "support": 36,
+            "coreRoll": 36,
+            "openTime": 0.28,
+            "springHz": 1.6,
+            "damping": 0.47,
+            "role": "leg_left",
+            "gain": 0.4
+          },
+          "preset": "biped-waddle"
+        },
+        {
+          "id": "leg_r",
+          "type": "recipe",
+          "recipe": "compass-step",
+          "target": {
+            "chain": "leg_r"
+          },
+          "params": {
+            "period": 1.2,
+            "reach": 90,
+            "support": 36,
+            "coreRoll": 36,
+            "openTime": 0.28,
+            "springHz": 1.6,
+            "damping": 0.47,
+            "role": "leg_right",
+            "gain": 0.4
+          },
+          "preset": "biped-waddle"
+        },
+        {
+          "id": "spine",
+          "type": "recipe",
+          "recipe": "compass-step",
+          "target": {
+            "chain": "spine"
+          },
+          "params": {
+            "period": 1.2,
+            "reach": 90,
+            "support": 36,
+            "coreRoll": 36,
+            "openTime": 0.28,
+            "springHz": 1.6,
+            "damping": 0.47,
+            "role": "core",
+            "plane": "lateral",
+            "gain": 0.4
+          },
+          "preset": "biped-waddle"
+        }
+      ]
+    }
+  ]
+}

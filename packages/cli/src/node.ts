@@ -162,8 +162,8 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
     },
   },
   "template.make": {
-    help: "Собрать модель по шаблону тела в Blender: fish, snake, tentacle, quadruped.",
-    args: { type: { type: "string", required: true, help: "fish | snake | tentacle | quadruped" }, out: { type: "string", required: true, help: "куда положить glb" }, bones: { type: "number", help: "число костей тела (по умолчанию — своё у каждого шаблона)" } },
+    help: "Собрать модель по шаблону тела в Blender: fish, snake, tentacle, quadruped, biped.",
+    args: { type: { type: "string", required: true, help: "fish | snake | tentacle | quadruped | biped" }, out: { type: "string", required: true, help: "куда положить glb" }, bones: { type: "number", help: "число костей тела (по умолчанию — своё у каждого шаблона)" } },
     run: async (dir, a) => makeTemplate(a.type, resolve(dir, a.out), a.bones),
   },
   "preset.list": {
