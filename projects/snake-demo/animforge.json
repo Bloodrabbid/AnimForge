@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "name": "snake-demo",
+  "model": "assets/snake.glb",
+  "up": [
+    0,
+    1,
+    0
+  ],
+  "chains": {
+    "body": [
+      "spine_0",
+      "spine_1",
+      "spine_2",
+      "spine_3",
+      "spine_4",
+      "spine_5",
+      "spine_6",
+      "spine_7",
+      "spine_8",
+      "spine_9",
+      "spine_10",
+      "spine_11",
+      "spine_12",
+      "spine_13"
+    ]
+  },
+  "clips": [
+    {
+      "name": "slither",
+      "duration": 3.6,
+      "fps": 30,
+      "loop": true,
+      "layers": [
+        {
+          "id": "wave",
+          "type": "recipe",
+          "recipe": "wave",
+          "target": {
+            "chain": "body"
+          },
+          "params": {
+            "plane": "lateral",
+            "period": 1.8,
+            "tipAmp": 16,
+            "growth": 0.6,
+            "bodyDelay": 540,
+            "headAmp": 0
+          },
+          "preset": "snake-slither"
+        }
+      ]
+    }
+  ]
+}

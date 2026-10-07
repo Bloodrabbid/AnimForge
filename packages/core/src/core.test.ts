@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { evalKeys } from "./curves.ts";
-import { bakeClip, buildRig, poseAt } from "./evaluate.ts";
+import { bakeClip, buildRig, chainAxes, poseAt } from "./evaluate.ts";
 import { DEG, Quat, qmul, qinv, qrot } from "./math.ts";
 import type { Project, Skeleton } from "./project.ts";
 import { RECIPES, withDefaults } from "./recipes.ts";
@@ -65,4 +65,27 @@ test("запекание цикла: последний кадр совпада�
   const b = bakeClip(pr, buildRig(skel), pr.clips[0]);
   assert.equal(b.times.length, 11);
   for (const qs of b.rotations.values()) qs[0].forEach((x, k) => close(x, qs[10][k], 1e-9));
+});
+
+test("изгиб: сумма углов по цепочке равна angle, пульсация масштабирует", () => {
+  const c = RECIPES.curl;
+  const p = withDefaults(c, { angle: 60, growth: 2, pulse: 0 });
+  let sum = 0;
+  for (let i = 0; i < 5; i++) sum += c.evaluate(p, i, 5, 0).vertical!;
+  close(sum, 60, 1e-9);
+  const pp = withDefaults(c, { angle: 60, growth: 0, pulse: 0.5, period: 4 });
+  close(c.evaluate(pp, 0, 3, 1).vertical!, 20 * 1.5, 1e-9); // t = T/4 → sin = 1
+});
+
+test("вертикальная цепочка: оси не вырождаются", () => {
+  const up: Skeleton = {
+    nodes: [
+      { name: "r", parent: null, restT: [0, 0, 0], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: true },
+      { name: "s0", parent: "r", restT: [0, 0, 0], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: true },
+      { name: "s1", parent: "s0", restT: [0, 1, 0], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: true },
+    ],
+  };
+  const pr: Project = { version: 1, name: "t", model: "", up: [0, 1, 0], chains: { c: ["s0", "s1"] }, clips: [] };
+  const ax = chainAxes(buildRig(up), pr, ["s0", "s1"]);
+  for (const v of Object.values(ax)) assert.ok(v.every(Number.isFinite) && Math.abs(Math.hypot(...v) - 1) < 1e-9, `ось ${v}`);
 });

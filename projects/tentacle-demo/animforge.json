@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "name": "tentacle-demo",
+  "model": "assets/tentacle.glb",
+  "up": [
+    0,
+    1,
+    0
+  ],
+  "chains": {
+    "arm": [
+      "seg_0",
+      "seg_1",
+      "seg_2",
+      "seg_3",
+      "seg_4",
+      "seg_5",
+      "seg_6",
+      "seg_7",
+      "seg_8",
+      "seg_9"
+    ]
+  },
+  "clips": [
+    {
+      "name": "idle",
+      "duration": 6.4,
+      "fps": 30,
+      "loop": true,
+      "layers": [
+        {
+          "id": "curl",
+          "type": "recipe",
+          "recipe": "curl",
+          "target": {
+            "chain": "arm"
+          },
+          "params": {
+            "plane": "vertical",
+            "angle": 70,
+            "growth": 2,
+            "pulse": 0.35,
+            "period": 3.2,
+            "phase": 0
+          },
+          "preset": "tentacle-curl"
+        },
+        {
+          "id": "wave",
+          "type": "recipe",
+          "recipe": "wave",
+          "target": {
+            "chain": "arm"
+          },
+          "params": {
+            "plane": "lateral",
+            "period": 3.2,
+            "tipAmp": 14,
+            "growth": 1.4,
+            "bodyDelay": 200,
+            "headAmp": 0
+          },
+          "preset": "tentacle-sway"
+        }
+      ]
+    }
+  ]
+}

@@ -33,7 +33,9 @@ export function chainAxes(rig: Rig, project: Project, chain: string[]): Record<S
   const a = rig.worldT[rig.index.get(chain[0])!];
   const b = rig.worldT[rig.index.get(chain[chain.length - 1])!];
   const along = vnorm(vsub(b, a));
-  const up = vnorm(project.up);
+  let up = vnorm(project.up);
+  // вертикальная цепочка (щупальце, шея): «верх» вдоль неё вырождается — берём «вперёд» мира как опору
+  if (Math.hypot(...vcross(along, up)) < 1e-3) up = [0, 0, 1];
   const side = vnorm(vcross(along, up));
   return { lateral: up, vertical: side, roll: along };
 }

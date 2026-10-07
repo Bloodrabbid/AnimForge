@@ -1,0 +1,41 @@
+{
+  "recipe": "curl",
+  "presets": [
+    {
+      "name": "tentacle-curl",
+      "help": "Щупальце загнуто к кончику и медленно «дышит» загибом.",
+      "params": {
+        "plane": "vertical",
+        "angle": 70,
+        "growth": 2,
+        "pulse": 0.35,
+        "period": 3.2,
+        "phase": 0
+      },
+      "provenance": [
+        {
+          "source": "hand-tuned",
+          "ref": "на глаз"
+        }
+      ]
+    },
+    {
+      "name": "breathe-spine",
+      "help": "Дыхание: спина еле заметно выгибается с периодом вдоха.",
+      "params": {
+        "plane": "vertical",
+        "angle": 3,
+        "growth": 0,
+        "pulse": 1,
+        "period": 3.5,
+        "phase": 0
+      },
+      "provenance": [
+        {
+          "source": "hand-tuned",
+          "ref": "на глаз; заменить замерами idle-клипов"
+        }
+      ]
+    }
+  ]
+}

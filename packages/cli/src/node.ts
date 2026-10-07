@@ -59,8 +59,9 @@ export async function exportGlb(ctx: Ctx & { dir: string }, out: string) {
       return { t, rotations: Object.fromEntries(poseAt(ctx.project, rig, clip, t)) };
     }),
   }));
-  writeFileSync(out.replace(/\.glb$/, ".samples.json"), JSON.stringify(samples, null, 1));
-  return { out, clips: report };
+  writeFileSync(out.replace(/\.glb$/, ".samples.json"), JSON.stringify(samples.filter((s) => report.find((r) => r.clip === s.clip)!.bones > 0), null, 1));
+  const empty = report.filter((r) => r.bones === 0).map((r) => r.clip);
+  return { out, clips: report, ...(empty.length ? { warning: `пустые клипы не записаны (нет слоёв, двигающих кости): ${empty.join(", ")}` } : {}) };
 }
 
 /** «Глаза»: рендер клипа в Blender → лист кадров PNG. */
@@ -85,11 +86,11 @@ export async function renderSheet(ctx: Ctx & { dir: string }, clip: string, fram
 }
 
 /** Шаблон тела через Blender: меш + кости + автоматические веса. */
-export function makeTemplate(type: string, out: string, bones = 6) {
+export function makeTemplate(type: string, out: string, bones?: number) {
   const script = join(ROOT, `bridge/blender/template_${type}.py`);
   if (!existsSync(script)) throw new Error(`нет шаблона «${type}»`);
   mkdirSync(dirname(out), { recursive: true });
-  const log = execFileSync(BLENDER, ["-b", "--python", script, "--", out, String(bones)], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const log = execFileSync(BLENDER, ["-b", "--python", script, "--", out, ...(bones ? [String(bones)] : [])], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   const ok = log.split("\n").find((l) => l.includes("_OK"));
   if (!ok) throw new Error("шаблон не собрался");
   return { out, log: ok };
@@ -108,9 +109,9 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
     },
   },
   "template.make": {
-    help: "Собрать модель по шаблону тела в Blender (сейчас: fish).",
-    args: { type: { type: "string", required: true, help: "fish" }, out: { type: "string", required: true, help: "куда положить glb" }, bones: { type: "number", help: "число костей тела" } },
-    run: async (dir, a) => makeTemplate(a.type, resolve(dir, a.out), a.bones ?? 6),
+    help: "Собрать модель по шаблону тела в Blender: fish, snake, tentacle, quadruped.",
+    args: { type: { type: "string", required: true, help: "fish | snake | tentacle | quadruped" }, out: { type: "string", required: true, help: "куда положить glb" }, bones: { type: "number", help: "число костей тела (по умолчанию — своё у каждого шаблона)" } },
+    run: async (dir, a) => makeTemplate(a.type, resolve(dir, a.out), a.bones),
   },
   "preset.list": {
     help: "Пресеты библиотеки с происхождением параметров.",
@@ -124,13 +125,14 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
       preset: { type: "string", required: true, help: "имя пресета" },
       chain: { type: "string", help: "цепочка (для нового слоя)" },
       layer: { type: "string", help: "id существующего слоя" },
+      id: { type: "string", help: "id нового слоя (если на клипе уже есть слой того же рецепта)" },
     },
     async run(dir, a) {
       const { recipe, preset } = findPreset(a.preset);
       const ctx = await loadCtx(dir);
       const r = a.layer
         ? runCommand(ctx, "recipe.set", { clip: a.clip, layer: a.layer, params: preset.params })
-        : runCommand(ctx, "recipe.add", { clip: a.clip, recipe, chain: a.chain, params: { ...preset.params }, preset: preset.name, id: recipe });
+        : runCommand(ctx, "recipe.add", { clip: a.clip, recipe, chain: a.chain, params: { ...preset.params }, preset: preset.name, id: a.id ?? recipe });
       if (a.layer) {
         const l = ctx.project.clips.find((c) => c.name === a.clip)!.layers.find((l) => l.id === a.layer);
         if (l && l.type === "recipe") l.preset = preset.name;

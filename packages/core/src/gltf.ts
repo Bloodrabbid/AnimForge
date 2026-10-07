@@ -33,6 +33,11 @@ export function writeClips(doc: Document, project: Project, rig: Rig): { clip: s
   for (const clip of project.clips) {
     root.listAnimations().filter((a) => a.getName() === clip.name).forEach((a) => a.dispose());
     const baked = bakeClip(project, rig, clip);
+    // анимация без каналов — невалидный glTF: такой клип не пишем, а сообщаем
+    if (baked.rotations.size === 0) {
+      report.push({ clip: clip.name, bones: 0, keys: 0 });
+      continue;
+    }
     const anim = doc.createAnimation(clip.name);
     const input = doc.createAccessor(`${clip.name}_t`).setType("SCALAR").setArray(new Float32Array(baked.times)).setBuffer(buffer);
     for (const [bone, qs] of baked.rotations) {
