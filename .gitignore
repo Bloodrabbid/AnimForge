@@ -3,3 +3,4 @@ out/
 *.blend1
 .DS_Store
 godot/verify/.godot/
+.claude/
