@@ -1,0 +1,481 @@
+{
+ "presets": [
+  {
+   "name": "toolsup_popup_overshoot_in",
+   "help": "Поп-ап меню: масштаб 0→1.2 за 0.18 с и дожим до 1.0 за 0.06 с, оба OutQuad.",
+   "target": "ui",
+   "duration": 0.24,
+   "tracks": [
+    {
+     "prop": "scale",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.18,
+       "from": 0,
+       "to": 1.2,
+       "ease": "outQuad"
+      },
+      {
+       "t0": 0.18,
+       "t1": 0.24,
+       "from": 1.2,
+       "to": 1.0,
+       "ease": "outQuad"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/toolsup",
+     "ref": "03 §5: PopupStyleMenuPanelController.Open RVA 0x4BDBA0 (DOScale 1.2/0.18, 1.0/0.06; ease по умолчанию DOTweenSettings defaultEaseType 6 = OutQuad)",
+     "note": "затемнение фона идёт параллельно: DOFade(исходная альфа, 0.1) — это отдельный объект, в пресет не включено"
+    }
+   ]
+  },
+  {
+   "name": "toolsup_button_select",
+   "help": "Кнопка под курсором: масштаб 1→1.1 за 0.4 с OutQuad (медленно и мягко).",
+   "target": "ui",
+   "duration": 0.4,
+   "tracks": [
+    {
+     "prop": "scale",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.4,
+       "from": 1.0,
+       "to": 1.1,
+       "ease": "outQuad"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/toolsup",
+     "ref": "03 §5: ButtonStylizer.dul RVA 0x4CB700 (DOScale 1.1, 0.4)"
+    }
+   ]
+  },
+  {
+   "name": "toolsup_button_deselect",
+   "help": "Снятие выделения: 1.1→1.0 за 0.4 с OutQuad.",
+   "target": "ui",
+   "duration": 0.4,
+   "tracks": [
+    {
+     "prop": "scale",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.4,
+       "from": 1.1,
+       "to": 1.0,
+       "ease": "outQuad"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/toolsup",
+     "ref": "03 §5: ButtonStylizer.dum RVA 0x4CB7B0 (DOScale 1.0, 0.4)"
+    }
+   ]
+  },
+  {
+   "name": "toolsup_punch_score",
+   "help": "Пинок счётчика: масштаб +0.08 за 0.133 с и назад за 0.267 с (DOPunchScale vibrato 2), OutQuad на каждом отрезке.",
+   "target": "ui",
+   "duration": 0.4,
+   "tracks": [
+    {
+     "prop": "scale",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.1333,
+       "from": 0,
+       "to": 0.08,
+       "ease": "outQuad"
+      },
+      {
+       "t0": 0.1333,
+       "t1": 0.4,
+       "from": 0.08,
+       "to": 0,
+       "ease": "outQuad"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/toolsup",
+     "ref": "03 §5: PointsProgressUI.fft RVA 0x5BDD40 (DOPunchScale(one·0.08, 0.4, 2, 1))",
+     "note": "разбивка 1/3 + 2/3 и ease на отрезок — по алгоритму DOTween.Punch/Vector3ArrayPlugin из DOTween 1.2.420 (сборка DREDGE); версию DOTween в Tools Up не сверял"
+    }
+   ]
+  },
+  {
+   "name": "toolsup_punch_progress",
+   "help": "Пинок счётчика: масштаб +0.1 за 0.133 с и назад за 0.267 с (DOPunchScale vibrato 2), OutQuad на каждом отрезке.",
+   "target": "ui",
+   "duration": 0.4,
+   "tracks": [
+    {
+     "prop": "scale",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.1333,
+       "from": 0,
+       "to": 0.1,
+       "ease": "outQuad"
+      },
+      {
+       "t0": 0.1333,
+       "t1": 0.4,
+       "from": 0.1,
+       "to": 0,
+       "ease": "outQuad"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/toolsup",
+     "ref": "03 §5: TotalTaskProgressUI.fgv RVA 0x5C6C50 (DOPunchScale(one·0.1, 0.4, 2, 1))",
+     "note": "разбивка 1/3 + 2/3 и ease на отрезок — по алгоритму DOTween.Punch/Vector3ArrayPlugin из DOTween 1.2.420 (сборка DREDGE); версию DOTween в Tools Up не сверял"
+    }
+   ]
+  },
+  {
+   "name": "toolsup_delivery_banner",
+   "help": "Плашка «доставка»: проявление 0.38 с и раскрытие по X 0.2 с, держит 2.5 с, уходит: гаснет 0.2 с, схлопывается по X 0.38 с.",
+   "target": "ui",
+   "duration": 2.88,
+   "tracks": [
+    {
+     "prop": "alpha",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.38,
+       "from": 0,
+       "to": 1,
+       "ease": "outQuad"
+      },
+      {
+       "t0": 2.5,
+       "t1": 2.7,
+       "from": 1,
+       "to": 0,
+       "ease": "outQuad"
+      }
+     ]
+    },
+    {
+     "prop": "scale_x",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.2,
+       "from": 0,
+       "to": 1,
+       "ease": "outQuad"
+      },
+      {
+       "t0": 2.5,
+       "t1": 2.88,
+       "from": 1,
+       "to": 0,
+       "ease": "outQuad"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/toolsup",
+     "ref": "03 §5: DeliveryUI.Show RVA 0x54FE90 (DOFade 1/0.38 ‖ DOScaleX 1/0.2; выход через duration+2.5: DOFade 0/0.2 ‖ DOScaleX 0/0.38)",
+     "note": "аргумент duration взят 0 — реальное значение передаёт вызывающий код, не выяснено; начальные alpha 0 и scale_x 0 предполагаются (выставление не проверено)"
+    }
+   ]
+  },
+  {
+   "name": "toolsup_hud_drop_in",
+   "help": "HUD-полоска прогресса выезжает сверху: 76 px за 0.3 с OutQuad.",
+   "target": "ui",
+   "duration": 0.3,
+   "tracks": [
+    {
+     "prop": "y",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.3,
+       "from": -76,
+       "to": 0,
+       "ease": "outQuad"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/toolsup",
+     "ref": "03 §5: SlideInOutOnGamePhaseChanges RVA 0x595610 + LevelCommonScene: TotalProgress _slideTime 0.3, y 60 → −16 (Unity, вверх = +)",
+     "note": "переведено в Godot (вниз = +): старт на 76 px выше конечной позиции"
+    }
+   ]
+  },
+  {
+   "name": "toolsup_hud_panel_side_in",
+   "help": "Список задач въезжает слева: 250 px за 0.5 с OutQuad.",
+   "target": "ui",
+   "duration": 0.5,
+   "tracks": [
+    {
+     "prop": "x",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.5,
+       "from": -250,
+       "to": 0,
+       "ease": "outQuad"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/toolsup",
+     "ref": "03 §5: SlideInOutOnGamePhaseChanges + LevelCommonScene: TaskList/Cleaning _slideTime 0.5, x −250 → 0"
+    }
+   ]
+  },
+  {
+   "name": "toolsup_bonus_text_rise",
+   "help": "Текст «+время» уплывает вверх на 150 px: экспоненциально, k = 10/с (≈0.69 с до остановки).",
+   "target": "ui",
+   "duration": 0.6931,
+   "tracks": [
+    {
+     "prop": "y",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.6931,
+       "from": 0,
+       "to": -150,
+       "ease": "outExpo"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/toolsup",
+     "ref": "03 §5: CountdownCounter.oh.MoveNext RVA 0x568970 (цель +150 px, Lerp(k = clamp01(dt·10)), стоп < 0.1)",
+     "note": "Lerp с k = 10·dt ≈ 1 − e^(−10t); outExpo за ln2 = 0.693 с даёт ровно e^(−10t); в игре объект гаснет SetActive(false) при остатке < 0.1 px (≈0.73 с)"
+    }
+   ]
+  },
+  {
+   "name": "toolsup_screen_fade",
+   "help": "Затемнение экрана: alpha 0→1 за 0.714 с smoothstep (обратное — те же числа).",
+   "target": "ui",
+   "duration": 0.7143,
+   "tracks": [
+    {
+     "prop": "alpha",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.7143,
+       "from": 0,
+       "to": 1,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/toolsup",
+     "ref": "02 §5: клип FadeCanvasFadeIn 1.0 с, плоские касательные; speed состояния 1.4"
+    }
+   ]
+  },
+  {
+   "name": "toolsup_vignette_in",
+   "help": "Виньетка закрывает экран: 0.6 с, разгон к концу (Hermite 0.12 / 2.7).",
+   "target": "ui",
+   "duration": 0.601,
+   "tracks": [
+    {
+     "prop": "alpha",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.601,
+       "from": 0,
+       "to": 1,
+       "ease": {
+        "hermite": [
+         0.117,
+         2.703
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/toolsup",
+     "ref": "03 §5: LevelCommonScene, FadeCanvasUI._vignetteFadeInCurve (0,0, slope 0.194) → (0.601,1, slope 4.498)",
+     "note": "в игре это сила виньетки, а не alpha; касательные нормированы: m = slope·T/Δv"
+    }
+   ]
+  },
+  {
+   "name": "toolsup_vignette_out",
+   "help": "Виньетка открывает экран: 0.6 с, быстро в начале и мягко в конце (Hermite 2.26 / 0.06).",
+   "target": "ui",
+   "duration": 0.6,
+   "tracks": [
+    {
+     "prop": "alpha",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.6,
+       "from": 1,
+       "to": 0,
+       "ease": {
+        "hermite": [
+         2.263,
+         0.055
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/toolsup",
+     "ref": "03 §5: LevelCommonScene, FadeCanvasUI._vignetteFadeOutCurve (0,1, slope −3.771) → (0.6,0, slope −0.092)",
+     "note": "в игре это сила виньетки, а не alpha"
+    }
+   ]
+  },
+  {
+   "name": "toolsup_time_popup",
+   "help": "Всплывашка ±время над миром: всплывает с замедлением за 1 с, проявление 0.167 с, держит до 0.633, гаснет к 1.0.",
+   "target": "ui",
+   "duration": 1.1667,
+   "tracks": [
+    {
+     "prop": "y",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 1.0,
+       "from": 0,
+       "to": -60,
+       "ease": {
+        "hermite": [
+         1.893,
+         0
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "prop": "alpha",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.1667,
+       "from": 0,
+       "to": 1,
+       "ease": "smoothstep"
+      },
+      {
+       "t0": 0.6333,
+       "t1": 1.0,
+       "from": 1,
+       "to": 0,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/toolsup",
+     "ref": "02 §5: клип TimeAttackPopupShow (TimeText y 0 → 1 за 1.0 с, Hermite m0 1.893, m1 0; alpha плоские касательные; событие в 1.1667)",
+     "note": "в игре подъём на 1 ед. мира; 60 px — условный перевод для экранного UI, не из игры"
+    }
+   ]
+  },
+  {
+   "name": "toolsup_logo_card",
+   "help": "Логотип при запуске: проявление 1 с, исчезание 0.6 с, пауза 0.1 с (OutQuad).",
+   "target": "ui",
+   "duration": 1.7,
+   "tracks": [
+    {
+     "prop": "alpha",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 1.0,
+       "from": 0,
+       "to": 1,
+       "ease": "outQuad"
+      },
+      {
+       "t0": 1.0,
+       "t1": 1.6,
+       "from": 1,
+       "to": 0,
+       "ease": "outQuad"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/toolsup",
+     "ref": "03 §5: GameLoader.Start RVA 0x473F00 (DOFade 1/1.0, DOFade 0/0.6, AppendInterval 0.1)"
+    }
+   ]
+  }
+ ]
+}
