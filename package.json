@@ -5,7 +5,9 @@
   "scripts": {
     "af": "tsx packages/cli/src/main.ts",
     "test": "tsx --test packages/core/src/*.test.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "web": "tsx apps/web/server.ts",
+    "web:shot": "tsx apps/web/screenshot.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit",
     "mcp": "tsx packages/mcp/src/server.ts"
   },
   "devDependencies": {
