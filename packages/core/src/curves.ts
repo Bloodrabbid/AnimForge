@@ -16,10 +16,16 @@ export function evalKeys(keys: Key[], t: number, loop: boolean, duration: number
   if (mode === "step") return a.v;
   const u = (t - a.t) / (b.t - a.t);
   if (mode === "linear") return a.v + (b.v - a.v) * u;
-  // Catmull-Rom касательные; на краях плоские — так клип мягко стартует и останавливается.
+  // Catmull-Rom касательные с зажимом (как «auto clamped» в Unity/Blender): на краях, в пиках и на полках
+  // касательная плоская, иначе ограничена 3·min(соседних наклонов) — кривая не перелетает ключи.
   const slope = (j: number) => {
     if (j <= 0 || j >= ks.length - 1) return 0;
-    return (ks[j + 1].v - ks[j - 1].v) / (ks[j + 1].t - ks[j - 1].t);
+    const d0 = (ks[j].v - ks[j - 1].v) / (ks[j].t - ks[j - 1].t);
+    const d1 = (ks[j + 1].v - ks[j].v) / (ks[j + 1].t - ks[j].t);
+    if (d0 * d1 <= 0) return 0;
+    const m = (ks[j + 1].v - ks[j - 1].v) / (ks[j + 1].t - ks[j - 1].t);
+    const lim = 3 * Math.min(Math.abs(d0), Math.abs(d1));
+    return Math.sign(m) * Math.min(Math.abs(m), lim);
   };
   const h = b.t - a.t;
   const m0 = slope(i) * h, m1 = slope(i + 1) * h;

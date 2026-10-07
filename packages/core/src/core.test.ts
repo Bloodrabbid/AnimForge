@@ -17,6 +17,19 @@ test("кривые: step держит значение, linear — середи�
   close(evalKeys(keys, 0.25, false, 1), 10 * (3 * 0.0625 - 2 * 0.015625)); // 3s²−2s³
 });
 
+test("кривые: полка и пик не дают перелёта", () => {
+  const keys = [{ t: 0, v: 0 }, { t: 1, v: 25 }, { t: 2, v: 25 }, { t: 3, v: 0 }];
+  let max = -Infinity;
+  for (let t = 0; t <= 3; t += 0.01) max = Math.max(max, evalKeys(keys, t, false, 3));
+  close(max, 25, 1e-9, "максимум на полке");
+  // монотонный участок: касательная в середине — обычный Catmull-Rom (зажим не срабатывает)
+  const mono = [{ t: 0, v: 0 }, { t: 1, v: 10 }, { t: 2, v: 20 }];
+  // резкий скачок после пологого участка: без зажима сплайн уходит ниже 0 на пологом отрезке
+  const jump = [{ t: 0, v: 0 }, { t: 1, v: 0.1 }, { t: 2, v: 100 }];
+  for (let t = 0; t <= 1; t += 0.01) { const v = evalKeys(jump, t, false, 2); assert.ok(v >= -1e-9 && v <= 0.1 + 1e-9, `t=${t} v=${v}`); }
+  close(evalKeys(mono, 1.5, false, 2), 16.25, 1e-9); // m0 = 10, m1 = 0 (край): 15 + 0.125·10
+});
+
 test("волна: амплитуда кончика, рост к кончику и задержка по телу", () => {
   const w = RECIPES.wave;
   const p = withDefaults(w, { period: 2, tipAmp: 10, growth: 2, bodyDelay: 90 });
