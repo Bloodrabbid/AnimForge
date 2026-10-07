@@ -1,0 +1,564 @@
+{
+ "presets": [
+  {
+   "name": "window_in",
+   "help": "Появление окна: проявление за 0.35 с.",
+   "target": "ui",
+   "duration": 0.35,
+   "tracks": [
+    {
+     "prop": "alpha",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.35,
+       "from": 0,
+       "to": 1,
+       "ease": "outQuad"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "03 §5.1 «Появление окна»: PopupWindow.cs:86 — 0.35 с OutQuad"
+    }
+   ]
+  },
+  {
+   "name": "window_out",
+   "help": "Закрытие окна: в DREDGE мгновенное; здесь — один кадр, чтобы было куда повесить событие.",
+   "target": "ui",
+   "duration": 0.0167,
+   "tracks": [
+    {
+     "prop": "alpha",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.0167,
+       "from": 1,
+       "to": 0,
+       "ease": "step"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "03 §5.1 «Закрытие окна»: PopupWindow.cs:99 — Kill + SetActive(false)"
+    }
+   ]
+  },
+  {
+   "name": "panel_slide_in",
+   "help": "Боковая панель выезжает: сдвиг 75 px + проявление, 0.5 с OutExpo.",
+   "target": "ui",
+   "duration": 0.5,
+   "tracks": [
+    {
+     "prop": "x",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.5,
+       "from": -75,
+       "to": 0,
+       "ease": "outExpo"
+      }
+     ]
+    },
+    {
+     "prop": "alpha",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.35,
+       "from": 0,
+       "to": 1,
+       "ease": "outQuad"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "03 §5.1 «Боковая панель» SlidePanel.cs:99–124 (0.5 с OutExpo) и «мелкие панели» ActiveAbilityInfoPanel.cs:327 (сдвиг 75 + alpha)"
+    }
+   ]
+  },
+  {
+   "name": "notification_in",
+   "help": "Уведомление сбоку: выезд 0.3 с OutExpo.",
+   "target": "ui",
+   "duration": 0.3,
+   "tracks": [
+    {
+     "prop": "x",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.3,
+       "from": 120,
+       "to": 0,
+       "ease": "outExpo"
+      }
+     ]
+    },
+    {
+     "prop": "alpha",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.3,
+       "from": 0,
+       "to": 1,
+       "ease": "outQuad"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "03 §5.1 «Уведомление» NotificationsUI.cs:128 — выезд 0.3 с OutExpo; величину сдвига 120 px взял сам"
+    }
+   ]
+  },
+  {
+   "name": "portrait_in",
+   "help": "Выезд портрета NPC: быстрый въезд за 0.33 с и дотяжка к 0.75 с, проявление 0.25 с.",
+   "target": "ui",
+   "duration": 0.75,
+   "tracks": [
+    {
+     "prop": "x",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.33,
+       "from": -75,
+       "to": -11,
+       "ease": {
+        "hermite": [
+         1.9,
+         0
+        ]
+       }
+      },
+      {
+       "t0": 0.33,
+       "t1": 0.75,
+       "from": -11,
+       "to": -3,
+       "ease": {
+        "hermite": [
+         2.9,
+         0
+        ]
+       }
+      },
+      {
+       "t0": 0.75,
+       "t1": 0.75,
+       "from": -3,
+       "to": 0,
+       "ease": "step"
+      }
+     ]
+    },
+    {
+     "prop": "alpha",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.25,
+       "from": 0,
+       "to": 1,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "02 §5.5 «выезд портрета» (21 клип *Appear)"
+    }
+   ]
+  },
+  {
+   "name": "button_cascade_item",
+   "help": "Элемент каскада кнопок; задержку 0.1·i ставит вызывающий код.",
+   "target": "ui",
+   "duration": 0.35,
+   "tracks": [
+    {
+     "prop": "y",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.35,
+       "from": 20,
+       "to": 0,
+       "ease": "outExpo"
+      }
+     ]
+    },
+    {
+     "prop": "alpha",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.35,
+       "from": 0,
+       "to": 1,
+       "ease": "outExpo"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "03 §5.1 «Каскад кнопок» Encyclopedia.cs:202–218 — 0.35 с, задержка 0.1·i; сдвиг 20 px мой"
+    }
+   ]
+  },
+  {
+   "name": "pop_in",
+   "help": "Плитка «выпрыгивает»: масштаб 0→1 OutBack за 0.35 с.",
+   "target": "ui",
+   "duration": 0.35,
+   "tracks": [
+    {
+     "prop": "scale",
+     "mode": "mul",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.35,
+       "from": 0,
+       "to": 1,
+       "ease": "outBack"
+      }
+     ]
+    },
+    {
+     "prop": "alpha",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.35,
+       "from": 0,
+       "to": 1,
+       "ease": "outQuad"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "03 §5.1 «Плитки рецептов» RecipeEntry.cs:144–145"
+    }
+   ]
+  },
+  {
+   "name": "kick",
+   "help": "«Пинок» значка при изменении: масштаб 1.5→1 за 0.17 с.",
+   "target": "ui",
+   "duration": 0.17,
+   "tracks": [
+    {
+     "prop": "scale",
+     "mode": "mul",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.17,
+       "from": 1.5,
+       "to": 1,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "02 §5.5 «пинок значка», 03 §5.3 ItemCountIconPulse"
+    }
+   ]
+  },
+  {
+   "name": "hit_juice",
+   "help": "Сочный отклик на попадание: сжатие −5 %, перелёт +5 %, возврат — за 0.1 с.",
+   "target": "ui",
+   "duration": 0.1,
+   "tracks": [
+    {
+     "prop": "scale",
+     "mode": "mul",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.0333,
+       "from": 0.95,
+       "to": 1.05,
+       "ease": "outQuad"
+      },
+      {
+       "t0": 0.0333,
+       "t1": 0.1,
+       "from": 1.05,
+       "to": 1,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "03 §5.3 HarvestMinigameHit: scale 0.95 → 1.05 → 1 за 0.1 с"
+    }
+   ]
+  },
+  {
+   "name": "miss_shake",
+   "help": "Промах: тряска ±5 px и крен ±0.76° за 0.27 с.",
+   "target": "ui",
+   "duration": 0.267,
+   "tracks": [
+    {
+     "prop": "x",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.067,
+       "from": 0,
+       "to": -5,
+       "ease": "linear"
+      },
+      {
+       "t0": 0.067,
+       "t1": 0.133,
+       "from": -5,
+       "to": 0,
+       "ease": "linear"
+      },
+      {
+       "t0": 0.133,
+       "t1": 0.2,
+       "from": 0,
+       "to": 5,
+       "ease": "linear"
+      },
+      {
+       "t0": 0.2,
+       "t1": 0.267,
+       "from": 5,
+       "to": 0,
+       "ease": "linear"
+      }
+     ]
+    },
+    {
+     "prop": "y",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.067,
+       "from": 0,
+       "to": 5,
+       "ease": "linear"
+      },
+      {
+       "t0": 0.067,
+       "t1": 0.133,
+       "from": 5,
+       "to": -5,
+       "ease": "linear"
+      },
+      {
+       "t0": 0.133,
+       "t1": 0.2,
+       "from": -5,
+       "to": 3,
+       "ease": "linear"
+      },
+      {
+       "t0": 0.2,
+       "t1": 0.267,
+       "from": 3,
+       "to": 0,
+       "ease": "linear"
+      }
+     ]
+    },
+    {
+     "prop": "rotation",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.0375,
+       "from": 0,
+       "to": 0.76,
+       "ease": "linear"
+      },
+      {
+       "t0": 0.0375,
+       "t1": 0.075,
+       "from": 0.76,
+       "to": -0.7,
+       "ease": "linear"
+      },
+      {
+       "t0": 0.075,
+       "t1": 0.1125,
+       "from": -0.7,
+       "to": 0.4,
+       "ease": "linear"
+      },
+      {
+       "t0": 0.1125,
+       "t1": 0.15,
+       "from": 0.4,
+       "to": 0,
+       "ease": "linear"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "03 §5.3 HarvestMinigameMiss — ключи кольца и подложки"
+    }
+   ]
+  },
+  {
+   "name": "attention_pulse",
+   "help": "Привлечение внимания: мерцание яркости туда-обратно 0.35 с, бесконечно.",
+   "target": "ui",
+   "duration": 0.7,
+   "loop": true,
+   "tracks": [
+    {
+     "prop": "alpha",
+     "mode": "mul",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.35,
+       "from": 1,
+       "to": 0.6,
+       "ease": "inOutSine"
+      },
+      {
+       "t0": 0.35,
+       "t1": 0.7,
+       "from": 0.6,
+       "to": 1,
+       "ease": "inOutSine"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "03 §5.1 «Привлечение внимания» ScreenSideSwitcherUI.cs:17 — white↔grey 0.35 с Yoyo InOutSine; цвет заменён на яркость"
+    }
+   ]
+  },
+  {
+   "name": "jump_spin",
+   "help": "Прыжок значка: парабола +108 px за 0.66 с, оборот 352°, исчезновение масштабом в конце.",
+   "target": "ui",
+   "duration": 0.66,
+   "tracks": [
+    {
+     "prop": "y",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.33,
+       "from": 0,
+       "to": -108,
+       "ease": {
+        "hermite": [
+         2.7,
+         0
+        ]
+       }
+      },
+      {
+       "t0": 0.33,
+       "t1": 0.66,
+       "from": -108,
+       "to": 0,
+       "ease": {
+        "hermite": [
+         0,
+         1.7
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "prop": "rotation",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.66,
+       "from": 0,
+       "to": 352,
+       "ease": "linear"
+      }
+     ]
+    },
+    {
+     "prop": "scale",
+     "mode": "mul",
+     "segments": [
+      {
+       "t0": 0.49,
+       "t1": 0.66,
+       "from": 1,
+       "to": 0,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "02 §5.5 «прыжок»; y в Godot растёт вниз, поэтому вверх = минус"
+    }
+   ]
+  }
+ ]
+}

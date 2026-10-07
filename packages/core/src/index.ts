@@ -5,3 +5,4 @@ export * from "./recipes.ts";
 export * from "./evaluate.ts";
 export * from "./gltf.ts";
 export * from "./commands.ts";
+export * from "./tweens.ts";

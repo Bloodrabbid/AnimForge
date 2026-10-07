@@ -1,0 +1,176 @@
+{
+ "presets": [
+  {
+   "name": "shake_explosion",
+   "help": "Тряска камеры: сила 5, 15.0 Гц, нарастание 0 с / удержание 0.2 с / затухание 0.7 с.",
+   "target": "camera",
+   "duration": 0.9,
+   "tracks": [
+    {
+     "prop": "shake",
+     "shake": {
+      "amp": 0.2,
+      "freq": 15.0,
+      "attack": 0,
+      "sustain": 0.2,
+      "decay": 0.7,
+      "roll": 1.5,
+      "seed": 1
+     }
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "03 §5.4 Cinemachine Impulse: ExplosivePOI.cs:54",
+     "note": "amp и freq Cinemachine переведены в смещение камеры ×0.04 ед. и ×3 Гц — коэффициенты мои, подобраны на глаз"
+    }
+   ]
+  },
+  {
+   "name": "shake_hit_light",
+   "help": "Тряска камеры: сила 1, 6.0 Гц, нарастание 0 с / удержание 0.05 с / затухание 0.4 с.",
+   "target": "camera",
+   "duration": 0.45,
+   "tracks": [
+    {
+     "prop": "shake",
+     "shake": {
+      "amp": 0.04,
+      "freq": 6.0,
+      "attack": 0,
+      "sustain": 0.05,
+      "decay": 0.4,
+      "roll": 1.5,
+      "seed": 1
+     }
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "03 §5.4 Cinemachine Impulse: OozeMonster.cs:146",
+     "note": "amp и freq Cinemachine переведены в смещение камеры ×0.04 ед. и ×3 Гц — коэффициенты мои, подобраны на глаз"
+    }
+   ]
+  },
+  {
+   "name": "shake_rumble_warning",
+   "help": "Тряска камеры: сила 0.2, 3.0 Гц, нарастание 1 с / удержание 0.5 с / затухание 1 с.",
+   "target": "camera",
+   "duration": 2.5,
+   "tracks": [
+    {
+     "prop": "shake",
+     "shake": {
+      "amp": 0.008,
+      "freq": 3.0,
+      "attack": 1,
+      "sustain": 0.5,
+      "decay": 1,
+      "roll": 0.5,
+      "seed": 1
+     }
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "03 §5.4 Cinemachine Impulse: FallingRocks.cs:51 — медленный нарастающий гул",
+     "note": "amp и freq Cinemachine переведены в смещение камеры ×0.04 ед. и ×3 Гц — коэффициенты мои, подобраны на глаз"
+    }
+   ]
+  },
+  {
+   "name": "punch_in",
+   "help": "Наезд: FOV −9° за 0.6 с (40→31), ease как у кранов катсцен.",
+   "target": "camera",
+   "duration": 0.6,
+   "tracks": [
+    {
+     "prop": "fov",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.6,
+       "from": 0,
+       "to": -9,
+       "ease": {
+        "hermite": [
+         0,
+         1
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "02 §5.6 «Наезд/кран»: −9° FOV, старт с нулевой касательной, конец на постоянной скорости (b=1); 0.6 с мои"
+    }
+   ]
+  },
+  {
+   "name": "pull_out",
+   "help": "Отъезд: FOV +15° за 1.5 с smoothstep (40→55).",
+   "target": "camera",
+   "duration": 1.5,
+   "tracks": [
+    {
+     "prop": "fov",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 1.5,
+       "from": 0,
+       "to": 15,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "02 §5.6 «при отъезде +15° (40 → 55, smoothstep)»; длительность моя"
+    }
+   ]
+  },
+  {
+   "name": "orbit_slow",
+   "help": "Облёт: 16°/с по рысканью 5 с с мягкой остановкой.",
+   "target": "camera",
+   "duration": 5,
+   "tracks": [
+    {
+     "prop": "yaw",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 5,
+       "from": 0,
+       "to": 80,
+       "ease": {
+        "hermite": [
+         1,
+         0
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "02 §5.6 «Облёт: 8–26 °/с по yaw, в конце остановка с нулевой касательной»"
+    }
+   ]
+  }
+ ]
+}

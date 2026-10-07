@@ -89,3 +89,32 @@ test("вертикальная цепочка: оси не вырождаютс�
   const ax = chainAxes(buildRig(up), pr, ["s0", "s1"]);
   for (const v of Object.values(ax)) assert.ok(v.every(Number.isFinite) && Math.abs(Math.hypot(...v) - 1) < 1e-9, `ось ${v}`);
 });
+
+import { ease, samplePreset, shakeAt } from "./tweens.ts";
+
+test("твины: easing в ключевых точках", () => {
+  close(ease("outQuad", 0.5), 0.75);
+  close(ease("outExpo", 0.1), 0.5);
+  close(ease("inOutSine", 0.5), 0.5);
+  close(ease("outBack", 0.5), 1 + 2.70158 * -0.125 + 1.70158 * 0.25);
+  close(ease({ hermite: [0, 1] }, 0.5), 0.375); // h01(0.5) = 0.5, h11(0.5)·b = (0.125 − 0.25)·1
+  close(ease("outBounce", 1), 1);
+});
+
+test("твины: сегменты держат значение в паузе, цикл заворачивает время", () => {
+  const p = { name: "p", help: "", target: "ui" as const, duration: 1, loop: true, provenance: [],
+    tracks: [{ prop: "x", segments: [{ t0: 0, t1: 0.2, from: 0, to: 10 }, { t0: 0.6, t1: 0.8, from: 8, to: 4 }] }] };
+  close(samplePreset(p, 0.1).x, 5);
+  close(samplePreset(p, 0.4).x, 10); // пауза
+  close(samplePreset(p, 0.7).x, 6);
+  close(samplePreset(p, 1.1).x, 5); // цикл
+});
+
+test("тряска: огибающая нарастает, держит и гаснет к нулю", () => {
+  const sh = { amp: 2, freq: 3, attack: 0.5, sustain: 0.5, decay: 1, roll: 1, seed: 1 };
+  close(shakeAt(sh, 0).x, 0);
+  close(shakeAt(sh, 2.0001).x, 0);
+  const n = (t: number) => { const w = 2 * Math.PI * 3 * t; return 0.5 * Math.sin(w + 1) + 0.3 * Math.sin(2.17 * w + 1.7) + 0.2 * Math.sin(3.71 * w + 2.3); };
+  close(shakeAt(sh, 0.7).x, 2 * n(0.7)); // удержание: env = 1
+  close(shakeAt(sh, 1.5).x, 2 * 0.25 * n(1.5)); // середина затухания: (1−0.5)² = 0.25
+});

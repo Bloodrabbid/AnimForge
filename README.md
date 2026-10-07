@@ -27,3 +27,17 @@ pnpm af verify --project $P                                            # про�
 - `library/presets` — пресеты рецептов; у каждого записано происхождение (из каких замеров взят).
 - `research/` — контур «Исследование» (приватный): что извлечено из игр, в библиотеку не попадает.
 - `projects/` — проекты анимации (`animforge.json` — текст, удобно править и смотреть в git).
+
+## Твины UI и камеры
+
+Пресеты лежат в `library/tweens/{ui,camera}.json`, у каждого указано происхождение (провенанс). Это 12 пресетов UI и 6 пресетов камеры, сняты с DREDGE. Одни и те же формулы считают ядро (`packages/core/src/tweens.ts`) и аддон Godot (`godot/sandbox/addons/animforge`).
+
+```sh
+pnpm af tweens.list --target ui
+pnpm af tweens.plot --preset jump_spin --out out/tweens/jump_spin.png   # график свойств во времени
+pnpm af tweens.verify      # синхронизирует пресеты в аддон и сверяет Godot с ядром без окна
+```
+
+Чтобы подключить в свою игру, скопируй `godot/sandbox/addons/animforge` в проект и включи плагин. Дальше:
+`AnimForge.play($Panel, "window_in")`, `AnimForge.play($Camera3D, "shake_explosion")`,
+`AnimForge.play(btn, "button_cascade_item", {"delay": 0.1 * i})`.

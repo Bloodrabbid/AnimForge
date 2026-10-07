@@ -1,0 +1,8 @@
+; AnimForge: песочница аддона (живые проверки твинов и пример подключения)
+config_version=5
+
+[application]
+config/name="AnimForge sandbox"
+
+[editor_plugins]
+enabled=PackedStringArray("res://addons/animforge/plugin.cfg")

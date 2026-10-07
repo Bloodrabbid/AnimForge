@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { COMMANDS, Ctx, Project, RECIPES, buildRig, emptyProject, poseAt, readSkeleton, runCommand, writeClips } from "../../core/src/index.ts";
+import { COMMANDS, Ctx, Project, RECIPES, TweenPreset, buildRig, emptyProject, poseAt, readSkeleton, runCommand, samplePreset, writeClips } from "../../core/src/index.ts";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 export const GODOT = process.env.GODOT ?? "/Applications/Godot.app/Contents/MacOS/Godot";
@@ -97,6 +97,59 @@ export function makeTemplate(type: string, out: string, bones?: number) {
 }
 
 /** Команды адаптера (файлы, Blender) — того же вида, что и команды ядра, чтобы CLI и MCP видели единый список. */
+
+const TWEEN_LIB = () => join(ROOT, "library/tweens");
+const ADDON_PRESETS = () => join(ROOT, "godot/sandbox/addons/animforge/presets");
+
+export function loadTweens(): TweenPreset[] {
+  return readdirSync(TWEEN_LIB()).filter((f) => f.endsWith(".json")).flatMap((f) => JSON.parse(readFileSync(join(TWEEN_LIB(), f), "utf8")).presets);
+}
+
+export function findTween(name: string): TweenPreset {
+  const all = loadTweens();
+  const p = all.find((p) => p.name === name);
+  if (!p) throw new Error(`нет твина «${name}». Есть: ${all.map((p) => p.name).join(", ")}`);
+  return p;
+}
+
+/** Копирует библиотеку твинов в аддон Godot (аддон читает только свою папку presets). */
+export function syncTweens() {
+  mkdirSync(ADDON_PRESETS(), { recursive: true });
+  const files = readdirSync(TWEEN_LIB()).filter((f) => f.endsWith(".json"));
+  for (const f of files) writeFileSync(join(ADDON_PRESETS(), f), readFileSync(join(TWEEN_LIB(), f)));
+  return { copied: files, to: ADDON_PRESETS() };
+}
+
+const sampleTimes = (p: TweenPreset, n: number) => Array.from({ length: n + 1 }, (_, i) => (p.duration * i) / n);
+
+/** Глаза агента для твинов: график всех свойств пресета во времени, PNG. */
+export function plotTween(p: TweenPreset, out: string) {
+  const W = 640, H = 400, pad = 40, N = 240;
+  const ts = sampleTimes(p, N);
+  const rows = ts.map((t) => samplePreset(p, t));
+  const keys = [...new Set(rows.flatMap((r) => Object.keys(r)))];
+  const colors = ["#e4572e", "#29335c", "#f3a712", "#669bbc", "#4c956c", "#a8201a", "#7b2cbf"];
+  const top = 24 + 18 * keys.length; // легенда над графиком, а не поверх кривых
+  const lines: string[] = [];
+  keys.forEach((k, ci) => {
+    const vs = rows.map((r) => r[k] ?? 0);
+    let lo = Math.min(...vs), hi = Math.max(...vs);
+    if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
+    const pts = vs.map((v, i) => `${(pad + ((W - 2 * pad) * i) / N).toFixed(1)},${(H - pad - ((H - pad - top) * (v - lo)) / (hi - lo)).toFixed(1)}`).join(" ");
+    lines.push(`<polyline fill="none" stroke="${colors[ci % colors.length]}" stroke-width="2.5" points="${pts}"/>`);
+    lines.push(`<text x="${pad + 8}" y="${20 + ci * 18}" font-size="14" fill="${colors[ci % colors.length]}">${k}: ${lo.toFixed(2)}…${hi.toFixed(2)}</text>`);
+  });
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" font-family="Helvetica, Arial, sans-serif"><rect width="100%" height="100%" fill="#fbf8f2"/>
+<line x1="${pad}" y1="${H - pad}" x2="${W - pad}" y2="${H - pad}" stroke="#999"/><line x1="${pad}" y1="${top}" x2="${pad}" y2="${H - pad}" stroke="#999"/>
+<text x="${W - pad}" y="${H - 12}" font-size="13" text-anchor="end" fill="#555">${p.name} · ${p.duration} с${p.loop ? " · цикл" : ""} (каждая кривая в своём масштабе)</text>
+${lines.join("\n")}</svg>`;
+  mkdirSync(dirname(out), { recursive: true });
+  const svgPath = out.replace(/\.png$/, ".svg");
+  writeFileSync(svgPath, svg);
+  execFileSync("rsvg-convert", [svgPath, "-o", out]);
+  return { png: out, props: keys };
+}
+
 export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, { type: string; required?: boolean; help: string }>; run(dir: string, a: Record<string, any>): Promise<unknown> }> = {
   init: {
     help: "Создать проект в папке: модель (glb) копируется не будет — указывается путь относительно папки.",
@@ -164,6 +217,46 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
       }
       const lines = log.split("\n").filter((l) => /CLIP|VERIFY/.test(l));
       return { ok: lines.some((l) => l.includes("VERIFY_OK")), godot: lines };
+    },
+  },
+  "tweens.list": {
+    help: "Пресеты твинов UI и камеры из library/tweens.",
+    args: { target: { type: "string", help: "ui | camera" } },
+    run: async (_d, a) => loadTweens().filter((p) => !a.target || p.target === a.target).map((p) => ({ name: p.name, target: p.target, duration: p.duration, loop: !!p.loop, help: p.help, props: p.tracks.map((t) => t.prop) })),
+  },
+  "tweens.sample": {
+    help: "Значения свойств твина во времени (как их применит аддон Godot).",
+    args: { preset: { type: "string", required: true, help: "имя твина" }, steps: { type: "number", help: "сколько отрезков, по умолчанию 10" } },
+    run: async (_d, a) => { const p = findTween(a.preset); return sampleTimes(p, a.steps ?? 10).map((t) => ({ t: +t.toFixed(4), v: samplePreset(p, t) })); },
+  },
+  "tweens.plot": {
+    help: "Глаза агента: график свойств твина во времени, PNG.",
+    args: { preset: { type: "string", required: true, help: "имя твина" }, out: { type: "string", required: true, help: "png" } },
+    run: async (dir, a) => plotTween(findTween(a.preset), resolve(dir, a.out)),
+  },
+  "tweens.sync": {
+    help: "Скопировать библиотеку твинов в аддон Godot (godot/sandbox/addons/animforge/presets).",
+    args: {},
+    run: async () => syncTweens(),
+  },
+  "tweens.verify": {
+    help: "Сверка аддона Godot с ядром: выборки всех твинов + живой Tween на Control, без окна.",
+    args: {},
+    async run() {
+      const sync = syncTweens();
+      const tmp = mkdtempSync(join(tmpdir(), "af-tw-"));
+      const samples = Object.fromEntries(loadTweens().map((p) => [p.name, sampleTimes(p, 50).map((t) => ({ t, v: samplePreset(p, t) }))]));
+      const file = join(tmp, "samples.json");
+      writeFileSync(file, JSON.stringify(samples));
+      let log = "";
+      try {
+        log = execFileSync(GODOT, ["--headless", "--path", join(ROOT, "godot/sandbox"), "--script", "res://tests/tweens_verify.gd", "--", file], { encoding: "utf8", timeout: 90_000, stdio: ["ignore", "pipe", "pipe"] });
+      } catch (e: any) {
+        log = String(e.stdout ?? "") + String(e.stderr ?? "");
+      }
+      rmSync(tmp, { recursive: true, force: true });
+      const lines = log.split("\n").filter((l) => /SAMPLES|LIVE|TWEENS|ERROR|error/.test(l));
+      return { ok: lines.some((l) => l.includes("TWEENS_OK")), presets: Object.keys(samples).length, synced: sync.copied, godot: lines };
     },
   },
   sheet: {
