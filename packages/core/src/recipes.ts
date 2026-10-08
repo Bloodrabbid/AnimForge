@@ -12,6 +12,11 @@ export interface ParamSpec {
   help: string;
 }
 
+export interface ClipEvent {
+  t: number;
+  name: string;
+}
+
 export interface BoneInfo {
   height: number;
 }
@@ -25,6 +30,8 @@ export interface RecipeDef {
   evaluate(p: Record<string, any>, i: number, n: number, t: number, info?: BoneInfo): Partial<Record<Channel, number>>;
   /** Вторичная динамика: считается не формулой, а симуляцией по движению остальных слоёв (evaluate.ts). */
   secondary?: boolean;
+  /** События рецепта (удар, звук, шлейф, окно ввода) в секундах клипа — уходят в экспорт и в Godot. */
+  events?(p: Record<string, any>): ClipEvent[];
 }
 
 const wave: RecipeDef = {
@@ -263,7 +270,173 @@ const jiggle: RecipeDef = {
   evaluate: () => ({}),
 };
 
-export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle };
+// ── удары ────────────────────────────────────────────────────────────────────────────────────────────────────────
+// Взмах — ease с треугольной скоростью: разгон до пика в доле a, затем торможение. Пик скорости — момент контакта
+// (в Witcher hit засчитывается через hitLag после пика скорости запястья).
+function swingEase(u: number, a: number): number {
+  u = Math.min(1, Math.max(0, u));
+  return u <= a ? (u * u) / a : 1 - ((1 - u) * (1 - u)) / (1 - a);
+}
+const smooth = (x: number) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
+/** Угол руки по фазе: в замахе — из покоя к up, во взмахе — прямо между up (pos = +1) и follow (pos = −1),
+ * в возврате — из крайней точки в покой. На стыках фаз скорость нулевая, поэтому движение гладкое.
+ * Доля «к замаху» w ∈ [0, 1] — для сгиба локтя: согнут в замахе, прям в доводке. */
+function armPath(pos: number, phase: string, up: number, follow: number): { angle: number; w: number } {
+  if (phase === "swing" || phase === "hold") { const w = (pos + 1) / 2; return { angle: follow + (up - follow) * w, w }; }
+  if (pos >= 0) return { angle: up * pos, w: pos }; // замах или возврат со стороны замаха
+  return { angle: follow * -pos, w: 0 }; // возврат из доводки
+}
+
+/** Траектория серии ударов в долях: pos ∈ [−1, 1] (+1 — замах, −1 — доводка), моменты попаданий и окно ввода. */
+function strikePlan(p: Record<string, any>) {
+  const k = 1 / p.tempo;
+  const strike = p.strike * k, follow = p.follow * k, hitLag = p.hitLag * k, recover = p.recover * k, tail = p.tail * k;
+  const swing = p.hits > 1 ? p.interval * k : strike + follow; // в серии каждый взмах длится interval
+  const a = strike / (strike + follow);
+  const firstHit = Math.max(p.firstHit * k, hitLag + a * swing + 0.05);
+  const s0 = firstHit - hitLag - a * swing; // начало первого взмаха = конец замаха
+  const hits = Array.from({ length: p.hits }, (_, i) => firstHit + i * swing);
+  const end = s0 + p.hits * swing; // конец последнего взмаха
+  return { s0, swing, a, hits, end, recover, tail, total: end + recover + tail };
+}
+
+function strikePos(p: Record<string, any>, t: number): { pos: number; phase: "ready" | "windup" | "swing" | "recover" | "rest"; i: number } {
+  const pl = strikePlan(p);
+  if (t < 0) return { pos: 0, phase: "ready", i: 0 };
+  if (t < pl.s0) return { pos: smooth(t / pl.s0), phase: "windup", i: 0 }; // замах inOut до +1
+  if (t < pl.end) {
+    const i = Math.floor((t - pl.s0) / pl.swing);
+    const from = i % 2 === 0 ? 1 : -1; // взмахи чередуются: замах → доводка → обратно
+    return { pos: from - 2 * from * swingEase((t - pl.s0 - i * pl.swing) / pl.swing, pl.a), phase: "swing", i };
+  }
+  const last = p.hits % 2 === 1 ? -1 : 1;
+  if (t < pl.end + pl.recover) return { pos: last * (1 - smooth((t - pl.end) / pl.recover)), phase: "recover", i: p.hits - 1 };
+  return { pos: 0, phase: "rest", i: p.hits - 1 };
+}
+
+const meleeStrike: RecipeDef = {
+  name: "melee-strike",
+  help:
+    "Удар или серия ударов (Witcher + Tools Up!): замах → взмах с пиком скорости в контакте → доводка → возврат → окно на " +
+    "следующий ввод. Один слой на роль: arm — цепочка плечо→локоть (мах vertical, локоть сгибается в крайних точках), " +
+    "core — кручение и наклон корпуса за рукой, pelvis — присед на замахе и оседание после удара. События: hit, " +
+    "trail_on/off, whoosh, effort, window_open/close.",
+  params: {
+    role: { type: "enum", default: "arm", options: ["arm", "core", "pelvis"], help: "что двигает слой" },
+    start: { type: "number", default: 0, min: 0, max: 10, unit: "с", help: "когда начать (несколько ударов в одном клипе)" },
+    hits: { type: "number", default: 1, min: 1, max: 6, help: "ударов в звене серии (Witcher: 2 → 4 → 5 → 4 по уровням)" },
+    firstHit: { type: "number", default: 0.685, min: 0.19, max: 2.2, unit: "с", help: "от начала до первого удара — «телеграф» (собаки 0.31, меч 0.57, двуручник 1.01, голем 1.20; Геральт 0.21–0.60)" },
+    strike: { type: "number", default: 0.3, min: 0.05, max: 0.6, unit: "с", help: "разгон взмаха до пика скорости (медиана 169 ударов 0.30)" },
+    follow: { type: "number", default: 0.3, min: 0.05, max: 0.8, unit: "с", help: "торможение после пика — доводка (медианы стилей 0.25–0.52)" },
+    interval: { type: "number", default: 0.47, min: 0.15, max: 0.8, unit: "с", help: "между ударами серии (быстрый стиль 0.29, сильный 0.47)" },
+    hitLag: { type: "number", default: 0.053, min: -0.02, max: 0.15, unit: "с", help: "контакт после пика скорости (Witcher 0.053; Tools Up! молоток 0.035)" },
+    recover: { type: "number", default: 0.4, min: 0.05, max: 1.5, unit: "с", help: "возврат в стойку (на глаз)" },
+    tail: { type: "number", default: 0.9, min: 0, max: 2, unit: "с", help: "окно на следующий ввод после возврата (сталь 0.9, серебро 1.1–1.3)" },
+    tempo: { type: "number", default: 1, min: 0.5, max: 2.5, help: "ускорение всего звена — так Witcher делает серию быстрее тем же мокапом (×1.37…1.92)" },
+    windupAngle: { type: "number", default: 110, min: 0, max: 170, unit: "°", help: "подъём руки в замахе (на глаз: в играх измерен подъём кисти, не угол)" },
+    followAngle: { type: "number", default: 20, min: -120, max: 120, unit: "°", help: "где рука заканчивает взмах: 20 — рубящий удар закончен впереди-внизу, −60 — рука уходит за спину (на глаз)" },
+    elbow: { type: "number", default: 60, min: 0, max: 140, unit: "°", help: "сгиб локтя в замахе; к доводке рука выпрямляется (на глаз)" },
+    plane: { type: "enum", default: "vertical", options: ["vertical", "lateral"], help: "плоскость маха руки: vertical — рубящий сверху (вперёд-вверх), lateral — вбок" },
+    coreTwist: { type: "number", default: 25, min: 0, max: 60, unit: "°", help: "кручение корпуса за рукой (на глаз)" },
+    coreLean: { type: "number", default: 10, min: 0, max: 40, unit: "°", help: "наклон корпуса за рукой (на глаз)" },
+    crouch: { type: "number", default: 0.1, min: 0, max: 0.4, help: "присед на замахе — доля высоты таза (на глаз)" },
+    settle: { type: "number", default: 0.22, min: 0, max: 0.4, help: "оседание после удара — доля высоты таза (Tools Up! молоток −0.10 при тазе 0.46)" },
+    trailLead: { type: "number", default: 0.13, min: 0, max: 0.3, unit: "с", help: "шлейф клинка включается до контакта (0.09–0.22)" },
+    trailLag: { type: "number", default: 0.05, min: 0, max: 0.15, unit: "с", help: "и гаснет после (0.01–0.12)" },
+    whooshLead: { type: "number", default: 0.115, min: 0, max: 0.3, unit: "с", help: "звук взмаха до контакта (n = 337, 0.045–0.29)" },
+    effortLead: { type: "number", default: 0.17, min: 0, max: 0.4, unit: "с", help: "выдох/крик усилия до контакта (n = 193)" },
+  },
+  evaluate(p, i, _n, t, info) {
+    if (i > 1 || (p.role !== "arm" && i > 0)) return {};
+    const tt = t - p.start;
+    const { pos, phase } = strikePos(p, tt);
+    switch (p.role) {
+      case "arm": {
+        const a = armPath(pos, phase, p.windupAngle, p.followAngle);
+        return i === 0 ? { [p.plane]: a.angle } : { [p.plane]: -p.elbow * a.w };
+      }
+      case "core":
+        return { roll: pos * p.coreTwist, vertical: -pos * p.coreLean };
+      default: {
+        const h = info?.height ?? 0;
+        const pl = strikePlan(p);
+        let dip = 0;
+        if (phase === "windup" || phase === "swing") dip -= p.crouch * h * Math.max(0, pos) * (phase === "windup" ? 1 : 1 - swingEase((tt - pl.s0) / pl.swing, pl.a));
+        // оседание после последнего удара: опускание за доводку, возврат за recover
+        const tl = pl.hits[pl.hits.length - 1];
+        const fall = (pl.end - tl) + pl.recover * 0.5;
+        if (tt > tl) dip -= p.settle * h * Math.sin(Math.PI * Math.min(1, (tt - tl) / (fall + pl.recover * 0.5)));
+        return { move_up: dip };
+      }
+    }
+  },
+  events(p) {
+    const pl = strikePlan(p);
+    const ev: ClipEvent[] = [];
+    for (const h of pl.hits) {
+      ev.push({ t: h - p.effortLead / p.tempo, name: "effort" }, { t: h - p.whooshLead / p.tempo, name: "whoosh" });
+      ev.push({ t: h - p.trailLead / p.tempo, name: "trail_on" }, { t: h, name: "hit" }, { t: h + p.trailLag / p.tempo, name: "trail_off" });
+    }
+    ev.push({ t: pl.end + pl.recover, name: "window_open" }, { t: pl.total, name: "window_close" });
+    return ev.map((e) => ({ ...e, t: +(e.t + p.start).toFixed(4) })).sort((a, b) => a.t - b.t);
+  },
+};
+
+const chargeRelease: RecipeDef = {
+  name: "charge-release",
+  help:
+    "Силовая атака (Witcher): долгий замах → удержание с пружинящим корнем (петля) → выпуск двумя ударами → возврат. " +
+    "Роли как у melee-strike. События: charge_start, charge_full, hit ×2, window_open.",
+  params: {
+    role: { type: "enum", default: "arm", options: ["arm", "core", "pelvis"], help: "что двигает слой" },
+    windup: { type: "number", default: 1.7, min: 0.3, max: 3, unit: "с", help: "замах заряда (1hS_powpre 1.70)" },
+    hold: { type: "number", default: 0.8, min: 0, max: 5, unit: "с", help: "удержание; в игре — петля 0.80 с, пока держат кнопку" },
+    holdPeriod: { type: "number", default: 0.8, min: 0.2, max: 2, unit: "с", help: "период пружинки в удержании (длина петли)" },
+    holdBob: { type: "number", default: 0.058, min: 0, max: 0.15, help: "пружинка корня в удержании — доля высоты таза (5.4 см при 0.93)" },
+    release: { type: "number", default: 1.9, min: 0.4, max: 3, unit: "с", help: "выпуск (1hS_pow_1 1.90)" },
+    hit1: { type: "number", default: 0.4, min: 0.1, max: 1.5, unit: "с", help: "первый удар от начала выпуска (0.40)" },
+    hit2: { type: "number", default: 1.05, min: 0.2, max: 2.5, unit: "с", help: "второй удар (1.05)" },
+    windupAngle: { type: "number", default: 140, min: 0, max: 175, unit: "°", help: "замах заряда — шире обычного (на глаз)" },
+    followAngle: { type: "number", default: 10, min: -120, max: 120, unit: "°", help: "где рука заканчивает первый взмах (на глаз)" },
+    elbow: { type: "number", default: 70, min: 0, max: 140, unit: "°", help: "сгиб локтя в замахе (на глаз)" },
+    coreTwist: { type: "number", default: 35, min: 0, max: 60, unit: "°", help: "кручение корпуса (на глаз)" },
+    crouch: { type: "number", default: 0.15, min: 0, max: 0.4, help: "присед в заряде — доля высоты таза (на глаз)" },
+  },
+  evaluate(p, i, _n, t, info) {
+    if (i > 1 || (p.role !== "arm" && i > 0)) return {};
+    const lag = 0.053; // контакт после пика скорости запястья (Witcher, медиана 245 ударов)
+    const A = p.windup, B = A + p.hold, h1 = B + p.hit1 - lag, h2 = B + p.hit2 - lag, E = B + p.release;
+    // pos: 0 → +1 замах; держим; к h1 — взмах в −1 (пик скорости в контакте); к h2 — обратно в +0.6; к E — в 0
+    let pos: number, phase: string;
+    const m1 = h1 + (h2 - h1) / 2, m2 = h2 + (E - h2) / 2;
+    if (t < A) { pos = smooth(t / A); phase = "windup"; }
+    else if (t < B) { pos = 1; phase = "hold"; }
+    else if (t < m1) { pos = 1 - 2 * swingEase((t - B) / (m1 - B), (h1 - B) / (m1 - B)); phase = "swing"; }
+    else if (t < m2) { pos = -1 + 1.6 * swingEase((t - m1) / (m2 - m1), (h2 - m1) / (m2 - m1)); phase = "swing"; }
+    else { pos = 0.6 * (1 - smooth((t - m2) / (E - m2))); phase = "recover"; }
+    if (p.role === "arm") {
+      // в возврате рука идёт из точки второго взмаха (0.6 пути к замаху) в покой
+      const a = phase === "recover" ? { angle: (p.followAngle + (p.windupAngle - p.followAngle) * 0.8) * (pos / 0.6), w: 0.8 * (pos / 0.6) } : armPath(pos, phase, p.windupAngle, p.followAngle);
+      return i === 0 ? { vertical: a.angle } : { vertical: -p.elbow * a.w };
+    }
+    if (p.role === "core") return { roll: pos * p.coreTwist };
+    const hgt = info?.height ?? 0;
+    const charge = t < A ? smooth(t / A) : t < B ? 1 : 1 - smooth((t - B) / Math.max(1e-6, p.hit1));
+    const bob = t >= A && t < B ? p.holdBob * hgt * 0.5 * (1 - Math.cos((2 * Math.PI * (t - A)) / p.holdPeriod)) : 0;
+    return { move_up: -p.crouch * hgt * charge - bob };
+  },
+  events(p) {
+    const B = p.windup + p.hold;
+    return [
+      { t: 0, name: "charge_start" }, { t: p.windup, name: "charge_full" },
+      { t: B + p.hit1, name: "hit" }, { t: B + p.hit2, name: "hit" }, { t: B + p.release, name: "window_open" },
+    ].map((e) => ({ ...e, t: +e.t.toFixed(4) }));
+  },
+};
+
+export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease };
+
+export { strikePlan, strikePos, swingEase };
 
 export function withDefaults(def: RecipeDef, params: Record<string, unknown>): Record<string, any> {
   const out: Record<string, any> = {};

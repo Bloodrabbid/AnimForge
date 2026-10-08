@@ -328,3 +328,66 @@ test("библиотека: параметры пресетов есть в ре
   }
   assert.deepEqual(problems, []);
 });
+
+import { strikePlan, strikePos, swingEase } from "./recipes.ts";
+import { clipEvents } from "./evaluate.ts";
+
+test("взмах: пик скорости в доле a, края без скорости", () => {
+  const a = 0.3, h = 1e-5;
+  const v = (u: number) => (swingEase(u + h, a) - swingEase(u - h, a)) / (2 * h);
+  close(swingEase(a, a), a, 1e-12);
+  close(v(a), 2, 1e-3, "пик = 2 (площадь треугольника = 1)");
+  assert.ok(v(a - 0.05) < v(a) && v(a + 0.05) < v(a));
+  close(v(1e-4), 0, 1e-3); close(v(1 - 1e-4), 0, 1e-3);
+});
+
+test("удар: контакт через hitLag после пика скорости руки, серия через interval, всё ускоряется tempo", () => {
+  const c = RECIPES["melee-strike"];
+  const p = withDefaults(c, { hits: 3, firstHit: 0.6, interval: 0.4, strike: 0.2, follow: 0.2, hitLag: 0.05, tempo: 2 });
+  const pl = strikePlan(p);
+  assert.deepEqual(pl.hits.map((x) => +x.toFixed(9)), [0.3, 0.5, 0.7]);
+  // скорость руки максимальна за hitLag/tempo до каждого контакта
+  // пик скорости руки — до каждого контакта, в пределах hitLag + 0.06
+  const arm = (t: number) => c.evaluate(p, 0, 2, t).vertical!;
+  const sp = (t: number) => Math.abs(arm(t + 1e-5) - arm(t - 1e-5));
+  for (const hit of pl.hits) {
+    let best = hit - 0.1;
+    for (let t = hit - 0.1; t < hit + 0.05; t += 0.0005) if (sp(t) > sp(best)) best = t;
+    assert.ok(best < hit && best > hit - 0.025 - 0.06, `пик ${best} у удара ${hit}`);
+  }
+  // взмахи чередуются: в концах взмахов рука в замахе и в доводке
+  close(strikePos(p, pl.s0).pos, 1, 1e-9); close(strikePos(p, pl.s0 + pl.swing).pos, -1, 1e-9); close(strikePos(p, pl.s0 + 2 * pl.swing).pos, 1, 1e-9);
+  // в контакте локоть прямее, чем в замахе
+  assert.ok(Math.abs(c.evaluate(p, 1, 2, pl.hits[0] - 0.025).vertical!) < Math.abs(c.evaluate(p, 1, 2, pl.s0).vertical!));
+  // одиночный удар: в конце взмаха рука в доводке, на полпути возврата — половина, после — покой
+  const one = withDefaults(c, { hits: 1, followAngle: 30, recover: 0.4 });
+  const p1 = strikePlan(one);
+  const a1 = (t: number) => c.evaluate(one, 0, 2, t).vertical!;
+  close(a1(p1.end), 30, 1e-9); close(a1(p1.end + 0.2), 15, 1e-9); close(a1(p1.end + 0.4), 0, 1e-9);
+  const ev = c.events!(p);
+  assert.deepEqual(ev.filter((e) => e.name === "hit").map((e) => e.t), [0.3, 0.5, 0.7]);
+  close(ev.find((e) => e.name === "whoosh")!.t, 0.3 - 0.115 / 2, 1e-4);
+  close(ev.find((e) => e.name === "window_close")!.t, pl.end + (0.4 + 0.9) / 2, 1e-4);
+});
+
+test("заряд: в удержании рука в замахе и таз пружинит, удары в hit1/hit2 после удержания", () => {
+  const c = RECIPES["charge-release"];
+  const p = withDefaults(c, {});
+  close(c.evaluate(p, 0, 2, 2.0).vertical!, 140, 1e-9, "держит замах");
+  const pel = (t: number) => c.evaluate({ ...p, role: "pelvis" }, 0, 1, t, { height: 1 }).move_up!;
+  close(pel(1.7), -0.15, 1e-9, "присед в начале удержания");
+  close(pel(1.7 + 0.4), -0.15 - 0.058, 1e-9, "середина пружинки");
+  assert.deepEqual(c.events!(p).filter((e) => e.name === "hit").map((e) => e.t), [2.9, 3.55]);
+  // пик угловой скорости руки — незадолго до первого удара (контакт после пика)
+  const sp = (t: number) => Math.abs(c.evaluate(p, 0, 2, t + 1e-5).vertical! - c.evaluate(p, 0, 2, t - 1e-5).vertical!);
+  let best = 0;
+  for (let t = 2.5; t < 3.2; t += 0.001) if (sp(t) > sp(best)) best = t;
+  close(best, 2.9 - 0.053, 0.002, "пик скорости руки ровно за hitLag до удара");
+});
+
+test("события клипа: повторы от ролей одного удара убраны, вне клипа — отброшены", () => {
+  const layer = (id: string, role: string) => ({ id, type: "recipe" as const, recipe: "melee-strike", target: { chain: "x" }, params: { role, tail: 5 } });
+  const ev = clipEvents({ name: "c", duration: 2, fps: 30, loop: false, layers: [layer("a", "arm"), layer("b", "core")] });
+  assert.equal(ev.filter((e) => e.name === "hit").length, 1);
+  assert.equal(ev.some((e) => e.name === "window_close"), false, "окно закрывается за пределами клипа");
+});

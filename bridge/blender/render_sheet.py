@@ -43,7 +43,7 @@ for m in meshes:
 c = sum(pts, Vector()) / len(pts)
 r = max((p - c).length for p in pts)
 # side/top/three_quarter — для тел вдоль X (рыба, змея); front/profile — для персонажей, смотрящих на −Y Blender
-el, az = {"side": (5, -90), "top": (89, -90), "three_quarter": (35, -60), "front": (8, -90), "profile": (8, 0), "front_3q": (20, -55)}[view]
+el, az = {"side": (5, -90), "top": (89, -90), "three_quarter": (35, -60), "front": (8, -90), "profile": (8, 0), "profile_r": (8, 180), "front_3q": (20, -55), "front_3q_r": (20, -125)}[view]
 el, az = math.radians(el), math.radians(az)
 d = Vector((math.cos(el) * math.cos(az), math.cos(el) * math.sin(az), math.sin(el)))
 cam.location = c + d * r * float(a[5] if len(a) > 5 else 3.4)

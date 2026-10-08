@@ -57,6 +57,10 @@ def finish(bm, name):
 
 
 def join(objs, name, color):
+    # каждая деталь помечается группой «part:<имя>» — по ней bind_and_export ограничит веса своими костями
+    for o in objs:
+        g = o.vertex_groups.new(name="part:" + o.name)
+        g.add([v.index for v in o.data.vertices], 1.0, "REPLACE")
     bpy.ops.object.select_all(action="DESELECT")
     for o in objs:
         o.select_set(True)
@@ -110,12 +114,44 @@ class Rig:
         return self.obj
 
 
-def bind_and_export(body, arm, out, tag):
+def restrict_weights(body, parts):
+    """parts: деталь → префиксы костей, которым она может принадлежать. Автовеса «протекают» между близкими деталями
+    (рука тянет туловище и голову), поэтому лишние кости у вершин детали обнуляем и нормируем остаток."""
+    names = {g.index: g.name for g in body.vertex_groups}
+    fixed = 0
+    for v in body.data.vertices:
+        part = next((names[g.group][5:] for g in v.groups if names[g.group].startswith("part:")), None)
+        if part not in parts:
+            continue
+        ok = lambda n: any(n.startswith(pre) for pre in parts[part])
+        bones = [(g.group, g.weight) for g in v.groups if not names[g.group].startswith("part:")]
+        keep = [(i, w) for i, w in bones if ok(names[i]) and w > 1e-4]
+        if len(keep) != len([b for b in bones if b[1] > 1e-4]):
+            fixed += 1
+        for i, _ in bones:
+            body.vertex_groups[names[i]].remove([v.index])
+        if not keep:  # деталь целиком ушла чужим костям — жёстко на первую свою
+            first = next(n for n in names.values() if not n.startswith("part:") and ok(n))
+            keep = [(body.vertex_groups[first].index, 1.0)]
+        total = sum(w for _, w in keep)
+        for i, w in keep:
+            body.vertex_groups[names[i]].add([v.index], w / total, "REPLACE")
+    for g in [g for g in body.vertex_groups if g.name.startswith("part:")]:
+        body.vertex_groups.remove(g)
+    return fixed
+
+
+def bind_and_export(body, arm, out, tag, parts=None):
     bpy.ops.object.select_all(action="DESELECT")
     body.select_set(True)
     arm.select_set(True)
     bpy.context.view_layer.objects.active = arm
     bpy.ops.object.parent_set(type="ARMATURE_AUTO")
+    if parts:
+        print(f"{tag}_PARTS вершин с чужими костями исправлено:", restrict_weights(body, parts))
+    else:
+        for g in [g for g in body.vertex_groups if g.name.startswith("part:")]:
+            body.vertex_groups.remove(g)
     # вершины без веса (автовеса иногда «теряют» тонкие детали) — проверка качества шаблона
     unweighted = sum(1 for v in body.data.vertices if not any(g.weight > 1e-3 for g in v.groups))
     bpy.ops.export_scene.gltf(filepath=out, export_format="GLB", export_skins=True, export_animations=False)

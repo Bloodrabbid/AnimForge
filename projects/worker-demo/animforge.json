@@ -1047,6 +1047,312 @@
         "mode": "floor",
         "ik": true
       }
+    },
+    {
+      "name": "combo",
+      "duration": 2.6,
+      "fps": 30,
+      "loop": false,
+      "layers": [
+        {
+          "id": "arm_r_melee-strike",
+          "type": "recipe",
+          "recipe": "melee-strike",
+          "target": {
+            "chain": "arm_r"
+          },
+          "params": {
+            "hits": 4,
+            "firstHit": 0.3,
+            "interval": 0.29,
+            "strike": 0.21,
+            "follow": 0.18,
+            "hitLag": 0.04,
+            "trailLead": 0.066,
+            "trailLag": 0.01,
+            "tail": 0.9,
+            "role": "arm"
+          },
+          "preset": "witcher-fast"
+        },
+        {
+          "id": "chest_melee-strike",
+          "type": "recipe",
+          "recipe": "melee-strike",
+          "target": {
+            "chain": "chest"
+          },
+          "params": {
+            "hits": 4,
+            "firstHit": 0.3,
+            "interval": 0.29,
+            "strike": 0.21,
+            "follow": 0.18,
+            "hitLag": 0.04,
+            "trailLead": 0.066,
+            "trailLag": 0.01,
+            "tail": 0.9,
+            "role": "core"
+          },
+          "preset": "witcher-fast"
+        },
+        {
+          "id": "pelvis_melee-strike",
+          "type": "recipe",
+          "recipe": "melee-strike",
+          "target": {
+            "chain": "pelvis"
+          },
+          "params": {
+            "hits": 4,
+            "firstHit": 0.3,
+            "interval": 0.29,
+            "strike": 0.21,
+            "follow": 0.18,
+            "hitLag": 0.04,
+            "trailLead": 0.066,
+            "trailLag": 0.01,
+            "tail": 0.9,
+            "role": "pelvis"
+          },
+          "preset": "witcher-fast"
+        },
+        {
+          "id": "ear_l",
+          "type": "recipe",
+          "recipe": "jiggle",
+          "target": {
+            "chain": "ear_l"
+          },
+          "params": {
+            "hz": 1.6,
+            "damping": 0.31,
+            "inert": 0.5
+          }
+        },
+        {
+          "id": "ear_r",
+          "type": "recipe",
+          "recipe": "jiggle",
+          "target": {
+            "chain": "ear_r"
+          },
+          "params": {
+            "hz": 1.6,
+            "damping": 0.31,
+            "inert": 0.5
+          }
+        }
+      ],
+      "ground": {
+        "bones": [
+          "foot_l",
+          "foot_r"
+        ],
+        "mode": "floor",
+        "ik": true
+      }
+    },
+    {
+      "name": "hammer",
+      "duration": 1.2,
+      "fps": 30,
+      "loop": false,
+      "layers": [
+        {
+          "id": "arm_r_melee-strike",
+          "type": "recipe",
+          "recipe": "melee-strike",
+          "target": {
+            "chain": "arm_r"
+          },
+          "params": {
+            "firstHit": 0.67,
+            "strike": 0.067,
+            "follow": 0.13,
+            "hitLag": 0.035,
+            "settle": 0.22,
+            "crouch": 0.15,
+            "recover": 0.4,
+            "tail": 0,
+            "role": "arm"
+          },
+          "preset": "toolsup-hammer"
+        },
+        {
+          "id": "chest_melee-strike",
+          "type": "recipe",
+          "recipe": "melee-strike",
+          "target": {
+            "chain": "chest"
+          },
+          "params": {
+            "firstHit": 0.67,
+            "strike": 0.067,
+            "follow": 0.13,
+            "hitLag": 0.035,
+            "settle": 0.22,
+            "crouch": 0.15,
+            "recover": 0.4,
+            "tail": 0,
+            "role": "core"
+          },
+          "preset": "toolsup-hammer"
+        },
+        {
+          "id": "pelvis_melee-strike",
+          "type": "recipe",
+          "recipe": "melee-strike",
+          "target": {
+            "chain": "pelvis"
+          },
+          "params": {
+            "firstHit": 0.67,
+            "strike": 0.067,
+            "follow": 0.13,
+            "hitLag": 0.035,
+            "settle": 0.22,
+            "crouch": 0.15,
+            "recover": 0.4,
+            "tail": 0,
+            "role": "pelvis"
+          },
+          "preset": "toolsup-hammer"
+        },
+        {
+          "id": "ear_l",
+          "type": "recipe",
+          "recipe": "jiggle",
+          "target": {
+            "chain": "ear_l"
+          },
+          "params": {
+            "hz": 1.6,
+            "damping": 0.31,
+            "inert": 0.5
+          }
+        },
+        {
+          "id": "ear_r",
+          "type": "recipe",
+          "recipe": "jiggle",
+          "target": {
+            "chain": "ear_r"
+          },
+          "params": {
+            "hz": 1.6,
+            "damping": 0.31,
+            "inert": 0.5
+          }
+        }
+      ],
+      "ground": {
+        "bones": [
+          "foot_l",
+          "foot_r"
+        ],
+        "mode": "floor",
+        "ik": true
+      }
+    },
+    {
+      "name": "power",
+      "duration": 4.4,
+      "fps": 30,
+      "loop": false,
+      "layers": [
+        {
+          "id": "arm_r_charge-release",
+          "type": "recipe",
+          "recipe": "charge-release",
+          "target": {
+            "chain": "arm_r"
+          },
+          "params": {
+            "windup": 1.7,
+            "hold": 0.8,
+            "holdPeriod": 0.8,
+            "holdBob": 0.058,
+            "release": 1.9,
+            "hit1": 0.4,
+            "hit2": 1.05,
+            "role": "arm"
+          },
+          "preset": "witcher-power"
+        },
+        {
+          "id": "chest_charge-release",
+          "type": "recipe",
+          "recipe": "charge-release",
+          "target": {
+            "chain": "chest"
+          },
+          "params": {
+            "windup": 1.7,
+            "hold": 0.8,
+            "holdPeriod": 0.8,
+            "holdBob": 0.058,
+            "release": 1.9,
+            "hit1": 0.4,
+            "hit2": 1.05,
+            "role": "core"
+          },
+          "preset": "witcher-power"
+        },
+        {
+          "id": "pelvis_charge-release",
+          "type": "recipe",
+          "recipe": "charge-release",
+          "target": {
+            "chain": "pelvis"
+          },
+          "params": {
+            "windup": 1.7,
+            "hold": 0.8,
+            "holdPeriod": 0.8,
+            "holdBob": 0.058,
+            "release": 1.9,
+            "hit1": 0.4,
+            "hit2": 1.05,
+            "role": "pelvis"
+          },
+          "preset": "witcher-power"
+        },
+        {
+          "id": "ear_l",
+          "type": "recipe",
+          "recipe": "jiggle",
+          "target": {
+            "chain": "ear_l"
+          },
+          "params": {
+            "hz": 1.6,
+            "damping": 0.31,
+            "inert": 0.5
+          }
+        },
+        {
+          "id": "ear_r",
+          "type": "recipe",
+          "recipe": "jiggle",
+          "target": {
+            "chain": "ear_r"
+          },
+          "params": {
+            "hz": 1.6,
+            "damping": 0.31,
+            "inert": 0.5
+          }
+        }
+      ],
+      "ground": {
+        "bones": [
+          "foot_l",
+          "foot_r"
+        ],
+        "mode": "floor",
+        "ik": true
+      }
     }
   ]
 }

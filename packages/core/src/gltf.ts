@@ -2,7 +2,7 @@
 import { Document, Node } from "@gltf-transform/core";
 import type { Quat, Vec3 } from "./math.ts";
 import type { Bone, Project, Skeleton } from "./project.ts";
-import { Rig, bakeClip } from "./evaluate.ts";
+import { Rig, bakeClip, clipEvents } from "./evaluate.ts";
 
 export function readSkeleton(doc: Document): Skeleton {
   const root = doc.getRoot();
@@ -39,6 +39,8 @@ export function writeClips(doc: Document, project: Project, rig: Rig): { clip: s
       continue;
     }
     const anim = doc.createAnimation(clip.name);
+    const events = clipEvents(clip);
+    if (events.length) anim.setExtras({ animforge_events: events.map(({ t, name }) => ({ t, name })) });
     const input = doc.createAccessor(`${clip.name}_t`).setType("SCALAR").setArray(new Float32Array(baked.times)).setBuffer(buffer);
     const bones = new Set<string>();
     const channel = (bone: string, vals: number[][], path: "rotation" | "translation" | "scale") => {

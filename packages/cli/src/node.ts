@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { COMMANDS, Ctx, Project, RECIPES, TweenPreset, buildRig, emptyProject, frameTimes, posePartsAt, readSkeleton, runCommand, samplePreset, writeClips } from "../../core/src/index.ts";
+import { COMMANDS, Ctx, Project, RECIPES, TweenPreset, buildRig, clipEvents, emptyProject, frameTimes, posePartsAt, readSkeleton, runCommand, samplePreset, writeClips } from "../../core/src/index.ts";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 export const GODOT = process.env.GODOT ?? "/Applications/Godot.app/Contents/MacOS/Godot";
@@ -63,6 +63,9 @@ export async function exportGlb(ctx: Ctx & { dir: string }, out: string) {
     }),
   }));
   writeFileSync(out.replace(/\.glb$/, ".samples.json"), JSON.stringify(samples.filter((s) => report.find((r) => r.clip === s.clip)!.bones > 0), null, 1));
+  // события — отдельным файлом рядом с glb: аддон Godot превращает их в вызовы методов (AnimForge.attach_events)
+  const events = Object.fromEntries(ctx.project.clips.map((c) => [c.name, clipEvents(c).map(({ t, name }) => ({ t, name }))]).filter(([, e]) => (e as unknown[]).length));
+  if (Object.keys(events).length) writeFileSync(out.replace(/\.glb$/, ".events.json"), JSON.stringify(events, null, 1));
   const empty = report.filter((r) => r.bones === 0).map((r) => r.clip);
   return { out, clips: report, ...(empty.length ? { warning: `пустые клипы не записаны (нет слоёв, двигающих кости): ${empty.join(", ")}` } : {}) };
 }
@@ -137,12 +140,15 @@ export function findTween(name: string): TweenPreset {
   return p;
 }
 
-/** Копирует библиотеку твинов в аддон Godot (аддон читает только свою папку presets). */
+/** Копирует библиотеку твинов и idle-вставок в аддон Godot (аддон читает только свою папку presets). */
 export function syncTweens() {
-  mkdirSync(ADDON_PRESETS(), { recursive: true });
+  mkdirSync(join(ADDON_PRESETS(), "idle"), { recursive: true });
   const files = readdirSync(TWEEN_LIB()).filter((f) => f.endsWith(".json"));
   for (const f of files) writeFileSync(join(ADDON_PRESETS(), f), readFileSync(join(TWEEN_LIB(), f)));
-  return { copied: files, to: ADDON_PRESETS() };
+  const idle = join(ROOT, "library/idle");
+  const idleFiles = readdirSync(idle).filter((f) => f.endsWith(".json"));
+  for (const f of idleFiles) writeFileSync(join(ADDON_PRESETS(), "idle", f), readFileSync(join(idle, f)));
+  return { copied: [...files, ...idleFiles.map((f) => `idle/${f}`)], to: ADDON_PRESETS() };
 }
 
 const sampleTimes = (p: TweenPreset, n: number) => Array.from({ length: n + 1 }, (_, i) => (p.duration * i) / n);
@@ -244,6 +250,16 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
       return { ok: lines.some((l) => l.includes("VERIFY_OK")), godot: lines };
     },
   },
+  "clip.events": {
+    help: "События клипа от рецептов (hit, whoosh, trail_on/off, window_open/close…) с временем в секундах.",
+    args: { clip: { type: "string", required: true, help: "клип" } },
+    async run(dir, a) {
+      const ctx = await loadCtx(dir);
+      const clip = ctx.project.clips.find((c) => c.name === a.clip);
+      if (!clip) throw new Error(`нет клипа «${a.clip}»`);
+      return clipEvents(clip);
+    },
+  },
   "tweens.list": {
     help: "Пресеты твинов UI и камеры из library/tweens.",
     args: { target: { type: "string", help: "ui | camera" } },
@@ -265,7 +281,7 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
     run: async () => syncTweens(),
   },
   "tweens.verify": {
-    help: "Сверка аддона Godot с ядром: выборки всех твинов + живой Tween на Control, без окна.",
+    help: "Проверка аддона Godot без окна: выборки всех твинов против ядра, живые твины, события клипов, вставки в idle.",
     args: {},
     async run() {
       const sync = syncTweens();
@@ -280,7 +296,7 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
         log = String(e.stdout ?? "") + String(e.stderr ?? "");
       }
       rmSync(tmp, { recursive: true, force: true });
-      const lines = log.split("\n").filter((l) => /SAMPLES|LIVE|TWEENS|ERROR|error/.test(l));
+      const lines = log.split("\n").filter((l) => /SAMPLES|LIVE|EVENTS|IDLE|TWEENS|ERROR|error/.test(l));
       return { ok: lines.some((l) => l.includes("TWEENS_OK")), presets: Object.keys(samples).length, synced: sync.copied, godot: lines };
     },
   },
@@ -290,7 +306,7 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
       clip: { type: "string", required: true, help: "клип" },
       out: { type: "string", required: true, help: "png" },
       frames: { type: "number", help: "сколько кадров, по умолчанию 8" },
-      view: { type: "string", help: "side | top | three_quarter (по умолчанию) — тела вдоль X; front | profile | front_3q — персонажи" },
+      view: { type: "string", help: "side | top | three_quarter (по умолчанию) — тела вдоль X; front | profile | profile_r | front_3q | front_3q_r — персонажи" },
       dist: { type: "number", help: "отдаление камеры в радиусах модели, по умолчанию 3.4" },
     },
     run: async (dir, a) => renderSheet(await loadCtx(dir), a.clip, a.frames ?? 8, a.view ?? "three_quarter", resolve(dir, a.out), a.dist ?? 3.4),

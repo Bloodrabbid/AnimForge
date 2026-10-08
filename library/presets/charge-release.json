@@ -1,0 +1,24 @@
+{
+ "recipe": "charge-release",
+ "presets": [
+  {
+   "name": "witcher-power",
+   "help": "Силовая атака Геральта: замах 1.7 с, удержание-петля 0.8 с, выпуск 1.9 с с ударами на 0.40 и 1.05.",
+   "params": {
+    "windup": 1.7,
+    "hold": 0.8,
+    "holdPeriod": 0.8,
+    "holdBob": 0.058,
+    "release": 1.9,
+    "hit1": 0.4,
+    "hit2": 1.05
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "02 §3.2а: 1hS_powpre 1.70, powpre_loop 0.80, pow_1 1.90 (hit 0.40 и 1.05); 02 §4.1: корень пружинит на 5.4 см при высоте 0.93"
+    }
+   ]
+  }
+ ]
+}

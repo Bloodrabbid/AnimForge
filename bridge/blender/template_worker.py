@@ -34,4 +34,7 @@ for tag, x in (("l", 1), ("r", -1)):
     rig.chain(f"arm_{tag}", (0.22 * x, 0, CH), (0.3 * x, 0, CH - 0.42), 2, parent="chest")
     rig.chain(f"leg_{tag}", (0.11 * x, 0, HIP), (0.11 * x, 0, 0.05), 2, parent="pelvis")
     rig.bone(f"foot_{tag}", (0.11 * x, 0, 0.05), (0.11 * x, -0.15, 0.045), parent=f"leg_{tag}_1", connect=True)
-k.bind_and_export(body, rig.done(), out, "WORKER")
+parts = {"Body": ["pelvis", "chest"], "Head": ["head"]}
+for tag in ("l", "r"):
+    parts.update({f"Eye_{tag}": [f"eye_{tag}"], f"Ear_{tag}": [f"ear_{tag}"], f"Arm_{tag}": [f"arm_{tag}"], f"Leg_{tag}": [f"leg_{tag}"], f"Foot_{tag}": [f"foot_{tag}"]})
+k.bind_and_export(body, rig.done(), out, "WORKER", parts)

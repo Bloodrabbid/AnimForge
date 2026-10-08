@@ -27,6 +27,12 @@ func _initialize() -> void:
 	var live := _live_check()
 	if live.begins_with("LIVE_OK"):
 		live = _live_camera()
+	if live.begins_with("LIVE_OK"):
+		print(live)
+		live = await _events_check()
+	if live.begins_with("LIVE_OK"):
+		print(live)
+		live = _idle_check()
 	print(live)
 	print("TWEENS_OK" if worst <= TOL and live.begins_with("LIVE_OK") else "TWEENS_FAIL")
 	quit()
@@ -73,3 +79,73 @@ func _live_camera() -> String:
 	if absf(cam.rotation_degrees.x - (-10 + float(s["pitch"]))) > 1e-3 or cam.position.distance_to(exp_pos) > 1e-3:
 		return "LIVE_FAIL камера pitch=%s pos=%s (ждали %s, %s)" % [cam.rotation_degrees.x, cam.position, -10 + float(s["pitch"]), exp_pos]
 	return "LIVE_OK камера: pitch %.2f°, наезд %.2f м" % [cam.rotation_degrees.x, s["dolly"]]
+
+
+class Catcher extends Node:
+	var got: Array = []
+	func animforge_event(name: String, clip: String) -> void:
+		got.append([snappedf(owner_time.call(), 0.001), name, clip])
+	var owner_time: Callable
+
+
+# События: JSON → дорожка методов; проигрываем вручную и ловим вызовы в нужные моменты.
+func _events_check() -> String:
+	var player := AnimationPlayer.new()
+	var lib := AnimationLibrary.new()
+	var anim := Animation.new()
+	anim.length = 1.0
+	lib.add_animation("strike", anim)
+	player.add_animation_library("", lib)
+	player.callback_mode_method = AnimationMixer.ANIMATION_CALLBACK_MODE_METHOD_IMMEDIATE  # в тесте кадры не идут
+	root.add_child(player)
+	var c := Catcher.new()
+	player.add_child(c)
+	c.owner_time = func(): return player.current_animation_position
+	var path := "user://events_test.json"
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string(JSON.stringify({"strike": [{"t": 0.25, "name": "whoosh"}, {"t": 0.4, "name": "hit"}], "other": [{"t": 0.1, "name": "x"}]}))
+	f.close()
+	var n := AF.attach_events(player, path, c)
+	player.play("strike")
+	for i in 60:
+		player.advance(1.0 / 60.0)
+	var want := [[0.25, "whoosh", "strike"], [0.4, "hit", "strike"]]
+	if n != 2 or c.got.size() != 2 or c.got[0][1] != "whoosh" or c.got[1][1] != "hit" or absf(c.got[1][0] - 0.4) > 1.0 / 60.0 + 1e-3:
+		return "LIVE_FAIL события: вставлено %d, поймано %s (ждали %s)" % [n, c.got, want]
+	return "LIVE_OK события: %s" % [c.got]
+
+
+# Вставки в idle: детерминированный прогон 3000 с; кулдауны соблюдены, частота частой вставки ≈ её шансу.
+func _idle_check() -> String:
+	var player := AnimationPlayer.new()
+	var lib := AnimationLibrary.new()
+	var cfg := AF.idle_preset("witcher-geralt")
+	for name in ["idle"] + cfg["inserts"].map(func(i): return i["clip"]):
+		var a := Animation.new()
+		a.length = 1.0 if name == "idle" else 2.0
+		lib.add_animation(name, a)
+	player.add_animation_library("", lib)
+	root.add_child(player)
+	player.play("idle")
+	var node = AF.idle_variety(player, cfg, 7)
+	node.manual = true
+	for i in 30000:
+		node.step(0.1)
+	var last := {}
+	var prev_end := -1e9
+	var count := {}
+	for e in node.log:
+		var ins = cfg["inserts"].filter(func(x): return x["clip"] == e["clip"])[0]
+		if last.has(e["clip"]) and e["t"] - last[e["clip"]] < float(ins.get("cooldown", 0.0)) - 1e-6:
+			return "LIVE_FAIL кулдаун %s: %.1f → %.1f" % [e["clip"], last[e["clip"]], e["t"]]
+		if e["t"] - prev_end < float(cfg["global_cooldown"]) - 1e-6:
+			return "LIVE_FAIL общий кулдаун: вставка в %.1f через %.1f с после конца прошлой" % [e["t"], e["t"] - prev_end]
+		last[e["clip"]] = e["t"]
+		prev_end = e["t"] + 2.0
+		count[e["clip"]] = count.get(e["clip"], 0) + 1
+	# проверок за прогон: ~ 3000 / (вставка 2 с + общий кулдаун 2 с + проверка 1 с) в худшем случае; частая вставка — ≈ 10 % проверок
+	var total: int = node.log.size()
+	var p1: int = count.get("pose_pause1", 0)
+	if total < 100 or p1 < total * 0.35:
+		return "LIVE_FAIL частоты: всего %d, pose_pause1 %d — %s" % [total, p1, count]
+	return "LIVE_OK idle: %d вставок за 3000 с, %s" % [total, count]

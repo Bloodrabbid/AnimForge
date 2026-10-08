@@ -182,3 +182,47 @@ static func apply(node: Node, base: Dictionary, modes: Dictionary, s: Dictionary
 			c2.offset = Vector2(base["x"] + s["shake_x"] * 100, base["y"] + s["shake_y"] * 100)
 			c2.rotation_degrees = base["rotation"] + s["shake_roll"]
 		if s.has("fov"): c2.zoom = Vector2.ONE * base["zoom"] * 40.0 / (40.0 + s["fov"])
+
+
+## События клипов из <glb>.events.json (их пишет `af export`) → дорожки вызова метода в анимациях плеера.
+## В нужный момент вызывается target.animforge_event(name, clip). Возвращает число вставленных событий.
+static func attach_events(player: AnimationPlayer, events_path: String, target: Node) -> int:
+	var data = JSON.parse_string(FileAccess.get_file_as_string(events_path))
+	if data == null:
+		push_error("AnimForge: не прочитан %s" % events_path)
+		return 0
+	var n := 0
+	var path := player.get_node(player.root_node).get_path_to(target)
+	for clip in data:
+		if not player.has_animation(clip):
+			continue
+		var anim := player.get_animation(clip)
+		var tr := anim.find_track(path, Animation.TYPE_METHOD)
+		if tr < 0:
+			tr = anim.add_track(Animation.TYPE_METHOD)
+			anim.track_set_path(tr, path)
+		for e in data[clip]:
+			anim.track_insert_key(tr, float(e["t"]), {"method": &"animforge_event", "args": [e["name"], clip]})
+			n += 1
+	return n
+
+
+## Вставки в idle по шансу и кулдауну (как в Witcher): пресет из presets/idle/*.json или словарь.
+## Возвращает узел-планировщик (уже добавлен к плееру); его можно остановить queue_free().
+static func idle_variety(player: AnimationPlayer, preset_or_config, seed := -1) -> Node:
+	var cfg: Dictionary = preset_or_config if preset_or_config is Dictionary else idle_preset(preset_or_config)
+	var node = load("res://addons/animforge/idle_variety.gd").new()
+	node.setup(player, cfg, seed)
+	player.add_child(node)
+	return node
+
+
+static func idle_preset(name: String) -> Dictionary:
+	var dir := "res://addons/animforge/presets/idle"
+	for f in DirAccess.get_files_at(dir):
+		if f.ends_with(".json"):
+			for p in JSON.parse_string(FileAccess.get_file_as_string(dir + "/" + f))["presets"]:
+				if p["name"] == name:
+					return p
+	push_error("AnimForge: нет idle-пресета «%s»" % name)
+	return {}

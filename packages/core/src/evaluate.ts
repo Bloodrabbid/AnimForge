@@ -3,7 +3,7 @@
 import { evalKeys } from "./curves.ts";
 import { DEG, QI, Quat, Vec3, angVel, qaxis, qinv, qmul, qnorm, qrot, vadd, vcross, vdot, vmul, vnorm, vscale, vsub } from "./math.ts";
 import type { Channel, Clip, Project, RecipeLayer, SemanticAxis, Skeleton } from "./project.ts";
-import { RECIPES, withDefaults } from "./recipes.ts";
+import { RECIPES, withDefaults, type ClipEvent } from "./recipes.ts";
 
 export interface Rig {
   skel: Skeleton;
@@ -414,4 +414,22 @@ export function bakeClip(project: Project, rig: Rig, clip: Clip): Baked {
   fill(out.translations, (i) => rig.skel.nodes[i].restT);
   fill(out.scales, (i) => rig.skel.nodes[i].restS);
   return out;
+}
+
+/** События клипа от рецептов (без повторов: роли одного удара дают одни и те же события). Вне клипа — отбрасываются. */
+export function clipEvents(clip: Clip): (ClipEvent & { layer: string })[] {
+  const seen = new Set<string>();
+  const out: (ClipEvent & { layer: string })[] = [];
+  for (const l of clip.layers) {
+    if (l.type !== "recipe") continue;
+    const def = RECIPES[l.recipe];
+    if (!def?.events) continue;
+    for (const e of def.events(withDefaults(def, l.params))) {
+      const key = `${e.t.toFixed(4)}|${e.name}`;
+      if (seen.has(key) || e.t < 0 || e.t > clip.duration + 1e-6) continue;
+      seen.add(key);
+      out.push({ ...e, layer: l.id });
+    }
+  }
+  return out.sort((a, b) => a.t - b.t);
 }

@@ -1,0 +1,73 @@
+{
+ "presets": [
+  {
+   "name": "witcher-geralt",
+   "help": "Стоящий Геральт: частые паузы-позы, редкие жесты, зевок не чаще раза в 2 минуты.",
+   "base": "idle",
+   "check": 1.0,
+   "blend": 1.1,
+   "global_cooldown": 2.0,
+   "inserts": [
+    {
+     "clip": "pose_pause1",
+     "chance": 10
+    },
+    {
+     "clip": "pose_pause2",
+     "chance": 5,
+     "cooldown": 20
+    },
+    {
+     "clip": "gest1",
+     "chance": 2
+    },
+    {
+     "clip": "gest2",
+     "chance": 1
+    },
+    {
+     "clip": "gest3",
+     "chance": 1.5
+    },
+    {
+     "clip": "gest4",
+     "chance": 0.3
+    },
+    {
+     "clip": "yawn",
+     "chance": 0.005,
+     "cooldown": 120
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "01 §5; LUC/mimicrydefs.lua:1-140 (вставки Геральта: шанс, кулдаун, наплыв 1.1 с); типичный кулдаун состояния 2 с (780 раз)",
+     "note": "смысл «шанса» (процент за проверку) и частота проверки 1 с — допущение, в коде игры не проверено"
+    }
+   ]
+  },
+  {
+   "name": "tlj-april",
+   "help": "Эйприл (TLJ): первый idle-брейк через 5.5 с, дальше примерно раз в 11 с.",
+   "base": "idle",
+   "check": 5.5,
+   "blend": 0.3,
+   "global_cooldown": 5.5,
+   "inserts": [
+    {
+     "clip": "idle_break",
+     "chance": 100,
+     "cooldown": 11
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/tlj",
+     "ref": "02/03: первый idle-брейк через 5.5 с, далее раз в 11 с; смешивание 300 мс (ScummVM engines/stark)",
+     "note": "брейк сведён к одной вставке; у игры их набор на персонажа"
+    }
+   ]
+  }
+ ]
+}

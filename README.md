@@ -68,3 +68,15 @@ pnpm af tweens.verify      # синхронизирует пресеты в ад
   `compass-step` — шаг-циркуль Biped.
 - `af video --clip walk1 --out out/walk.mp4 --view front_3q` — видео клипа; `sheet --view front|profile|front_3q` — виды для персонажей.
 - Шаблоны тел: `fish | snake | tentacle | quadruped | biped | worker`.
+
+## Бой, события и вставки в idle
+
+- `melee-strike`: удар или серия. Фазы: замах, взмах с пиком скорости за `hitLag` до контакта, доводка, возврат, окно на следующий ввод.
+  Слои ставятся на роли `arm` (плечо→локоть), `core`, `pelvis`. Пресеты: стили Геральта, телеграфы NPC от собаки до голема, молоток Tools Up!.
+- `charge-release`: силовая атака — замах, удержание с пружинящим корнем, выпуск двумя ударами (`witcher-power`).
+- События рецептов: `hit`, `whoosh`, `effort`, `trail_on/off`, `window_open/close`.
+  Посмотреть их: `af clip.events --clip combo`. При экспорте они пишутся в extras анимации и в `<glb>.events.json`.
+  В Godot их подключает `AnimForge.attach_events(player, "res://…events.json", self)`, дальше игра получает вызовы `animforge_event(name, clip)`.
+- Вставки в idle по шансу и кулдауну (Witcher, TLJ): `AnimForge.idle_variety($AnimationPlayer, "witcher-geralt")`. Пресеты лежат в `library/idle/`.
+- `af tweens.verify` проверяет аддон целиком: твины, события и вставки в idle.
+- Шаблоны: детали тела слушаются только своих костей (`bodykit.restrict_weights`), поэтому взмах руки не мнёт туловище и голову.
