@@ -6,6 +6,7 @@ import { bakeClip, buildRig, chainAxes, poseAt } from "./evaluate.ts";
 import { DEG, Quat, qmul, qinv, qrot } from "./math.ts";
 import type { Project, Skeleton } from "./project.ts";
 import { RECIPES, withDefaults } from "./recipes.ts";
+import { runCommand } from "./commands.ts";
 
 const close = (a: number, b: number, eps = 1e-6, msg = "") => assert.ok(Math.abs(a - b) <= eps, `${msg} ${a} ≠ ${b}`);
 
@@ -755,4 +756,11 @@ test("тяжесть и корпус: поклон груди голема дв�
     close(pel + ch, 37 * Math.cos(2 * Math.PI * (t - 0.82)), 1e-9, "грудь в мире");
     close(pel + ch + hd, 48 * Math.cos(2 * Math.PI * (t - 0.67)), 1e-9, "голова в мире");
   }
+});
+
+test("recipe.add: пресет без параметров — ошибка, а не слой на умолчаниях под чужим именем", () => {
+  const ctx = { project: project([]), skeleton: skel };
+  assert.throws(() => runCommand(ctx, "recipe.add", { clip: "c", recipe: "wave", chain: "body", preset: "fish-fast" }), /preset\.apply/);
+  runCommand(ctx, "recipe.add", { clip: "c", recipe: "wave", chain: "body", preset: "fish-fast", params: { period: 1.2 } });
+  assert.equal((ctx.project.clips[0].layers[0] as any).params.period, 1.2);
 });

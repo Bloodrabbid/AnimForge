@@ -111,18 +111,20 @@ const defs: CommandDef[] = [
   },
   {
     name: "recipe.add",
-    help: "Добавить слой-рецепт на цепочку. Параметры — params как JSON или из пресета библиотеки (preset применяет адаптер).",
+    help: "Добавить слой-рецепт на цепочку с параметрами params (JSON). Слой из пресета библиотеки — preset.apply.",
     args: {
       clip: { type: "string", required: true, help: "клип" },
       recipe: { type: "string", required: true, help: "имя рецепта, см. recipes" },
       chain: { type: "string", required: true, help: "цепочка" },
       id: { type: "string", help: "id слоя, по умолчанию имя рецепта" },
       params: { type: "json", help: "параметры рецепта" },
-      preset: { type: "string", help: "имя пресета (для записи происхождения)" },
+      preset: { type: "string", help: "имя пресета — только пометка происхождения рядом с params; взять параметры из библиотеки — preset.apply" },
     },
     mutates: true,
     run(ctx, a) {
       const clip = clipOf(ctx, a.clip);
+      // без params пометка врала бы: слой подписан пресетом, а считается на умолчаниях
+      need(!a.preset || a.params, `recipe.add: preset «${a.preset}» без params ничего не применяет — вызови preset.apply`);
       need(RECIPES[a.recipe], `нет рецепта «${a.recipe}». Есть: ${Object.keys(RECIPES).join(", ")}`);
       need(ctx.project.chains[a.chain], `нет цепочки «${a.chain}»`);
       const layer: RecipeLayer = { id: a.id ?? a.recipe, type: "recipe", recipe: a.recipe, target: { chain: a.chain }, params: a.params ?? {}, preset: a.preset };

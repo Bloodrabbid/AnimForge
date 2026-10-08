@@ -193,6 +193,168 @@
      "ref": "tipAmp/growth подобраны под профиль амплитуд по костям — на глаз"
     }
    ]
+  },
+  {
+   "name": "dredge-ghost-shark-swim",
+   "help": "Призрачная акула, плавание: быстрая волна по 6 позвонкам, голова с опережением.",
+   "params": {
+    "plane": "lateral",
+    "period": 0.83,
+    "tipAmp": 12,
+    "growth": 1.5,
+    "bodyDelay": 140,
+    "headAmp": 7,
+    "headLead": 90
+   },
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "04-creatures.md §2 призрачная акула; tipAmp, bodyDelay — на глаз по кривым",
+     "ranges": {
+      "period": [
+       0.83,
+       0.83
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "dredge-ghost-shark-attack",
+   "help": "Призрачная акула, атака: та же волна вдвое быстрее (пасть открыть отдельно ключом).",
+   "params": {
+    "plane": "lateral",
+    "period": 0.42,
+    "tipAmp": 12,
+    "growth": 1.5,
+    "bodyDelay": 140,
+    "headAmp": 7,
+    "headLead": 90
+   },
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "04-creatures.md §2 призрачная акула, атака = волна ×2",
+     "ranges": {
+      "period": [
+       0.42,
+       0.42
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "dredge-great-white",
+   "help": "Белая акула: голова ±7.9° со сдвигом в четверть цикла, хвост одной дугой ±9°.",
+   "params": {
+    "plane": "lateral",
+    "period": 1.6,
+    "tipAmp": 9.2,
+    "growth": 2,
+    "bodyDelay": 90,
+    "headAmp": 7.9,
+    "headLead": 90
+   },
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "04-creatures.md §1 большая белая акула; period, bodyDelay — на глаз",
+     "ranges": {
+      "tipAmp": [
+       9.2,
+       9.2
+      ],
+      "headAmp": [
+       7.9,
+       7.9
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "dredge-leviathan",
+   "help": "Левиафан на 24 позвонка: почти стоячая волна, ~1.3° на позвонок, 7.7° фазы на позвонок.",
+   "params": {
+    "plane": "lateral",
+    "period": 4,
+    "tipAmp": 1.3,
+    "growth": 0,
+    "bodyDelay": 185,
+    "headAmp": 0,
+    "headLead": 90
+   },
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "04-creatures.md §1 левиафан; bodyDelay = 7.7°×24; period — на глаз",
+     "ranges": {
+      "tipAmp": [
+       0.3,
+       1.3
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "dredge-twisted-strand",
+   "help": "Червь Twisted Strand: бегущая волна ~110° на звено, почти целая волна на теле.",
+   "params": {
+    "plane": "lateral",
+    "period": 4.5,
+    "tipAmp": 12,
+    "growth": 0,
+    "bodyDelay": 720,
+    "headAmp": 0,
+    "headLead": 90
+   },
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "04-creatures.md §1 Twisted Strand, §3 червь; 110°×7 звеньев = 770°, обрезано до предела 720",
+     "ranges": {
+      "period": [
+       4,
+       5
+      ],
+      "tipAmp": [
+       8,
+       15
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "dredge-dog-tail-wag",
+   "help": "Виляние хвостом собаки: 1.52 Гц, ±26°, кончик отстаёт на 96°.",
+   "params": {
+    "plane": "lateral",
+    "period": 0.66,
+    "tipAmp": 20,
+    "growth": 0,
+    "bodyDelay": 96,
+    "headAmp": 0,
+    "headLead": 90
+   },
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "04-creatures.md §3 виляние хвостом; tipAmp ×0.75 от корня ±26°",
+     "ranges": {
+      "period": [
+       0.66,
+       0.66
+      ],
+      "bodyDelay": [
+       96,
+       96
+      ]
+     }
+    }
+   ]
   }
  ]
 }

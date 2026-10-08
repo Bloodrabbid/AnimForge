@@ -618,7 +618,7 @@ const wingFlap: RecipeDef = {
     "Цепочки wing_l/wing_r — из rig.detect (размах больше 1.6 роста).",
   params: {
     role: { type: "enum", default: "wing_l", options: ["wing_l", "wing_r", "body", "tail", "leg_l", "leg_r"], help: "крыло, корпус (таз), хвост или нога" },
-    period: { type: "number", default: 0.35, min: 0.05, max: 3, unit: "с", help: "один взмах" },
+    period: { type: "number", default: 0.35, min: 0.05, max: 6, unit: "с", help: "один взмах (птица 0.2–0.5, ласт черепахи ~4)" },
     amp: { type: "number", default: 45, min: 0, max: 90, unit: "°", help: "размах: от середины до верха и до низа" },
     mean: { type: "number", default: 5, min: -45, max: 45, unit: "°", help: "середина взмаха: + — крылья выше горизонта" },
     down: { type: "number", default: 0.55, min: 0.3, max: 0.8, help: "доля цикла на рабочий ход вниз" },

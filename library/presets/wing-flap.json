@@ -25,6 +25,37 @@
      "ref": "lag, bob, tailPitch, tuck — на глаз"
     }
    ]
+  },
+  {
+   "name": "dredge-turtle-stroke",
+   "help": "Черепаха: оба ласта гребут синхронно, медленный цикл 3.9 с, рабочий ход вниз-назад ~46% цикла, долгое скольжение.",
+   "params": {
+    "period": 3.93,
+    "amp": 40,
+    "mean": -5,
+    "down": 0.46,
+    "lag": 0.06,
+    "fold": 15,
+    "bob": 0.02,
+    "tailPitch": 5,
+    "tuck": 20
+   },
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "04-creatures.md §2 черепаха: удар вниз 20% + отвод 26%; amp, fold, mean — на глаз (кручение ±93° не перенесено)",
+     "ranges": {
+      "period": [
+       3.93,
+       3.93
+      ],
+      "down": [
+       0.46,
+       0.46
+      ]
+     }
+    }
+   ]
   }
  ]
 }
