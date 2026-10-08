@@ -67,11 +67,11 @@ r = (hi - lo).length / 2
 set_frame(0)
 # пол — непрозрачный диск на z = 0: видно, как стоят ноги, и что ушло под землю или под воду
 fl = bpy.data.meshes.new("floor")
-R = max(r * 4, 1e-3)
+R = max(r * 1.6, 1e-3)
 ring = [(c.x + R * math.cos(2 * math.pi * k / 48), c.y + R * math.sin(2 * math.pi * k / 48), 0.0) for k in range(48)]
 fl.from_pydata(ring, [], [list(range(48))])
 fm = bpy.data.materials.new("floor")
-fm.diffuse_color = (0.78, 0.8, 0.83, 1)
+fm.diffuse_color = (0.97, 0.97, 0.98, 1)  # в студийном свете плоскость темнеет — берём почти белый
 fl.materials.append(fm)
 sc.collection.objects.link(bpy.data.objects.new("floor", fl))
 # side/top/three_quarter — для тел вдоль X (рыба, змея); front/profile — для персонажей, смотрящих на −Y Blender

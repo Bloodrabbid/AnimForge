@@ -196,11 +196,14 @@ function skeletonRoot(rig: Rig, i: number): number {
 const isSecondary = (l: Clip["layers"][number]) => l.type === "recipe" && !!RECIPES[l.recipe]?.secondary;
 
 /** Высота кости над самой нижней костью скелета в rest (для рецептов, которым нужен масштаб тела). */
+const SIZE = "\u0000size"; // рост скелета — в той же таблице, под именем, которого не бывает у костей
 function restHeights(rig: Rig, project: Project): Map<string, number> {
   const up = bodyFrame(project).up;
   const hs = rig.skel.nodes.map((n, i) => (n.isJoint ? vdot(rig.worldT[i], up) : Infinity));
   const floor = Math.min(...hs);
-  return new Map(rig.skel.nodes.map((n, i) => [n.name, Number.isFinite(hs[i]) ? hs[i] - floor : 0]));
+  const m = new Map(rig.skel.nodes.map((n, i) => [n.name, Number.isFinite(hs[i]) ? hs[i] - floor : 0]));
+  m.set(SIZE, Math.max(0, ...m.values()));
+  return m;
 }
 const heightCache = new WeakMap<Rig, Map<string, number>>();
 
@@ -221,7 +224,7 @@ function primary(project: Project, rig: Rig, clip: Clip, t: number): Acc {
       const getAxes = () => (axes ??= chainAxes(rig, project, chain));
       const w = layer.weight ?? 1;
       chain.forEach((bone, i) => {
-        const out = def.evaluate(p, i, chain.length, t, { height: heights!.get(bone) ?? 0 });
+        const out = def.evaluate(p, i, chain.length, t, { height: heights!.get(bone) ?? 0, size: heights!.get(SIZE) ?? 0 });
         for (const [ch, v] of Object.entries(out)) {
           // вес слоя: для углов и сдвигов — множитель, для масштаба — доля пути от 1 до значения
           const val = ch.startsWith("scale_") ? 1 + ((v as number) - 1) * w : (v as number) * w;

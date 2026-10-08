@@ -19,6 +19,8 @@ export interface ClipEvent {
 
 export interface BoneInfo {
   height: number;
+  /** рост всего скелета в rest (от нижней кости до верхней) */
+  size?: number;
 }
 
 export interface RecipeDef {
@@ -748,7 +750,7 @@ const emerge: RecipeDef = {
     "замах вверх на 30–35 %. Ставь на первую кость тела (таз, основание щупальца).",
   params: {
     mode: { type: "enum", default: "emerge", options: ["emerge", "submerge"], help: "появление или уход" },
-    depth: { type: "number", default: 1, min: 0, max: 50, help: "глубина — доля высоты кости над землёй (щупальце 9.5 м ≈ 1.2, утопец ≈ 2.3)" },
+    depth: { type: "number", default: 1, min: 0, max: 5, help: "глубина — доля роста существа (1 — уходит целиком; щупальце 11.6 м при 9.5 м ≈ 1.2)" },
     duration: { type: "number", default: 1, min: 0.1, max: 10, unit: "с", help: "время всего движения" },
     rise: { type: "number", default: 0.35, min: 0.05, max: 1, help: "доля времени на основной подъём (щупальце 0.3 / 0.32 с, зейгл 0.45)" },
     overshoot: { type: "number", default: 0, min: 0, max: 0.5, help: "перелёт (Дагон 0.15, призрак 0.06, утопец 0.02)" },
@@ -758,7 +760,7 @@ const emerge: RecipeDef = {
   },
   evaluate(p, i, n, t, info) {
     if (i > 0) return {};
-    const h = (info?.height ?? 1) * p.depth;
+    const h = (info?.size ?? info?.height ?? 1) * p.depth;
     return { move_up: -h * (1 - emergeCurve(p, t / p.duration)) };
   },
 };

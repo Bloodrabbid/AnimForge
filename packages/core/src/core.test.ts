@@ -722,6 +722,7 @@ test("emerge: появление из глубины с перелётом и п
   for (let k = 0; k <= 1000; k++) { mx = Math.max(mx, emergeCurve(up, k / 1000)); mn = Math.min(mn, emergeCurve(up, k / 1000)); }
   close(mx, 1.15, 1e-3, "перелёт"); close(mn, -0.05, 1e-3, "присед");
   close(d.evaluate(withDefaults(d, {}), 0, 1, 0, { height: 2 }).move_up!, -2, 1e-9, "старт из глубины");
+  close(d.evaluate(withDefaults(d, {}), 0, 1, 0, { height: 0, size: 3 }).move_up!, -3, 1e-9, "глубина — от роста существа, у основания высота 0");
   const dn = withDefaults(d, { mode: "submerge", anticipation: 0.3, preT: 0.4 });
   close(emergeCurve(dn, 0), 1); close(emergeCurve(dn, 0.4), 1.3, 1e-9, "замах вверх"); close(emergeCurve(dn, 1), 0, 1e-9, "ушло");
   // без скачков: соседние отсчёты (шаг 0.001) отличаются меньше чем на 0.02
