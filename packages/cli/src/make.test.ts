@@ -55,17 +55,17 @@ test("make на копии рабочего: клипы по словам и с�
     const game = join(tmp, "game");
     mkdirSync(game);
     writeFileSync(join(game, "project.godot"), "config_version=5\n");
-    const r = (await call(dir, "make", { clips: "ленивая ходьба; удар; прыжок с переворотом", style: { stylization: "cartoon", role: "npc" }, godot: join(game, "anim"), video: false })) as any;
+    const r = (await call(dir, "make", { clips: "ленивая ходьба; удар; прыжок с переворотом", style: { stylization: "cartoon", role: "npc" }, godot: join(game, "anim"), video: false, review: false })) as any;
     assert.deepEqual(r.clips.map((c: any) => [c.name, c.preset]), [["walk", "toolsup-calm"], ["attack", "toolsup-hammer"]]);
     assert.deepEqual(r.missing.map((m: any) => m.query), ["прыжок с переворотом"]);
     assert.ok(existsSync(r.glb) && existsSync(join(game, "anim/worker-demo.glb")));
-    assert.deepEqual(r.notes, [], "папка внутри проекта Godot — без предупреждений");
+    assert.deepEqual(r.notes.filter((n: string) => /Godot/.test(n)), [], "папка внутри проекта Godot — без предупреждений");
     const p = JSON.parse(readFileSync(join(dir, "animforge.json"), "utf8"));
     assert.equal(p.style.stylization, "cartoon", "карточка стиля запомнилась");
     assert.equal(p.godot, join(game, "anim"), "папка игры запомнилась");
     assert.equal(p.clips.find((c: any) => c.name === "attack").loop, false);
     // повторный make заменяет клип, а не плодит walk-2; стиль и папка игры берутся из проекта
-    const r2 = (await call(dir, "make", { clips: "walk=toolsup-heavy", video: false })) as any;
+    const r2 = (await call(dir, "make", { clips: "walk=toolsup-heavy", video: false, review: false })) as any;
     assert.equal(r2.godot, join(game, "anim/worker-demo.glb"));
     const p2 = JSON.parse(readFileSync(join(dir, "animforge.json"), "utf8"));
     assert.equal(p2.clips.filter((c: any) => c.name.startsWith("walk")).length, p.clips.filter((c: any) => c.name.startsWith("walk")).length);

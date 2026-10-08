@@ -28,6 +28,7 @@ import { BoneTree } from "./BoneTree.tsx";
 import { Icon } from "./Icon.tsx";
 import { KeysPanel } from "./KeysPanel.tsx";
 import { LayersPanel } from "./LayersPanel.tsx";
+import { SimplePanel } from "./SimplePanel.tsx";
 import { LibraryPanel, chainsFor, sourceOf, type Entry } from "./LibraryPanel.tsx";
 import { Timeline } from "./Timeline.tsx";
 import { Viewport, type ViewCmd } from "./Viewport.tsx";
@@ -66,6 +67,9 @@ export function App() {
   const [showFloor, setShowFloor] = useState(true);
   const [view, setView] = useState<ViewCmd>({ kind: "fit", n: 0 });
   const [leftTab, setLeftTab] = useState<"library" | "bones">((query.get("left") as "bones") ?? "library");
+  // простой режим по умолчанию: модель, клипы, позинг, главные ручки и проверка; остальное — «Расширенное» (запоминается)
+  const [advanced, setAdvanced] = useState(() => query.get("adv") === "1" || (query.get("adv") !== "0" && localStorage.getItem("af.advanced") === "1"));
+  useEffect(() => localStorage.setItem("af.advanced", advanced ? "1" : "0"), [advanced]);
   const [rightTab, setRightTab] = useState<"layers" | "keys" | "weights" | "limits" | "targets">((query.get("right") as "weights") ?? "layers");
   const [activeTarget, setActiveTarget] = useState<string | null>(query.get("target"));
   const group = rightTab === "layers" || rightTab === "keys" ? "motion" : rightTab === "weights" ? "skin" : "body";
@@ -377,6 +381,14 @@ export function App() {
           <button className="ghost" onClick={() => setHelp((v) => !v)} title="горячие клавиши (?)">
             <Icon name="keyboard" />
           </button>
+          <button className={`ghost adv ${advanced ? "on" : ""}`} onClick={() => setAdvanced((v) => !v)} title="слои, ключи, цели, пределы, веса, дерево костей">
+            Расширенное
+          </button>
+          {project!.godot && (
+            <button className="btn outline" onClick={() => run("publish", {})} title={`запечь glb и положить в игру: ${project!.godot}`}>
+              <Icon name="download" /> В Godot
+            </button>
+          )}
           <a className="btn accent" href={downloadUrl(DIR)} title="запечь все клипы в glb — для Godot, Blender, Unity, Unreal">
             <Icon name="download" /> Скачать GLB
           </a>
@@ -388,12 +400,14 @@ export function App() {
           <button className={leftTab === "library" ? "on" : ""} onClick={() => setLeftTab("library")}>
             <Icon name="library" size={14} /> Библиотека
           </button>
-          <button className={leftTab === "bones" ? "on" : ""} onClick={() => setLeftTab("bones")}>
-            <Icon name="tree" size={14} /> Кости
-          </button>
+          {advanced && (
+            <button className={leftTab === "bones" ? "on" : ""} onClick={() => setLeftTab("bones")}>
+              <Icon name="tree" size={14} /> Кости
+            </button>
+          )}
         </div>
         <div className="tab-body">
-          {leftTab === "library" ? (
+          {leftTab === "library" || !advanced ? (
             <LibraryPanel library={library} chains={shown.chains} body={body?.body} active={trial?.entry.preset.name ?? null} onTry={(e) => tryOn(e)} />
           ) : (
             <BoneTree skeleton={data.skeleton} chains={shown.chains} selected={selectedBone} onSelect={setSelectedBone} />
@@ -414,7 +428,7 @@ export function App() {
             wireframe={wireframe}
             showFloor={showFloor}
             view={view}
-            weightMode={rightTab === "weights" && !trial}
+            weightMode={advanced && rightTab === "weights" && !trial}
             brush={brush}
             onPainter={(p) => {
               painter.current = p;
@@ -423,7 +437,7 @@ export function App() {
             onStroke={setStrokes}
             onPickBone={setSelectedBone}
             showTargets={!!clip?.constraints?.length}
-            activeTarget={rightTab === "targets" && !trial ? activeTarget : null}
+            activeTarget={advanced && rightTab === "targets" && !trial ? activeTarget : null}
             onMoveTarget={(id, pos) => {
               const c = clip?.constraints?.find((x) => x.id === id);
               if (!c || !clip || c.type === "copy") return;
@@ -573,6 +587,25 @@ export function App() {
       </main>
 
       <aside className="right">
+        {!advanced ? (
+          <>
+            <div className="tabs">
+              <button className="on">Клип {clip && <span className="n">{clip.name}</span>}</button>
+            </div>
+            <div className="tab-body">
+              {clip ? (
+                <SimplePanel dir={DIR} project={shown} clip={clip} readOnly={!!trial} runMany={trial ? runTrial : runMany} />
+              ) : (
+                <div className="empty-state">
+                  <Icon name="library" size={28} />
+                  <p>В проекте нет клипов.</p>
+                  <p className="muted">Выберите движение в библиотеке — клип создастся сам.</p>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+        <>
         <div className="tabs">
           {/* три группы по задаче: движение клипа, тело (цели и пределы суставов), кожа */}
           <button className={group === "motion" ? "on" : ""} onClick={() => setRightTab(lastSub.current.motion)} title="слои и ключи клипа">
@@ -696,6 +729,8 @@ export function App() {
             />
           )}
         </div>
+        </>
+        )}
       </aside>
 
       {(drag || upload) && (

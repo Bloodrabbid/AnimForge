@@ -7,6 +7,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:f
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { categoryOf, clipSteps, libRoles, missingChains, parseClips, searchPresets, uniqueClipName, type LibRecipe, type StyleCard } from "../../core/src/index.ts";
+import { checkProject } from "./checks.ts";
 import { loadSkinScene } from "./skin.ts";
 import { NODE_COMMANDS, call, exportGlb, loadCtx, loadPresets, projectFile, renderSheet, renderVideo, saveProject } from "./node.ts";
 
@@ -111,21 +112,13 @@ export async function make(dir: string, a: Record<string, any>) {
       notes.push(`пределы не поставлены: ${(e as Error).message}`);
     }
   }
+  // автопроверки по коже модели; что умеют — чинят (ослабить рвущий слой, стопы на пол), остальное — в отчёт
+  const checks = made.length && a.check !== false ? await checkProject(dir, made.map((m) => m.name), true) : [];
   ctx = await loadCtx(dir);
 
-  const glb = resolve(dir, a.out ?? `out/${ctx.project.name}.glb`);
-  const exp = await exportGlb(ctx, glb);
-  if (exp.warning) notes.push(exp.warning);
-
-  let godot: string | undefined;
-  if (ctx.project.godot) {
-    mkdirSync(ctx.project.godot, { recursive: true });
-    godot = join(ctx.project.godot, basename(glb));
-    copyFileSync(glb, godot);
-    const ev = glb.replace(/\.glb$/, ".events.json");
-    if (existsSync(ev)) copyFileSync(ev, join(ctx.project.godot, basename(ev)));
-    if (!godotRoot(ctx.project.godot)) notes.push(`${ctx.project.godot} не внутри проекта Godot (нет project.godot выше) — файл положен, но игра его не увидит`);
-  }
+  const pub = await publish(dir, a.out);
+  notes.push(...pub.notes);
+  const { glb, godot } = pub;
 
   let video: string | undefined;
   if (a.video !== false && made.length) {
@@ -149,14 +142,39 @@ export async function make(dir: string, a: Record<string, any>) {
     }
   }
 
+  // пакет для критика (critic/CRITIC.md): когда автопроверки нашли брак или о нём попросили. Критик — отдельный агент
+  let review: string | undefined;
+  if (made.length && a.review !== false && (a.review || checks.some((r) => !r.ok))) review = ((await NODE_COMMANDS["review.pack"].run(dir, { clip: made.map((m) => m.name).join(",") })) as { dir: string }).dir;
+  if (review) notes.push(`пакет для критика: ${review} (правила — critic/CRITIC.md)`);
+
   const summary = [
     `${ctx.project.name}: ${made.length} клип(ов)${missing.length ? `, не найдено ${missing.length}` : ""}`,
     ...made.map((m) => `• ${m.name} — ${m.preset} (${m.how}${m.alternatives ? `; ещё: ${m.alternatives.join(", ")}` : ""})`),
     ...missing.map((m) => `• «${m.query}» — ${m.reason}`),
+    ...checks.flatMap((r) => r.findings.map((f) => `${f.level === "fail" ? "✗" : "△"} ${r.clip}: ${f.msg}${f.fixed ? ` (починено: ${f.fixed})` : ""}`)),
     ...notes.map((n) => `! ${n}`),
   ].join("\n");
   if (a.send) send([video, glb].filter(Boolean) as string[], summary);
-  return { dir, fresh, body, clips: made, missing, glb, godot, video, style: ctx.project.style, notes, summary };
+  return { dir, fresh, body, clips: made, missing, checks, review, glb, godot, video, style: ctx.project.style, notes, summary };
+}
+
+/** Запечь glb (out/<имя>.glb) и положить копию в игру на Godot, если папка игры записана в проекте. */
+export async function publish(dir: string, out?: string) {
+  const ctx = await loadCtx(dir);
+  const notes: string[] = [];
+  const glb = resolve(dir, out ?? `out/${ctx.project.name}.glb`);
+  const exp = await exportGlb(ctx, glb);
+  if (exp.warning) notes.push(exp.warning);
+  let godot: string | undefined;
+  if (ctx.project.godot) {
+    mkdirSync(ctx.project.godot, { recursive: true });
+    godot = join(ctx.project.godot, basename(glb));
+    copyFileSync(glb, godot);
+    const ev = glb.replace(/\.glb$/, ".events.json");
+    if (existsSync(ev)) copyFileSync(ev, join(ctx.project.godot, basename(ev)));
+    if (!godotRoot(ctx.project.godot)) notes.push(`${ctx.project.godot} не внутри проекта Godot (нет project.godot выше) — файл положен, но игра его не увидит`);
+  }
+  return { glb, godot, notes };
 }
 
 /** В Telegram владельцу (harbor-send): видео и glb с подписью-отчётом. */

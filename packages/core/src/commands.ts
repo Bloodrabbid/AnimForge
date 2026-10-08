@@ -2,7 +2,7 @@
 // Команды здесь чистые: меняют проект в памяти и возвращают результат. Файлы, Blender и рендер — в адаптерах (packages/cli).
 import { CHANNELS } from "./project.ts";
 import type { Channel, Clip, Constraint, ConstraintTarget, Interp, KeyLayer, PoseLayer, Project, RecipeLayer, Skeleton } from "./project.ts";
-import { RECIPES } from "./recipes.ts";
+import { RECIPES, withDefaults } from "./recipes.ts";
 import { addPoseDelta, buildRig, frameTimes, motionAt, reach } from "./evaluate.ts";
 import { LIMIT_AXES, boneAngles, limitFrame, type BoneLimit, type LimitAxis } from "./limits.ts";
 import { DEG, qaxis, qrot, vdot, vsub } from "./math.ts";
@@ -228,6 +228,30 @@ const defs: CommandDef[] = [
     },
   },
   {
+    name: "clip.set",
+    help: "Поменять длительность, частоту запекания или цикличность клипа. fit — длина по рецептам клипа (удар — до конца окна ввода).",
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      duration: { type: "number", help: "длительность, с" },
+      fps: { type: "number", help: "частота запекания" },
+      loop: { type: "boolean", help: "цикл" },
+      fit: { type: "boolean", help: "длина по рецептам: самая длинная из длин разовых рецептов клипа (RecipeDef.length)" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const clip = clipOf(ctx, a.clip);
+      if (a.fit) {
+        const ls = clip.layers.flatMap((l) => (l.type === "recipe" && RECIPES[l.recipe]?.length ? [RECIPES[l.recipe].length!(withDefaults(RECIPES[l.recipe], l.params))] : []));
+        need(ls.length > 0, "у клипа нет разовых рецептов с длиной — укажите duration");
+        clip.duration = +Math.max(...ls).toFixed(3);
+      }
+      if (a.duration != null) { need(+a.duration > 0, "duration > 0"); clip.duration = +a.duration; }
+      if (a.fps != null) clip.fps = +a.fps;
+      if (a.loop != null) clip.loop = !!a.loop;
+      return { clip: clip.name, duration: clip.duration, fps: clip.fps, loop: clip.loop };
+    },
+  },
+  {
     name: "clip.ground",
     help: "Ставить кости на пол после всех слоёв: корень сдвигается по вертикали. contact — нижняя кость всегда на полу; floor — только не проваливаться. Без bones — выключить.",
     args: {
@@ -235,6 +259,7 @@ const defs: CommandDef[] = [
       bones: { type: "string", help: "кости через запятую (ступни)" },
       mode: { type: "string", help: "contact (по умолчанию) | floor" },
       ik: { type: "boolean", help: "провалившуюся ступню поднимать сгибом колена (двухзвенная IK: ступня → голень → бедро)" },
+      flat: { type: "boolean", help: "опорная стопа (у пола) — плоско: наклон снимается, разворот остаётся; иначе носок или пятка уходят под пол" },
     },
     mutates: true,
     run(ctx, a) {
@@ -243,7 +268,7 @@ const defs: CommandDef[] = [
       const bones = String(a.bones).split(",").map((s) => s.trim());
       for (const b of bones) need(ctx.skeleton.nodes.some((n) => n.name === b), `нет кости «${b}»`);
       need(!a.mode || a.mode === "contact" || a.mode === "floor", "mode: contact | floor");
-      clip.ground = { bones, mode: a.mode ?? "contact", ...(a.ik ? { ik: true } : {}) };
+      clip.ground = { bones, mode: a.mode ?? "contact", ...(a.ik ? { ik: true } : {}), ...(a.flat ? { flat: true } : {}) };
       return clip.ground;
     },
   },

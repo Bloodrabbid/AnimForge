@@ -103,14 +103,15 @@ export function detectRig(skel: Skeleton, project: Pick<Project, "up" | "forward
     const { base, side } = norm(n.name);
     const r = roleOf(base);
     // сторону без явной метки берём из геометрии (только для парных ролей)
-    return { i, role: r?.role, order: r?.order ?? 0, side: side ?? (Math.abs(S(i)) > 1e-4 ? (S(i) > 0 ? "l" : "r") : null) };
+    return { i, role: r?.role, order: r?.order ?? 0, side: side ?? (Math.abs(S(i)) > 1e-4 ? (S(i) > 0 ? "l" : "r") : null), named: !!side };
   });
   const pick = (role: string, side?: "l" | "r") => tagged.filter((t) => t.role === role && (!side || t.side === side)).sort((a, b) => a.order - b.order || H(a.i) - H(b.i));
 
   const hips = pick("hips").sort((a, b) => depth(rig, a.i) - depth(rig, b.i))[0];
   if (hips) { det.chains.pelvis = [name(hips.i)]; det.method.pelvis = "names"; }
   const spines = pick("spine").filter((t) => !hips || isAncestor(hips.i, t.i)).map((t) => t.i);
-  const chestT = pick("chest")[0];
+  // грудь — кость по середине тела: CC_Base_R_Breast (грудь как мягкая ткань, со стороной в имени) — не она
+  const chestT = pick("chest").find((t) => !t.named);
   if (spines.length) { det.chains.spine = spines.map(name); det.method.spine = "names"; }
   const chestBone = chestT?.i ?? spines[spines.length - 1];
   if (chestBone != null) { det.chains.chest = [name(chestBone)]; det.method.chest = "names"; }

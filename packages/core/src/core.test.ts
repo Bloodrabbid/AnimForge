@@ -7,6 +7,7 @@ import { DEG, Quat, qmul, qinv, qrot } from "./math.ts";
 import type { Project, Skeleton } from "./project.ts";
 import { RECIPES, withDefaults } from "./recipes.ts";
 import { runCommand } from "./commands.ts";
+import { emptyProject } from "./project.ts";
 
 const close = (a: number, b: number, eps = 1e-6, msg = "") => assert.ok(Math.abs(a - b) <= eps, `${msg} ${a} ≠ ${b}`);
 
@@ -428,6 +429,12 @@ function humanSkel(names: Record<string, string> | null): Skeleton {
   return { nodes: [{ name: "Armature", parent: null, restT: [0, 0, 0], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: false },
     ...HUMAN.map(([n, par, p]) => ({ name: nm(n), parent: par ? nm(par) : "Armature", restT: (par ? vsub(p, pos.get(par)!) : p) as Vec3, restR: [0, 0, 0, 1] as Quat, restS: [1, 1, 1] as Vec3, isJoint: true }))] };
 }
+
+test("грудь — кость посередине тела: CC_Base_R_Breast (мягкая ткань со стороной) — не грудь", () => {
+  const sk = humanSkel(CONV.unreal);
+  sk.nodes.push({ name: "CC_Base_R_Breast", parent: "spine_03", restT: [-0.08, -0.1, 0.1], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: true });
+  assert.deepEqual(detectRig(sk, { up: [0, 1, 0] }).chains.chest, ["spine_03"]);
+});
 
 test("распознавание скелета: Mixamo, Unreal, 3ds Max Biped, Rigify и скелет без имён дают одни и те же части тела", () => {
   const want = { pelvis: ["hips"], chest: ["chest"], head: ["head"], arm_l: ["uarm_l", "farm_l"], arm_r: ["uarm_r", "farm_r"], leg_l: ["thigh_l", "shin_l"], leg_r: ["thigh_r", "shin_r"] };
@@ -1184,4 +1191,25 @@ test("позинг: pose.reach тянет кисть в точку и пишет
   close(dist(endPt, [0.5, 1.25, 0.3]), 0, 1e-4, "конец предплечья там, куда тянули");
   runCommand(ctx, "pose.clear", { clip: "c" });
   assert.equal(ctx.project.clips[0].layers.length, 0);
+});
+
+test("главные ручки рецептов (простой режим) — настоящие числовые параметры, 3–5 штук", () => {
+  for (const [name, def] of Object.entries(RECIPES)) {
+    assert.ok(def.main && def.main.length >= 3 && def.main.length <= 5, `${name}: ${def.main}`);
+    for (const k of def.main!) assert.equal(def.params[k]?.type, "number", `${name}.${k}`);
+  }
+});
+
+test("clip.set fit: длина удара — до закрытия окна ввода (tail), не короче 0,3 с после открытия", () => {
+  const p = { ...emptyProject("t", "m.glb"), chains: { arm: ["uarm_r", "farm_r"] } };
+  const ctx = { project: p, skeleton: plain() };
+  runCommand(ctx, "clip.add", { name: "hit", duration: 1, loop: false });
+  runCommand(ctx, "recipe.add", { clip: "hit", recipe: "melee-strike", chain: "arm", params: { tail: 0.4 } });
+  // события рецепта целиком (clipEvents обрезает их по длине клипа)
+  const evOf = (tail: number) => RECIPES["melee-strike"].events!(withDefaults(RECIPES["melee-strike"], { tail }));
+  const close = evOf(0.4).find((e) => e.name === "window_close")!.t;
+  assert.equal((runCommand(ctx, "clip.set", { clip: "hit", fit: true }) as { duration: number }).duration, +close.toFixed(3));
+  runCommand(ctx, "recipe.set", { clip: "hit", layer: "melee-strike", params: { tail: 0 } });
+  const open = evOf(0).find((e) => e.name === "window_open")!.t;
+  assert.equal((runCommand(ctx, "clip.set", { clip: "hit", fit: true }) as { duration: number }).duration, +(open + 0.3).toFixed(3));
 });

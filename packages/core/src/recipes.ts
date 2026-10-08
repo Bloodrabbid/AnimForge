@@ -39,10 +39,13 @@ export interface RecipeDef {
   events?(p: Record<string, any>): ClipEvent[];
   /** Длина разового движения целиком, с — под неё делается клип (у циклов длина — период). */
   length?(p: Record<string, any>): number;
+  /** Главные ручки рецепта — 3–5 параметров, которые простой режим редактора показывает ползунками. */
+  main?: string[];
 }
 
 const wave: RecipeDef = {
   name: "wave",
+  main: ["period", "tipAmp", "growth", "bodyDelay"],
   help:
     "Волна по цепочке: синус с задержкой фазы от основания к кончику и амплитудой, растущей к кончику. " +
     "Плавание рыб и скатов (plane=lateral), китов и дельфинов (plane=vertical), щупальца, хвосты, змеи.",
@@ -72,6 +75,7 @@ const wave: RecipeDef = {
 
 const curl: RecipeDef = {
   name: "curl",
+  main: ["angle", "period", "pulse"],
   help:
     "Изгиб цепочки: угол распределён по костям с ростом к кончику, может пульсировать. " +
     "Загиб щупальца, поджатый хвост, дыхание (маленький пульсирующий изгиб спины), сжатие перед прыжком.",
@@ -121,6 +125,7 @@ function springCycle(key: string, period: number, hz: number, zeta: number, targ
 
 const compassStep: RecipeDef = {
   name: "compass-step",
+  main: ["period", "reach", "coreRoll"],
   roles: { leg_left: { chain: "leg_l" }, leg_right: { chain: "leg_r" }, core: { chain: "pelvis", params: { plane: "lateral" } } },
   help:
     "Шаг циркулем (Biped): шагающая нога раскрывается на reach за openTime, опорная отклоняется на −support, " +
@@ -173,6 +178,7 @@ function bobAt(s: number): number {
 
 const waddleWalk: RecipeDef = {
   name: "waddle-walk",
+  main: ["period", "pelvisRoll", "bob", "armSwing", "legSwing"],
   roles: Object.fromEntries(["pelvis", "chest", "head", "arm_l", "arm_r", "leg_l", "leg_r"].map((r) => [r, { chain: r }])),
   help:
     "Мультяшная ходьба вразвалку (Tools Up!): таз рыщет и подпрыгивает, плечи в противофазе, голова стабилизирована, " +
@@ -238,6 +244,7 @@ const waddleWalk: RecipeDef = {
 
 const blink: RecipeDef = {
   name: "blink",
+  main: ["interval", "close", "open"],
   roles: { eye_l: { chain: "eye_l" }, eye_r: { chain: "eye_r" } },
   help:
     "Моргание масштабом кости глаза (Tools Up!): сплющить по вертикали и чуть расширить, подержать, открыть с перелётом. " +
@@ -268,6 +275,7 @@ const blink: RecipeDef = {
 
 const jiggle: RecipeDef = {
   name: "jiggle",
+  main: ["hz", "damping", "gain"],
   secondary: true,
   help:
     "Вторичная динамика (как DynamicBone): цепочка — маятник с пружиной, её раскачивают ускорения и повороты родителя " +
@@ -331,9 +339,14 @@ const strikeRoles: RecipeDef["roles"] = { arm: { chain: (s) => `arm_${s}` }, cor
 
 const meleeStrike: RecipeDef = {
   name: "melee-strike",
+  main: ["firstHit", "strike", "windupAngle", "coreTwist", "crouch"],
   roles: strikeRoles,
-  // клип кончается чуть позже открытия окна ввода: рука уже вернулась
-  length: (p) => +((meleeStrike.events!(p).find((e) => e.name === "window_open")?.t ?? 1.3) + 0.3).toFixed(3),
+  // клип — до закрытия окна ввода, но не короче 0,3 с после его открытия (рука уже вернулась)
+  length: (p) => {
+    const ev = meleeStrike.events!(p);
+    const open = ev.find((e) => e.name === "window_open")?.t ?? 1.3, close = ev.find((e) => e.name === "window_close")?.t ?? 0;
+    return +Math.max(open + 0.3, close).toFixed(3);
+  },
   help:
     "Удар или серия ударов (Witcher + Tools Up!): замах → взмах с пиком скорости в контакте → доводка → возврат → окно на " +
     "следующий ввод. Один слой на роль: arm — цепочка плечо→локоть (мах vertical, локоть сгибается в крайних точках), " +
@@ -406,6 +419,7 @@ const meleeStrike: RecipeDef = {
 
 const chargeRelease: RecipeDef = {
   name: "charge-release",
+  main: ["windup", "hold", "release", "windupAngle"],
   roles: strikeRoles,
   length: (p) => +(p.windup + p.hold + p.release + 0.3).toFixed(3),
   help:
@@ -494,6 +508,7 @@ const QUAD_ROLES = { pelvis: "pelvis", spine: "spine", neck: "neck", leg_fl: "ar
 
 const quadrupedGait: RecipeDef = {
   name: "quadruped-gait",
+  main: ["period", "legs", "body", "bob"],
   roles: Object.fromEntries(Object.entries(QUAD_ROLES).map(([role, chain]) => [role, { chain }])),
   help:
     "Походка четвероногого по собаке Witcher: у каждой лапы свои кривые плеча/бедра, локтя/колена, пясти/плюсны и пальцев " +
@@ -557,6 +572,7 @@ function legProfile(ph: number, duty: number): { protract: number; lift: number 
 }
 const multilegGait: RecipeDef = {
   name: "multileg-gait",
+  main: ["period", "swing", "lift", "bob"],
   roles: {
     ...Object.fromEntries([...Array(MAX_PAIRS).keys()].flatMap((k) => (["l", "r"] as const).map((s) => [`leg_${s}${k}`, { chain: `leg_${s}${k}`, optional: true }]))),
     spine: { chain: "spine", optional: true },
@@ -613,6 +629,7 @@ function flapProfile(u: number, down: number): number {
 }
 const wingFlap: RecipeDef = {
   name: "wing-flap",
+  main: ["period", "amp", "down", "fold"],
   roles: {
     wing_l: { chain: "wing_l" }, wing_r: { chain: "wing_r" }, body: { chain: "pelvis", optional: true },
     tail: { chain: "tail", optional: true }, leg_l: { chain: "leg_l", optional: true }, leg_r: { chain: "leg_r", optional: true },
@@ -664,6 +681,7 @@ const wingFlap: RecipeDef = {
 // ── парение (призрак Witcher, cr_wraith) ─────────────────────────────────────────────────────────────────────────
 const hover: RecipeDef = {
   name: "hover",
+  main: ["period", "bob", "lean", "roll"],
   roles: { pelvis: { chain: "pelvis" }, chest: { chain: "chest", optional: true }, head: { chain: "head", optional: true } },
   help:
     "Парение без ног (призрак Witcher): таз поднимается и опускается почти чистым синусом, корпус кивает и кренится, грудь рыщет, " +
@@ -704,6 +722,7 @@ function strikeCurve(p: Record<string, any>, t: number): number {
 }
 const tentacleStrike: RecipeDef = {
   name: "tentacle-strike",
+  main: ["amp", "windupT", "strikeT", "returnT"],
   length: (p) => +(p.windupT + p.strikeT + p.hold + p.returnT + 0.3).toFixed(3),
   help:
     "Удар щупальцем, стеблем или хвостом (Witcher: щупальце, эхинопс, зейгл): замах назад, удар за доли секунды, удержание, " +
@@ -750,6 +769,7 @@ function emergeCurve(p: Record<string, any>, u: number): number {
 }
 const emerge: RecipeDef = {
   name: "emerge",
+  main: ["duration", "rise", "overshoot", "anticipation"],
   help:
     "Появление из воды или земли и уход (Witcher): корень цепочки поднимается из глубины depth. Щупальце и стебель выбрасываются " +
     "почти линейно, Дагон перелетает на 15 % и оседает, зейгл сначала приседает; уход — с ускорением, у призрака и утопца перед ним " +

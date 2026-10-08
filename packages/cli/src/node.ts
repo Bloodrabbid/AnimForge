@@ -5,8 +5,8 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { COMMANDS, Clip, type LibPreset, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectFins, detectForward, detectMultiLeg, detectWings, detectQuadruped, detectRig, emptyProject, frameTimes, posePartsAt, readSkeleton, runCommand, samplePreset, suggestAlign, writeClips } from "../../core/src/index.ts";
-import { loadSkinScene, skinFrame, skinTopology } from "./skin.ts";
+import { COMMANDS, Clip, type LibPreset, smoothJointWeights, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectFins, detectForward, detectMultiLeg, detectWings, detectQuadruped, detectRig, emptyProject, frameTimes, posePartsAt, readSkeleton, runCommand, samplePreset, suggestAlign, writeClips } from "../../core/src/index.ts";
+import { loadSkinScene, restVerts, skinFrame, skinTopology } from "./skin.ts";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 export const GODOT = process.env.GODOT ?? "/Applications/Godot.app/Contents/MacOS/Godot";
@@ -76,13 +76,15 @@ export async function exportGlb(ctx: Ctx & { dir: string }, out: string) {
 
 /** «Глаза»: кадры клипа. Позу считает ядро, кожу — skin.ts по спецификации glTF, Blender только рисует треугольники.
  * Кадр k из count — момент duration·k/count. */
-async function renderFrames(ctx: Ctx & { dir: string }, clip: Clip, dir: string, count: number, view: string, dist = 1, size: [number, number] = [480, 300]) {
+async function renderFrames(ctx: Ctx & { dir: string }, clip: Clip, dir: string, count: number, view: string, dist = 1, size: [number, number] = [480, 300], times?: number[]) {
   const sc = loadSkinScene(await io.read(join(ctx.dir, ctx.project.model)));
   if (!sc.parts.length) throw new Error("в модели нет мешей — рисовать нечего");
   const rig = buildRig(ctx.skeleton);
   const fw = bodyFrame(ctx.project).forward;
   const yaw = Math.abs(ctx.project.up[1]) > 0.99 ? -Math.atan2(fw[0], fw[2]) : 0; // лицом на +Z, только для Y-up
-  const frames = Array.from({ length: count }, (_, k) => skinFrame(sc, posePartsAt(ctx.project, rig, clip, (clip.duration * k) / count), yaw));
+  const at = times ?? Array.from({ length: count }, (_, k) => (clip.duration * k) / count);
+  count = at.length;
+  const frames = at.map((t) => skinFrame(sc, posePartsAt(ctx.project, rig, clip, t), yaw));
   const topo = join(dir, "topo.json"), bin = join(dir, "frames.bin");
   writeFileSync(topo, JSON.stringify(skinTopology(sc)));
   writeFileSync(bin, Buffer.concat(frames.map((f) => Buffer.from(f.buffer, f.byteOffset, f.byteLength))));
@@ -130,6 +132,41 @@ export async function renderSheet(ctx: Ctx & { dir: string }, clip: string, fram
   }
 }
 
+/** Лист для критика: два ряда — спереди в три четверти и в профиль; на каждом кадре номер и время.
+ * Кадров — по длине клипа (≈6 в секунду, 6–12), и кадры событий удара всегда в листе: на редком листе задержка
+ * в замахе и контакт пролетают между кадрами (так критик однажды не увидел замаха, который был). */
+export function reviewTimes(clip: Clip, n?: number): number[] {
+  const k = n ?? Math.max(6, Math.min(12, Math.round(clip.duration * 6)));
+  const ts = Array.from({ length: k }, (_, i) => (clip.duration * i) / k);
+  for (const e of clipEvents(clip).filter((e) => e.name === "hit")) {
+    let j = 0;
+    for (let i = 1; i < ts.length; i++) if (Math.abs(ts[i] - e.t) < Math.abs(ts[j] - e.t)) j = i;
+    if (j > 0) ts[j] = e.t; // первый кадр — всегда начало клипа
+  }
+  return [...new Set(ts.map((t) => +t.toFixed(3)))].sort((a, b) => a - b);
+}
+
+export async function renderReviewSheet(ctx: Ctx & { dir: string }, clip: string, out: string, n?: number) {
+  const tmp = mkdtempSync(join(tmpdir(), "af-review-"));
+  try {
+    const c = findClip(ctx, clip);
+    const times = reviewTimes(c, n);
+    const rows: string[] = [];
+    for (const view of ["front_3q", "profile"]) {
+      const d = join(tmp, view);
+      mkdirSync(d);
+      const pngs = await renderFrames(ctx, c, d, times.length, view, 0.9, [300, 360], times);
+      pngs.forEach((p, k) => execFileSync("magick", [p, "-font", "/System/Library/Fonts/Supplemental/Arial.ttf", "-pointsize", "20", "-fill", "#222", "-gravity", "northwest", "-annotate", "+8+6", `${view === "profile" ? "профиль" : "спереди"} ${k} · ${times[k].toFixed(2)} с`, p]));
+      rows.push("(", ...pngs, "-bordercolor", "#c4c8cf", "-border", "1", "+append", ")");
+    }
+    mkdirSync(dirname(out), { recursive: true });
+    execFileSync("magick", [...rows, "-append", out]);
+    return { out, times };
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 /** Шаблон тела через Blender: меш + кости + автоматические веса. */
 export function makeTemplate(type: string, out: string, bones?: number) {
   const script = join(ROOT, `bridge/blender/template_${type}.py`);
@@ -139,6 +176,36 @@ export function makeTemplate(type: string, out: string, bones?: number) {
   const ok = log.split("\n").find((l) => l.includes("_OK"));
   if (!ok) throw new Error("шаблон не собрался");
   return { out, log: ok };
+}
+
+/** Руки, которые нельзя выравнивать по костям: рука меша (вершины, где главная кость — из цепочки руки или ниже)
+ * от плеча уже смотрит вниз — ближе 45° к вертикали. Мало вершин (жёсткая рука-деталь) — проверять нечего. */
+async function meshArmCheck(ctx: Ctx & { dir: string }, arms: string[]): Promise<Record<string, string>> {
+  if (!arms.length) return {};
+  const sc = loadSkinScene(await io.read(join(ctx.dir, ctx.project.model)));
+  if (!sc.parts.length) return {};
+  const rig = buildRig(ctx.skeleton);
+  const { p, dom } = restVerts(sc);
+  const out: Record<string, string> = {};
+  for (const arm of arms) {
+    const chain = ctx.project.chains[arm];
+    const root = rig.index.get(chain[0])!;
+    // кости руки и всё, что ниже (кисть, пальцы, twist-кости)
+    const under = new Set<string>();
+    ctx.skeleton.nodes.forEach((n, i) => { for (let q = i; q >= 0; q = rig.parent[q]) if (q === root) { under.add(n.name); break; } });
+    const s: number[] = [0, 0, 0];
+    let n = 0;
+    dom.forEach((d, i) => { if (d && under.has(d)) { s[0] += p[i * 3]; s[1] += p[i * 3 + 1]; s[2] += p[i * 3 + 2]; n++; } });
+    if (n < 30) continue;
+    const sh = rig.worldT[root];
+    const md = [s[0] / n - sh[0], s[1] / n - sh[1], s[2] / n - sh[2]];
+    // от «вниз» тела: рецепты пишутся от висящей руки — уже висит в меше, значит, опускать нечего
+    const down = bodyFrame(ctx.project).up.map((x) => -x);
+    const cos = (md[0] * down[0] + md[1] * down[1] + md[2] * down[2]) / (Math.hypot(...md) || 1);
+    const deg = Math.acos(Math.max(-1, Math.min(1, cos))) * 180 / Math.PI;
+    if (deg < 45) out[arm] = `рука меша уже опущена (${deg.toFixed(0)}° от вертикали), отведены только кости`;
+  }
+  return out;
 }
 
 /** Команды адаптера (файлы, Blender) — того же вида, что и команды ядра, чтобы CLI и MCP видели единый список. */
@@ -392,6 +459,13 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
       for (const [k, v] of Object.entries(det.chains)) if (v) ctx.project.chains[k] = v;
       // руки в T/A-позе сначала опускаются вниз — от этой позы считаются все махи рецептов
       const al = suggestAlign(buildRig(ctx.skeleton), ctx.project);
+      // кости говорят «T-поза», а меш может быть вылеплен иначе (у пекаря CC-скелет в T-позе, а ручки — перед животом):
+      // опускать такие руки — рвать кожу. Выравниваем, только если рука меша идёт вдоль костей
+      for (const [arm, why] of Object.entries(await meshArmCheck(ctx, Object.keys(al.align)))) {
+        delete al.align[arm];
+        if (ctx.project.align) delete ctx.project.align[arm];
+        det.notes.push(`${arm}: ${why} — руку не выравниваем`);
+      }
       if (Object.keys(al.align).length) ctx.project.align = { ...ctx.project.align, ...al.align };
       if (a.write !== false) saveProject(dir, ctx.project);
       return { ...det, armAngles: al.angles, align: ctx.project.align ?? {} };
@@ -508,6 +582,8 @@ NODE_COMMANDS.make = {
     style: { type: "json", help: "карточка стиля: {genre, stylization, role: player|enemy|npc, fps, refs[], notes} — запоминается в проекте" },
     godot: { type: "string", help: "папка внутри проекта Godot, куда класть glb — запоминается в проекте" },
     force: { type: "boolean", help: "не останавливаться на сомнительном риге" },
+    check: { type: "boolean", help: "автопроверки с починкой (по умолчанию да)" },
+    review: { type: "boolean", help: "пакет для критика: true — всегда, false — никогда, без флага — когда проверки нашли брак" },
     video: { type: "boolean", help: "рендерить видео (по умолчанию да)" },
     view: { type: "string", help: "ракурс видео, как у sheet (по умолчанию по телу)" },
     out: { type: "string", help: "куда glb, по умолчанию out/<имя>.glb" },
@@ -515,6 +591,102 @@ NODE_COMMANDS.make = {
   },
   run: async (dir, a) => (await import("./make.ts")).make(dir, a),
 };
+
+NODE_COMMANDS["weights.smooth"] = {
+  help: "Сгладить веса кожи у границ соседних костей: где вершины жёстко поделены между бедром и голенью (или плечом и предплечьем), при сгибе открывается щель. Исходник модели — рядом, *.orig.glb.",
+  args: {
+    rings: { type: "number", help: "насколько широко от границы, в рёбрах; по умолчанию 3" },
+    iters: { type: "number", help: "проходов сглаживания, по умолчанию 6" },
+  },
+  run: async (dir, a) => smoothWeights(dir, a.rings ?? 3, a.iters ?? 6),
+};
+
+NODE_COMMANDS.publish = {
+  help: "Запечь все клипы в glb (out/<имя>.glb) и положить копию в игру на Godot — в папку, записанную в проекте (make --godot).",
+  args: { out: { type: "string", help: "куда glb, по умолчанию out/<имя>.glb" } },
+  run: async (dir, a) => (await import("./make.ts")).publish(dir, a.out),
+};
+
+NODE_COMMANDS["review.pack"] = {
+  help: "Пакет для критика (critic/CRITIC.md): на каждый клип лист кадров спереди и в профиль с номерами, review.json — карточка стиля, клипы, события и отчёт автопроверок. Критик — отдельный агент, он только судит.",
+  args: {
+    clip: { type: "string", help: "клипы через запятую (по умолчанию все)" },
+    out: { type: "string", help: "папка пакета, по умолчанию out/review" },
+    frames: { type: "number", help: "кадров в ряду, по умолчанию по длине клипа (≈6 в секунду, 6–12; кадры удара — всегда)" },
+  },
+  async run(dir, a) {
+    const { checkProject } = await import("./checks.ts");
+    const ctx = await loadCtx(dir);
+    const names = a.clip ? String(a.clip).split(",").map((x: string) => x.trim()) : ctx.project.clips.map((c) => c.name);
+    const out = resolve(dir, a.out ?? "out/review");
+    rmSync(out, { recursive: true, force: true });
+    mkdirSync(out, { recursive: true });
+    const checks = await checkProject(dir, names, false);
+    const sheets: string[] = [], times: Record<string, number[]> = {};
+    for (const name of names) {
+      const r = await renderReviewSheet(ctx, name, join(out, `${name}.png`), a.frames);
+      sheets.push(r.out);
+      times[name] = r.times;
+    }
+    const clips = ctx.project.clips.filter((c) => names.includes(c.name)).map((c) => ({
+      clip: c.name, duration: c.duration, loop: c.loop, frameTimes: times[c.name],
+      layers: c.layers.map((l) =>
+        l.type === "recipe"
+          ? { recipe: l.recipe, preset: l.preset, chain: l.target.chain, weight: l.weight ?? 1 }
+          : l.type === "keys"
+            ? { type: "keys", tracks: l.tracks.map((tr) => ({ bone: tr.bone, axis: tr.axis, keys: tr.keys.map((k) => [k.t, k.v]) })) }
+            : { type: l.type },
+      ),
+      events: clipEvents(c).map(({ t, name }) => ({ t: +t.toFixed(3), name })),
+    }));
+    writeFileSync(join(out, "review.json"), JSON.stringify({ project: ctx.project.name, style: ctx.project.style ?? null, clips, checks }, null, 1));
+    return { dir: out, sheets, prompt: join(ROOT, "critic/CRITIC.md") };
+  },
+};
+
+NODE_COMMANDS.check = {
+  help: "Автопроверки клипов по коже модели: кожа рвётся (с поиском виноватого слоя), провал в пол и парение, шов цикла, рывки, упор в пределы, тайминг удара под роль из карточки стиля, клип короче событий. fix — чинить, что умеется (ослабить рвущий слой, поставить на пол).",
+  args: {
+    clip: { type: "string", help: "клип или несколько через запятую (по умолчанию все)" },
+    fix: { type: "boolean", help: "чинить и записать правки в проект" },
+  },
+  async run(dir, a) {
+    const { checkProject } = await import("./checks.ts");
+    return checkProject(dir, a.clip ? String(a.clip).split(",").map((x: string) => x.trim()) : undefined, !!a.fix);
+  },
+};
+
+/** Веса модели проекта: сгладить у суставов (smoothJointWeights) и записать glb; исходник — *.orig.glb рядом. */
+export async function smoothWeights(dir: string, rings = 3, iters = 6) {
+  const ctx = await loadCtx(dir);
+  const file = join(dir, ctx.project.model);
+  const orig = file.replace(/\.glb$/, ".orig.glb");
+  if (!existsSync(orig)) writeFileSync(orig, readFileSync(file));
+  const doc = await io.read(file);
+  const parentOf = new Map<unknown, unknown>();
+  for (const n of doc.getRoot().listNodes()) for (const c of n.listChildren()) parentOf.set(c, n);
+  let changed = 0, total = 0;
+  const e: number[] = [];
+  for (const node of doc.getRoot().listNodes()) {
+    const skin = node.getSkin(), mesh = node.getMesh();
+    if (!skin || !mesh) continue;
+    const joints = skin.listJoints();
+    const parent = joints.map((jn) => { for (let p = parentOf.get(jn); p; p = parentOf.get(p)) { const k = joints.indexOf(p as never); if (k >= 0) return k; } return -1; });
+    for (const prim of mesh.listPrimitives()) {
+      const J = prim.getAttribute("JOINTS_0"), W = prim.getAttribute("WEIGHTS_0"), P = prim.getAttribute("POSITION");
+      if (!J || !W || !P) continue;
+      const n = J.getCount(), j = new Uint16Array(n * 4), w = new Float32Array(n * 4), pos = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) { J.getElement(i, e); j.set(e.slice(0, 4), i * 4); W.getElement(i, e); w.set(e.slice(0, 4), i * 4); P.getElement(i, e); pos.set(e.slice(0, 3), i * 3); }
+      const idx = prim.getIndices();
+      const faces = idx ? Array.from({ length: idx.getCount() }, (_, i) => idx.getScalar(i)) : Array.from({ length: n }, (_, i) => i);
+      changed += smoothJointWeights(j, w, pos, faces, parent, rings, iters);
+      total += n;
+      for (let i = 0; i < n; i++) { J.setElement(i, Array.from(j.subarray(i * 4, i * 4 + 4))); W.setElement(i, Array.from(w.subarray(i * 4, i * 4 + 4))); }
+    }
+  }
+  await io.write(file, doc);
+  return { changed, total, backup: orig };
+}
 
 /** Единая точка вызова любой команды: и ядра, и адаптера. Команды ядра, меняющие проект, сохраняют его. */
 export async function call(dir: string, name: string, args: Record<string, any>) {

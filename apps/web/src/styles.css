@@ -1726,3 +1726,18 @@ table.keys tbody tr:hover {
   gap: 4px;
   padding: 6px 10px;
 }
+
+/* простой режим: главные ручки рецепта и проверка */
+.simple { display: flex; flex-direction: column; gap: 14px; padding: 12px; }
+.simple h3 { font-size: 13px; margin: 0 0 8px; font-weight: 600; }
+.simple h3 .muted { font-weight: 400; margin-left: 6px; }
+.knob { display: grid; grid-template-columns: 1fr 1.2fr 64px; align-items: center; gap: 8px; font-size: 12px; margin: 6px 0; }
+.knob .k-name { color: var(--muted, #9aa0a6); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.knob .k-val { text-align: right; font-variant-numeric: tabular-nums; }
+.checks .row { display: flex; gap: 8px; margin-top: 8px; }
+.checks .finding { font-size: 12px; margin: 4px 0; line-height: 1.4; }
+.checks .finding.fail b { color: #ff6b6b; }
+.checks .finding.warn b { color: #ffb547; }
+.checks h3 .ok { color: #7ee0a1; font-weight: 400; }
+.checks h3 .bad { color: #ff6b6b; font-weight: 400; }
+button.adv.on { color: var(--accent, #ffb547); }

@@ -129,3 +129,70 @@ export function skinFrame(sc: SkinScene, pose: PoseParts, yaw = 0): Float32Array
 export function skinTopology(sc: SkinScene) {
   return sc.parts.map((p) => ({ name: p.name, color: p.color, verts: p.pos.length / 3, faces: p.faces }));
 }
+
+const NO_POSE: PoseParts = { rot: new Map(), pos: new Map(), scl: new Map() };
+
+/** Вершины в позе привязки в координатах glTF и главная кость каждой вершины (с наибольшим весом). */
+export function restVerts(sc: SkinScene): { p: Float32Array; dom: (string | null)[] } {
+  const b = skinFrame(sc, NO_POSE);
+  const p = new Float32Array(b.length);
+  // обратно из Blender (x, −z, y) в glTF
+  for (let i = 0; i < b.length; i += 3) { p[i] = b[i]; p[i + 1] = b[i + 2]; p[i + 2] = -b[i + 1]; }
+  const dom: (string | null)[] = [];
+  for (const part of sc.parts) {
+    const n = part.pos.length / 3;
+    for (let i = 0; i < n; i++) {
+      if (!part.skin) { dom.push(null); continue; }
+      let best = 0;
+      for (let k = 1; k < 4; k++) if (part.skin.w[i * 4 + k] > part.skin.w[i * 4 + best]) best = k;
+      dom.push(part.skin.joints[part.skin.j[i * 4 + best]].getName());
+    }
+  }
+  return { p, dom };
+}
+
+/** Рёбра всех треугольников (без повторов) — индексы в общем массиве вершин skinFrame. */
+export function meshEdges(sc: SkinScene): Uint32Array {
+  const seen = new Set<number>(), out: number[] = [];
+  let base = 0;
+  for (const part of sc.parts) {
+    const f = part.faces;
+    for (let t = 0; t + 2 < f.length; t += 3)
+      for (const [a, b] of [[f[t], f[t + 1]], [f[t + 1], f[t + 2]], [f[t + 2], f[t]]]) {
+        const lo = base + Math.min(a, b), hi = base + Math.max(a, b);
+        const key = lo * 4194304 + hi;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(lo, hi);
+      }
+    base += part.pos.length / 3;
+  }
+  return Uint32Array.from(out);
+}
+
+/** Насколько кожа «плывёт» в кадре: доля рёбер, которые растянуты больше чем в tol раз против позы привязки
+ * и при этом сдвинулись заметно — больше minLen (1 % роста модели): крошечные рёбра в складках глаз не видит.
+ * Жёсткие части (молоток, глаза-сферы) не тянутся вовсе, мягкая кожа в сгибах — в разы, но коротко. */
+export function stretchOf(rest: Float32Array, frame: Float32Array, edges: Uint32Array, minLen: number, tol = 1.6) {
+  let bad = 0, worst = 1, worstEdge = -1, n = 0;
+  for (let e = 0; e < edges.length; e += 2) {
+    const a = edges[e] * 3, b = edges[e + 1] * 3;
+    const l0 = Math.hypot(rest[a] - rest[b], rest[a + 1] - rest[b + 1], rest[a + 2] - rest[b + 2]);
+    if (l0 < 1e-7) continue;
+    const l1 = Math.hypot(frame[a] - frame[b], frame[a + 1] - frame[b + 1], frame[a + 2] - frame[b + 2]);
+    n++;
+    if (Math.abs(l1 - l0) < minLen) continue;
+    // только растяжение: сжатие в сгибе (колено изнутри) — норма для любой трубки, рвётся кожа на растяжении
+    const r = l1 / l0;
+    if (r > tol) bad++;
+    if (r > worst) { worst = r; worstEdge = edges[e]; }
+  }
+  return { bad: n ? bad / n : 0, worst, worstVertex: worstEdge };
+}
+
+/** Рост модели в позе привязки (размах по вертикали Blender Z) — масштаб для порогов. */
+export function heightOf(rest: Float32Array) {
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 2; i < rest.length; i += 3) { lo = Math.min(lo, rest[i]); hi = Math.max(hi, rest[i]); }
+  return hi - lo;
+}

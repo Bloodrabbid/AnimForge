@@ -114,8 +114,10 @@ class Acc {
   constructor(readonly rig: Rig, readonly project: Project) {}
 
   /** Ограничения проекта: каждый поворот — в свой диапазон (поверх выравнивания позы покоя). */
-  applyLimits() {
+  /** only — только эти кости (после вторичной динамики: колени, согнутые IK пола, второй раз не трогаем). */
+  applyLimits(only?: Set<string>) {
     for (const [bone, lim] of Object.entries(this.project.limits ?? {})) {
+      if (only && !only.has(bone)) continue;
       const d = this.rot.get(bone);
       if (!d || !this.rig.index.has(bone)) continue;
       const r = clampRotation(this.rig, this.project, bone, lim, d, this.base.get(bone));
@@ -268,6 +270,7 @@ function primary(project: Project, rig: Rig, clip: Clip, t: number): Acc {
     if (g.mode === "contact") ground(acc, rig, project, g);
     if (g.ik) for (const b of g.bones) footIK(acc, rig, project, b);
     if (g.mode === "floor") ground(acc, rig, project, g);
+    if (g.flat) for (const b of g.bones) flatFoot(acc, rig, project, b);
   }
   if (clip.constraints?.some((c) => !c.muted)) {
     for (const c of clip.constraints) if (!c.muted) solveConstraint(acc, rig, project, clip, c, t);
@@ -683,6 +686,28 @@ function footIK(acc: Acc, rig: Rig, project: Project, foot: string) {
   acc.setLocal(rig.skel.nodes[si].name, qnorm(qmul(qinv(w.R[ti]), qmul(q1, w.R[si]))));
 }
 
+/** Опорная стопа плоско: у пола (не выше 2 % роста бедра над своей высотой покоя) наклон стопы относительно пола
+ * снимается — её «верх» из позы покоя снова смотрит вверх, разворот вокруг вертикали остаётся. Выше — плавно
+ * отпускается до половины к 6 %: в переносе стопа гнётся вдвое меньше, чем по рецепту. */
+function flatFoot(acc: Acc, rig: Rig, project: Project, foot: string) {
+  const fi = rig.index.get(foot);
+  if (fi == null) return;
+  const { up } = bodyFrame(project);
+  const w = worldPose(rig, acc.parts());
+  const hip = rig.parent[rig.parent[fi] ?? -1] ?? -1;
+  const leg = hip >= 0 ? Math.max(1e-6, vdot(rig.worldT[hip], up) - vdot(rig.worldT[fi], up)) : 1;
+  const lift = (vdot(w.T[fi], up) - vdot(rig.worldT[fi], up)) / leg;
+  // в переносе — наполовину: носок, опущенный на 40–60° маха ноги, иначе чиркает по полу
+  const k = lift <= 0.02 ? 1 : lift >= 0.06 ? 0.5 : 1 - (0.5 * (lift - 0.02)) / 0.04;
+  // «верх» стопы — то её направление, что в позе покоя смотрело вверх мира
+  const localUp = qrot(qinv(rig.worldR[fi]), up);
+  const nowUp = qrot(w.R[fi], localUp);
+  const fixQ = qscale(qbetween(nowUp, up), k);
+  const pf = rig.parent[fi];
+  const Rp = pf >= 0 ? w.R[pf] : QI;
+  acc.setLocal(rig.skel.nodes[fi].name, qnorm(qmul(qinv(Rp), qmul(fixQ, w.R[fi]))));
+}
+
 /** Выравнивание позы покоя: первая кость цепочки разворачивается так, чтобы цепочка смотрела вниз (с отведением abduct). */
 function alignRest(acc: Acc, rig: Rig, project: Project) {
   const f = bodyFrame(project);
@@ -807,12 +832,17 @@ function addSecondary(acc: Acc, project: Project, rig: Rig, clip: Clip, t: numbe
   }
 }
 
+/** Кости, которые двигает вторичная динамика клипа. */
+function secondaryBones(project: Project, clip: Clip): Set<string> {
+  return new Set(clip.layers.flatMap((l) => (isSecondary(l) && l.type === "recipe" ? (project.chains[l.target.chain] ?? []) : [])));
+}
+
 /** Полная поза в момент t: повороты, сдвиги и масштабы затронутых костей (в локальных осях, как в glTF). */
 export function posePartsAt(project: Project, rig: Rig, clip: Clip, t: number): PoseParts {
   const acc = primary(project, rig, clip, t);
   if (clip.layers.some(isSecondary)) {
     addSecondary(acc, project, rig, clip, t);
-    if (project.limits) acc.applyLimits(); // хвост и уши после пружины — тоже в своих пределах
+    if (project.limits) acc.applyLimits(secondaryBones(project, clip)); // хвост и уши после пружины — тоже в своих пределах
   }
   const parts = acc.parts();
   if (acc.limited.size) parts.limited = acc.limited;
@@ -824,7 +854,7 @@ export function motionAt(project: Project, rig: Rig, clip: Clip, t: number): { r
   const acc = primary(project, rig, clip, t);
   if (clip.layers.some(isSecondary)) {
     addSecondary(acc, project, rig, clip, t);
-    if (project.limits) acc.applyLimits();
+    if (project.limits) acc.applyLimits(secondaryBones(project, clip));
   }
   return { rot: acc.rot, base: acc.base, limited: acc.limited };
 }
