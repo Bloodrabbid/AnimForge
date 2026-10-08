@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { COMMANDS, Clip, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectForward, detectQuadruped, detectRig, emptyProject, frameTimes, posePartsAt, readSkeleton, runCommand, samplePreset, suggestAlign, writeClips } from "../../core/src/index.ts";
+import { COMMANDS, Clip, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectForward, detectMultiLeg, detectQuadruped, detectRig, emptyProject, frameTimes, posePartsAt, readSkeleton, runCommand, samplePreset, suggestAlign, writeClips } from "../../core/src/index.ts";
 import { loadSkinScene, skinFrame, skinTopology } from "./skin.ts";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -283,10 +283,10 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
       const ctx = await loadCtx(dir);
       // сначала — куда смотрит персонаж (от этого зависят «лево/право» и плоскости маха)
       // четвероногое узнаём по геометрии лап, и «вперёд» у него — к голове
-      const quad = detectQuadruped(ctx.skeleton, ctx.project.up);
+      const quad = detectQuadruped(ctx.skeleton, ctx.project.up) ?? detectMultiLeg(ctx.skeleton, ctx.project.up);
       const fw = quad ? { forward: quad.forward, by: "head" as const } : detectForward(ctx.skeleton, ctx.project.up);
       ctx.project.forward = fw.forward.map((x) => +x.toFixed(4)) as [number, number, number];
-      const det = { ...(quad ?? detectRig(ctx.skeleton, ctx.project)), body: quad ? "quadruped" : ctx.project.chains.leg_l || detectRig(ctx.skeleton, ctx.project).chains.leg_l ? "biped" : "other", forward: ctx.project.forward, forwardBy: fw.by };
+      const det = { ...(quad ?? detectRig(ctx.skeleton, ctx.project)), body: quad ? ("legCount" in quad ? "multileg" : "quadruped") : ctx.project.chains.leg_l || detectRig(ctx.skeleton, ctx.project).chains.leg_l ? "biped" : "other", forward: ctx.project.forward, forwardBy: fw.by };
       for (const [k, v] of Object.entries(det.chains)) if (v) ctx.project.chains[k] = v;
       // руки в T/A-позе сначала опускаются вниз — от этой позы считаются все махи рецептов
       const al = suggestAlign(buildRig(ctx.skeleton), ctx.project);
@@ -312,7 +312,7 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
       const added: string[] = [], skipped: string[] = [];
       for (const [role, r] of Object.entries(def.roles)) {
         const chain = typeof r.chain === "function" ? r.chain(a.side === "l" ? "l" : "r") : r.chain;
-        if (!ctx.project.chains[chain]) { skipped.push(`${role} (нет цепочки ${chain})`); continue; }
+        if (!ctx.project.chains[chain]) { if (!r.optional) skipped.push(`${role} (нет цепочки ${chain})`); continue; }
         const id = `${chain}_${a.recipe}`;
         const clip = ctx.project.clips.find((c) => c.name === a.clip);
         if (clip) clip.layers = clip.layers.filter((l) => l.id !== id); // повторный вызов заменяет слой

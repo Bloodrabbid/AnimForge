@@ -593,3 +593,65 @@ test("quadruped-gait: лапа выносится к своей фазе, вын
   const b = (h: number) => def.evaluate(P({ role: "pelvis", gait: "run" }), 0, 1, 0.13, { height: h }).move_up!;
   close(b(2), 2 * b(1), 1e-12); assert.ok(Math.abs(b(1)) > 0.01);
 });
+
+// ── многоногие ──
+import { detectMultiLeg } from "./rig.ts";
+import { legProfile, multilegPhase } from "./recipes.ts";
+
+/** Шестиногое без смысловых имён у ног, смотрит на +X: грудь, голова с двумя усиками, брюшко; ноги «колено вверх». */
+function hexSkel(compact = false): Skeleton {
+  const pts: [string, string | null, Vec3][] = [
+    ["thorax", null, [0, 0.2, 0]], ["head", "thorax", [0.25, 0.22, 0]], ["ant_a", "head", [0.45, 0.35, -0.1]], ["ant_b", "head", [0.45, 0.35, 0.1]],
+    ["abd1", "thorax", [-0.2, 0.22, 0]], ["abd2", "abd1", [-0.45, 0.25, 0]],
+  ];
+  // смотрит на +X, вверх +Y: влево = Y × X = −Z
+  // compact — как у паука: основания ног кучно (вдоль 0.08, поперёк 0.16), а тело вытянуто
+  const q = compact ? 0.04 : 0.15, wz = compact ? 0.08 : 0.05;
+  for (const [tag, x, z] of [["a", q, -1], ["b", q, 1], ["c", 0, -1], ["d", 0, 1], ["e", -q, -1], ["f", -q, 1]] as const) {
+    pts.push([`${tag}0`, "thorax", [x, 0.2, wz * z]], [`${tag}1`, `${tag}0`, [x, 0.32, 0.17 * z]], [`${tag}2`, `${tag}1`, [x, 0.02, 0.35 * z]], [`${tag}3`, `${tag}2`, [x, 0, 0.38 * z]]);
+  }
+  const pos = new Map(pts.map(([n, , p]) => [n, p]));
+  return { nodes: pts.map(([n, par, p]) => ({ name: n === "head" || n === "thorax" || n.startsWith("abd") || n.startsWith("ant") ? n : `x${n}`, parent: par ? (par === "thorax" || par === "head" || par.startsWith("abd") ? par : `x${par}`) : null, restT: (par ? vsub(p, pos.get(par)!) : p) as Vec3, restR: [0, 0, 0, 1] as Quat, restS: [1, 1, 1] as Vec3, isJoint: true })) };
+}
+
+test("многоногое: шесть ног по парам спереди назад, стороны по телу, голова и брюшко; четвероногое и человек — не многоногие", () => {
+  const sk = hexSkel();
+  const d = detectMultiLeg(sk)!;
+  assert.ok(d); assert.equal(d.legCount, 6);
+  d.forward.forEach((v, k) => close(v, [1, 0, 0][k], 1e-6, "вперёд"));
+  const leg = (tag: string) => [0, 1, 2, 3].map((k) => `x${tag}${k}`);
+  assert.deepEqual(d.chains["leg_l0" as never], leg("a")); assert.deepEqual(d.chains["leg_r0" as never], leg("b"));
+  assert.deepEqual(d.chains["leg_l1" as never], leg("c")); assert.deepEqual(d.chains["leg_r2" as never], leg("f"));
+  assert.deepEqual(d.chains.head, ["head"]); assert.deepEqual(d.chains.tail, ["abd1", "abd2"]);
+  assert.equal(detectMultiLeg(quadSkel()), null); assert.equal(detectMultiLeg(humanSkel(null)), null);
+  // развёрнутое на 180°: перёд к −X, левая передняя — та же нога
+  const flip: Skeleton = { nodes: sk.nodes.map((n) => (n.parent ? n : { ...n, restR: [0, 1, 0, 0] as Quat })) };
+  const f = detectMultiLeg(flip)!;
+  close(f.forward[0], -1, 1e-6, "развёрнутое"); assert.deepEqual(f.chains["leg_l0" as never], leg("a"));
+  // компактное, как паук: ось — по телу, а не по основаниям ног
+  const c = detectMultiLeg(hexSkel(true))!;
+  close(Math.abs(c.forward[0]), 1, 1e-3, "ось вдоль тела"); assert.deepEqual(c.chains["leg_l0" as never], leg("a"));
+});
+
+test("multileg-gait: трипод при lag 0.5; опора — доля duty; стопа в опоре уходит назад, в переносе поднимается", () => {
+  const p = withDefaults(RECIPES["multileg-gait"], { lag: 0.5, side: 0.5, duty: 0.5 });
+  const ph = (s: "l" | "r", k: number) => multilegPhase(p, s, k, 0.13);
+  close(ph("l", 0), ph("r", 1)); close(ph("l", 0), ph("l", 2)); close(ph("r", 0), ph("l", 1));
+  close(((ph("l", 0) - ph("r", 0)) % 1 + 1) % 1, 0.5, 1e-9, "треноги в противофазе");
+  // волна: при lag 0.2 задняя пара шагает раньше передней
+  const w = withDefaults(RECIPES["multileg-gait"], { lag: 0.2 });
+  close(((multilegPhase(w, "l", 2, 0) - multilegPhase(w, "l", 0, 0)) % 1 + 1) % 1, 0.4, 1e-9, "задняя опережает");
+  // профиль: опора ровно duty, края непрерывны, подъём только в переносе
+  let st = 0;
+  for (let k = 0; k < 1000; k++) if (legProfile(k / 1000, 0.7).lift === 0) st++;
+  close(st / 1000, 0.7, 0.002);
+  close(legProfile(0.7 - 1e-9, 0.7).protract, legProfile(0.7, 0.7).protract, 1e-6); close(legProfile(1 - 1e-9, 0.7).protract, legProfile(0, 0.7).protract, 1e-6);
+  // сквозь ядро: левая средняя нога шестиногого
+  const sk = hexSkel(), rig = buildRig(sk), d = detectMultiLeg(sk)!;
+  const project: Project = { version: 1, name: "h", model: "", up: [0, 1, 0], forward: d.forward, chains: d.chains as Record<string, string[]>,
+    clips: [{ name: "w", duration: 1, fps: 30, loop: true, layers: [{ id: "g", type: "recipe", recipe: "multileg-gait", target: { chain: "leg_l1" }, params: { role: "leg_l1", period: 1, duty: 0.6, lag: 0, side: 0.5 } } as any] }] };
+  const paw = (t: number) => worldPose(rig, posePartsAt(project, rig, project.clips[0], t)).T[rig.index.get("xc3")!];
+  assert.ok(paw(0.05)[0] > paw(0.55)[0] + 0.05, `в опоре стопа уходит назад: ${paw(0.05)[0]} → ${paw(0.55)[0]}`);
+  assert.ok(paw(0.8)[1] > paw(0.3)[1] + 0.03, `в переносе стопа выше: ${paw(0.8)[1]} против ${paw(0.3)[1]}`);
+  assert.ok(Math.abs(paw(0.3)[1] - paw(0.1)[1]) < 0.02, "в опоре высота почти постоянна");
+});

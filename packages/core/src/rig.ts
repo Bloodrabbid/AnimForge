@@ -209,7 +209,9 @@ export function detectRig(skel: Skeleton, project: Pick<Project, "up" | "forward
  * Цепочки — как у двуногих, чтобы рецепты и пресеты работали без переименований: передние лапы — arm_l/arm_r,
  * задние — leg_l/leg_r, таз — место крепления задних лап, грудь — передних, между ними spine, дальше neck/head и tail.
  * Лапа — весь путь от корня до нижнего конца (у собаки это плечо → предплечье → пясть → палец). null — не четвероногое. */
-export function detectQuadruped(skel: Skeleton, up: Vec3 = [0, 1, 0]): (RigDetection & { forward: Vec3; paws: string[] }) | null {
+/** Ноги по геометрии: нижние концы скелета кучками (пальцы одной лапы), корень ноги — самая высокая кость, под которой
+ * остаётся одна кучка. Отсев служебных костей на полу: нога должна доходить до тела. */
+function findLegs(skel: Skeleton, up: Vec3) {
   const rig = buildRig(skel);
   const U = vnorm(up);
   const H = (i: number) => vdot(rig.worldT[i], U);
@@ -218,30 +220,34 @@ export function detectQuadruped(skel: Skeleton, up: Vec3 = [0, 1, 0]): (RigDetec
   const kids = new Map<number, number[]>();
   for (const i of joints) if (rig.parent[i] >= 0) kids.set(rig.parent[i], [...(kids.get(rig.parent[i]) ?? []), i]);
   const leaves = joints.filter((i) => !kids.has(i));
-  if (leaves.length < 4) return null;
   const floor = Math.min(...joints.map(H)), height = Math.max(...joints.map(H)) - floor || 1;
   const low = leaves.filter((i) => H(i) - floor < 0.15 * height);
   const name = (i: number) => skel.nodes[i].name;
   const below = (a: number): number[] => (kids.get(a) ?? []).flatMap((c) => [c, ...below(c)]);
   const lowUnder = (a: number) => [a, ...below(a)].filter((i) => low.includes(i));
   const spread = (ids: number[]) => Math.max(0, ...ids.flatMap((a) => ids.map((b) => Math.hypot(...flat(vsub(rig.worldT[a], rig.worldT[b]))))));
-  // корень лапы: поднимаемся, пока под родителем остаётся одна кучка нижних концов
   const roots = new Set<number>();
   for (const leaf of low) {
     let r = leaf;
     while (rig.parent[r] >= 0 && skel.nodes[rig.parent[r]].isJoint && spread(lowUnder(rig.parent[r])) < 0.08 * height) r = rig.parent[r];
     roots.add(r);
   }
-  if (roots.size !== 4) return null;
   const legs = [...roots].map((r) => {
     const paw = lowUnder(r).sort((a, b) => H(a) - H(b))[0];
     const path: number[] = [];
     for (let c = paw; c !== rig.parent[r]; c = rig.parent[c]) path.unshift(c);
     return { root: r, paw, path, at: rig.parent[r], pos: rig.worldT[paw] };
   });
-  // лапа должна доходить до тела: служебные кости на полу (у April 02_b2) — не лапы
+  // нога должна доходить до тела: служебные кости на полу (у April 02_b2) — не ноги
   const len = (path: number[]) => path.slice(1).reduce((a, c) => a + Math.hypot(...vsub(rig.worldT[c], rig.worldT[rig.parent[c]])), 0);
-  if (legs.some((l) => H(l.root) - floor < 0.25 * height || len(l.path) < 0.2 * height)) return null;
+  const ok = !legs.some((l) => H(l.root) - floor < 0.25 * height || len(l.path) < 0.2 * height);
+  return { rig, U, H, flat, leaves, floor, height, name, legs: ok ? legs : [] };
+}
+type Leg = ReturnType<typeof findLegs>["legs"][number];
+
+export function detectQuadruped(skel: Skeleton, up: Vec3 = [0, 1, 0]): (RigDetection & { forward: Vec3; paws: string[] }) | null {
+  const { rig, U, H, flat, leaves, height, name, legs } = findLegs(skel, up);
+  if (legs.length !== 4) return null;
   // пары — по месту крепления (две лапы на одной кости или рядом); иначе по расстоянию
   const attach = [...new Set(legs.map((l) => l.at))];
   let pairs: (typeof legs)[];
@@ -292,6 +298,70 @@ export function detectQuadruped(skel: Skeleton, up: Vec3 = [0, 1, 0]): (RigDetec
     if (tp.length) det.chains.tail = tp.map(name);
   }
   for (const c of ["pelvis", "chest", "neck", "head", "tail"] as const) det.method[c] = "geometry";
+  return det;
+}
+
+/** Многоногое (6 и больше ног: насекомое, паук, сколопендра). Ноги — leg_l0, leg_r0 (передняя пара), leg_l1… —
+ * по порядку от головы. Ось тела — главное направление, вдоль которого стоят основания ног; перёд — по именам
+ * (голова, усики, челюсти) или по стороне, где больше концов вне ног. spine — от последнего крепления ног к первому. */
+export function detectMultiLeg(skel: Skeleton, up: Vec3 = [0, 1, 0]): (RigDetection & { forward: Vec3; paws: string[]; legCount: number }) | null {
+  const { rig, U, flat, leaves, name, legs } = findLegs(skel, up);
+  if (legs.length < 6) return null;
+  // ось тела — главное направление костей тела (не ног): у паука основания ног сидят кучно, а тело вытянуто
+  const legSet = new Set(legs.flatMap((l) => l.path));
+  const bodyJ = skel.nodes.map((_, i) => i).filter((i) => skel.nodes[i].isJoint && !legSet.has(i));
+  const base = (bodyJ.length >= 2 ? bodyJ : legs.map((l) => l.root)).map((i) => flat(rig.worldT[i]));
+  const c = vscale(base.reduce((a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]] as Vec3, [0, 0, 0] as Vec3), 1 / base.length);
+  const C = [0, 1, 2].map((i) => [0, 1, 2].map((j) => base.reduce((a, b) => a + (b[i] - c[i]) * (b[j] - c[j]), 0)));
+  let axis: Vec3 = vnorm(flat([0.31, 0.17, 0.23]));
+  for (let it = 0; it < 60; it++) axis = vnorm(flat([0, 1, 2].map((i) => C[i][0] * axis[0] + C[i][1] * axis[1] + C[i][2] * axis[2]) as Vec3));
+  const others = leaves.filter((i) => !legSet.has(i));
+  const along = (i: number) => vdot(vsub(flat(rig.worldT[i]), c), axis);
+  const FRONT = /head|antenn|mandib|jaw|eye|fang|chelic|pedipalp|mouth/i, BACK = /tail|abdom|sting|spinner|telson|cerc/i;
+  let score = 0;
+  for (const i of others) { // концы вне ног: «головные» имена — за перёд, «хвостовые» — за зад; без имён — просто голос стороны
+    const sgn = Math.sign(along(i)), nm = name(i);
+    let p: number[] = [];
+    for (let q = i; q >= 0; q = rig.parent[q]) p.push(q);
+    const tag = p.some((q) => FRONT.test(name(q))) ? 2 : p.some((q) => BACK.test(name(q))) ? -2 : 0;
+    score += sgn * (tag || 0.5) * (nm ? 1 : 1);
+  }
+  if (score < 0) axis = vscale(axis, -1);
+  const forward = axis, left = vcross(U, forward);
+  const det: RigDetection & { forward: Vec3; paws: string[]; legCount: number } = { chains: {}, feet: {}, hands: {}, method: {}, notes: [`многоногое: ${legs.length} ног, leg_l0/leg_r0 — передняя пара`], forward, paws: legs.map((l) => name(l.paw)), legCount: legs.length };
+  for (const side of ["l", "r"] as const) {
+    const mine = legs.filter((l) => (vdot(vsub(flat(rig.worldT[l.root]), c), left) > 0) === (side === "l")).sort((a, b) => along(b.root) - along(a.root));
+    mine.forEach((l, k) => { det.chains[`leg_${side}${k}` as StdChain] = l.path.map(name); det.method[`leg_${side}${k}` as StdChain] = "geometry"; });
+  }
+  // ось тела: от самого заднего крепления ног к самому переднему
+  const ats = [...new Set(legs.map((l) => l.at))].sort((a, b) => along(a) - along(b));
+  const isUnder = (a: number, b: number) => { for (let p = b; p >= 0; p = rig.parent[p]) if (p === a) return true; return false; };
+  const [back, front] = [ats[0], ats[ats.length - 1]];
+  const pathBetween = (a: number, b: number) => { const p: number[] = []; for (let q = b; q >= 0 && q !== a; q = rig.parent[q]) p.unshift(q); return p; };
+  if (back !== front) {
+    const sp = isUnder(back, front) ? [back, ...pathBetween(back, front)] : isUnder(front, back) ? [front, ...pathBetween(front, back)].reverse() : [];
+    if (sp.length > 1) { det.chains.spine = sp.map(name); det.method.spine = "geometry"; }
+  }
+  det.chains.pelvis = [name(isUnder(back, front) ? back : front)];
+  // голова: кость с именем head/cephal на пути от переднего конца; без имени — первая развилка (голова с усиками)
+  const frontLeaf = others.filter((i) => along(i) > 0).sort((a, b) => along(b) - along(a))[0];
+  const attachSet = new Set(legs.map((l) => l.at));
+  if (frontLeaf != null) {
+    const up_: number[] = [];
+    for (let q = frontLeaf; q >= 0 && !attachSet.has(q); q = rig.parent[q]) up_.push(q);
+    const kidsN = (q: number) => skel.nodes.filter((n) => n.parent === name(q) && n.isJoint).length;
+    const hb = up_.find((q) => /head|cephal/i.test(name(q))) ?? up_.find((q) => kidsN(q) >= 2) ?? up_[Math.min(1, up_.length - 1)];
+    if (hb != null) { det.chains.head = [name(hb)]; det.method.head = "geometry"; }
+  }
+  // хвост/брюшко: от заднего конца вверх до места крепления ног или спины
+  const tailLeaf = others.filter((i) => along(i) < 0).sort((a, b) => along(a) - along(b))[0];
+  if (tailLeaf != null) {
+    const stop = new Set([...attachSet, ...(det.chains.spine ?? []).map((n) => rig.index.get(n)!)]);
+    const tp: number[] = [];
+    for (let q = tailLeaf; q >= 0 && !stop.has(q) && !legSet.has(q) && skel.nodes[q].isJoint; q = rig.parent[q]) tp.unshift(q);
+    // у сколопендры задний конец — сам хвостовой сегмент (он же крепление): хвоста нет
+    if (tp.length) { det.chains.tail = tp.map(name); det.method.tail = "geometry"; }
+  }
   return det;
 }
 

@@ -32,7 +32,7 @@ export interface RecipeDef {
   secondary?: boolean;
   /** Какую стандартную цепочку (rig.ts) берёт каждая роль — для `recipe.rig`: один вызов ставит слои на всё тело.
    * Значение — имя цепочки или функция от стороны («r»/«l», для ударов). Плюс параметры, которые роль требует. */
-  roles?: Record<string, { chain: string | ((side: "l" | "r") => string); params?: Record<string, string | number> }>;
+  roles?: Record<string, { chain: string | ((side: "l" | "r") => string); params?: Record<string, string | number>; optional?: boolean }>;
   /** События рецепта (удар, звук, шлейф, окно ввода) в секундах клипа — уходят в экспорт и в Godot. */
   events?(p: Record<string, any>): ClipEvent[];
 }
@@ -531,9 +531,64 @@ const quadrupedGait: RecipeDef = {
   },
 };
 
-export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait };
+// ── многоногие: волна шагов по ногам ─────────────────────────────────────────────────────────────────────────────
+// Нога — бедро (кость 0), голень (1), лапка (2+). Опора: бедро равномерно уводит стопу назад (поворот вокруг вертикали);
+// перенос: бедро возвращает стопу вперёд и поднимает (поворот вокруг поперечной оси ноги), голень складывается.
+// Фаза ноги k (0 — передняя пара): −k·lag — задние шагают раньше, волна бежит к голове; правая сторона + side.
+const MAX_PAIRS = 24;
+function multilegPhase(p: Record<string, any>, side: "l" | "r", k: number, t: number) {
+  const u = t / p.period - (-k * p.lag + (side === "r" ? p.side : 0));
+  return ((u % 1) + 1) % 1;
+}
+/** Профиль ноги: protract — вынос вперёд в долях размаха (+1 впереди, −1 сзади), lift — подъём 0…1 (только в переносе). */
+function legProfile(ph: number, duty: number): { protract: number; lift: number } {
+  if (ph < duty) return { protract: 1 - (2 * ph) / duty, lift: 0 };
+  const w = (ph - duty) / (1 - duty);
+  return { protract: -Math.cos(Math.PI * w), lift: Math.sin(Math.PI * w) };
+}
+const multilegGait: RecipeDef = {
+  name: "multileg-gait",
+  roles: {
+    ...Object.fromEntries([...Array(MAX_PAIRS).keys()].flatMap((k) => (["l", "r"] as const).map((s) => [`leg_${s}${k}`, { chain: `leg_${s}${k}`, optional: true }]))),
+    spine: { chain: "spine", optional: true },
+  },
+  help:
+    "Походка многоногого (насекомое, паук, сколопендра): каждая нога — опора (стопа равномерно уходит назад) и перенос " +
+    "(вынос вперёд с подъёмом, голень складывается). Ноги сдвинуты по фазе: lag — сдвиг между соседними парами (волна от хвоста " +
+    "к голове), side — между левой и правой. У шести ног lag 0.5 и side 0.5 дают трипод. Цепочки — из rig.detect: leg_l0, leg_r0 " +
+    "(передняя пара), leg_l1… и spine (волна тела, у сколопендры).",
+  params: {
+    role: { type: "enum", default: "leg_l0", options: [...[...Array(MAX_PAIRS).keys()].flatMap((k) => [`leg_l${k}`, `leg_r${k}`]), "spine"], help: "нога (leg_l0 — передняя левая) или spine" },
+    period: { type: "number", default: 0.6, min: 0.1, max: 4, unit: "с", help: "цикл одной ноги" },
+    duty: { type: "number", default: 0.5, min: 0.2, max: 0.9, help: "доля опоры в цикле (трипод 0.5, медленная волна 0.6–0.8)" },
+    lag: { type: "number", default: 0.5, min: -1, max: 1, help: "сдвиг фазы между соседними парами, доля цикла (трипод 0.5; волна сколопендры 0.1–0.2)" },
+    side: { type: "number", default: 0.5, min: 0, max: 1, help: "сдвиг правой стороны от левой (0.5 — в противофазе)" },
+    swing: { type: "number", default: 20, min: 0, max: 60, unit: "°", help: "размах бедра вперёд-назад (±)" },
+    lift: { type: "number", default: 20, min: 0, max: 60, unit: "°", help: "подъём бедра в переносе" },
+    fold: { type: "number", default: 15, min: 0, max: 60, unit: "°", help: "складывание голени в переносе" },
+    bodyWave: { type: "number", default: 0, min: 0, max: 30, unit: "°", help: "волна тела вбок на кость spine (сколопендра)" },
+    waveLag: { type: "number", default: 0.1, min: -1, max: 1, help: "сдвиг фазы волны тела на кость" },
+  },
+  evaluate(p, i, n, t) {
+    if (p.role === "spine") {
+      if (!p.bodyWave) return {};
+      return { yaw: p.bodyWave * Math.sin(2 * Math.PI * (t / p.period + i * p.waveLag)) };
+    }
+    const m = /^leg_([lr])(\d+)$/.exec(p.role);
+    if (!m) return {};
+    const s = m[1] as "l" | "r", k = +m[2];
+    const { protract, lift } = legProfile(multilegPhase(p, s, k, t), p.duty);
+    const sgn = s === "l" ? 1 : -1;
+    // вокруг вертикали: + уводит левую ногу назад, правую — вперёд; вокруг поперечной оси ноги (vertical цепочки) + поднимает
+    if (i === 0) return { yaw: -sgn * p.swing * protract, vertical: p.lift * lift };
+    if (i === 1) return { vertical: -p.fold * lift };
+    return {};
+  },
+};
 
-export { QUAD, periodic, strikePlan, strikePos, swingEase };
+export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait };
+
+export { QUAD, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
 
 export function withDefaults(def: RecipeDef, params: Record<string, unknown>): Record<string, any> {
   const out: Record<string, any> = {};
