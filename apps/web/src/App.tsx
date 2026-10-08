@@ -28,7 +28,7 @@ import { Viewport, type ViewCmd } from "./Viewport.tsx";
 
 const query = new URLSearchParams(location.search);
 const DIR = query.get("dir") ?? "projects/fish-demo";
-const BODY_RU: Record<string, string> = { quadruped: "четвероногое", multileg: "многоногое", winged: "крылатое", biped: "двуногое", other: "без ног" };
+const BODY_RU: Record<string, string> = { quadruped: "четвероногое", multileg: "многоногое", winged: "крылатое", biped: "двуногое", finned: "с ластами", other: "без ног" };
 const ONE_SHOT = new Set(["melee-strike", "charge-release", "tentacle-strike", "emerge"]);
 
 export interface Status {

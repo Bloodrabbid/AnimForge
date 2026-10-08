@@ -390,6 +390,97 @@ export function detectWings(skel: Skeleton, up: Vec3, det: RigDetection): { wing
   return { wing_l: l.map((i) => skel.nodes[i].name), wing_r: r.map((i) => skel.nodes[i].name), span };
 }
 
+/** Ласты и плавники: у тела без ног ищем зеркальные пары веток в стороны (черепаха, рыба с грудными плавниками, скат).
+ * Пара — две сестринские кости, отражающиеся друг в друга через плоскость симметрии тела. Передняя пара — wing_l/wing_r
+ * (гребок wing-flap), следующая — leg_l/leg_r; таз — общий предок пар; голова и хвост — непарные ветки вперёд и назад. */
+export function detectFins(skel: Skeleton, up: Vec3 = [0, 1, 0]): (Omit<RigDetection, "chains"> & { chains: RigDetection["chains"] & { wing_l?: string[]; wing_r?: string[] }; forward: Vec3; pairs: number }) | null {
+  const rig = buildRig(skel);
+  const U = vnorm(up);
+  const flat = (v: Vec3) => vsub(v, vscale(U, vdot(v, U)));
+  const len = (v: Vec3) => Math.hypot(...v);
+  const joints = skel.nodes.map((_, i) => i).filter((i) => skel.nodes[i].isJoint);
+  const kids = (i: number) => joints.filter((j) => rig.parent[j] === i);
+  const subtree = (i: number): number[] => [i, ...kids(i).flatMap(subtree)];
+  const lo = joints.map((i) => rig.worldT[i]);
+  const size = Math.max(...[0, 1, 2].map((k) => Math.max(...lo.map((v) => v[k])) - Math.min(...lo.map((v) => v[k])))) || 1;
+  // пары сестёр-отражений
+  const pairs: { a: number; b: number; L: Vec3 }[] = [];
+  const parents = [...new Set(joints.map((j) => rig.parent[j]))];
+  for (const p of parents) {
+    const c = joints.filter((j) => rig.parent[j] === p);
+    const P = p >= 0 ? rig.worldT[p] : rig.worldT[c[0]];
+    for (let x = 0; x < c.length; x++)
+      for (let y = x + 1; y < c.length; y++) {
+        const a = c[x], b = c[y];
+        const ab = flat(vsub(rig.worldT[a], rig.worldT[b]));
+        if (len(ab) < 0.04 * size) continue; // в одной точке — не пара
+        const L = vnorm(ab);
+        const da = vsub(rig.worldT[a], P), db = vsub(rig.worldT[b], P);
+        const mirror = vsub(da, vscale(L, 2 * vdot(da, L)));
+        if (len(vsub(mirror, db)) > 0.2 * Math.max(len(da), len(db), 1e-6)) continue;
+        if (subtree(a).length !== subtree(b).length) continue;
+        pairs.push({ a, b, L });
+      }
+  }
+  // вложенные пары (средние звенья того же ласта) отбрасываем
+  const top = pairs.filter((q) => !pairs.some((o) => o !== q && (subtree(o.a).includes(q.a) || subtree(o.b).includes(q.a))));
+  if (!top.length) return null;
+  // ось «вбок» — средняя по парам, «вперёд» — перпендикуляр; знак — по detectForward (имена, носки) или к непарной ветке-голове
+  let lat: Vec3 = [0, 0, 0];
+  for (const q of top) lat = vdot(lat, q.L) < 0 ? vsub(lat, q.L) : ([0, 1, 2].map((k) => lat[k] + q.L[k]) as Vec3);
+  lat = vnorm(lat);
+  let F = vnorm(vcross(lat, U));
+  const inPair = new Set(top.flatMap((q) => [...subtree(q.a), ...subtree(q.b)]));
+  const free = joints.filter((i) => !inPair.has(i));
+  const named = free.find((i) => /head|skull|neck|nose|jaw|mouth/i.test(skel.nodes[i].name));
+  const fw = detectForward(skel, up);
+  if (named != null) {
+    const c = top.map((q) => vscale([0, 1, 2].map((k) => rig.worldT[q.a][k] + rig.worldT[q.b][k]) as Vec3, 0.5));
+    const mid = vscale(c.reduce((s, v) => [s[0] + v[0], s[1] + v[1], s[2] + v[2]] as Vec3, [0, 0, 0] as Vec3), 1 / c.length);
+    if (vdot(vsub(rig.worldT[named], mid), F) < 0) F = vscale(F, -1);
+  } else if (vdot(fw.forward, F) < 0) F = vscale(F, -1);
+  const left = vcross(U, F);
+  const along = (i: number) => vdot(rig.worldT[i], F);
+  const sorted = [...top].sort((p, q) => along(q.a) + along(q.b) - along(p.a) - along(p.b));
+  const branch = (root: number) => {
+    let best = root, bd = 0;
+    for (const j of subtree(root)) { const d = len(vsub(rig.worldT[j], rig.worldT[root])); if (d > bd) { bd = d; best = j; } }
+    const path: number[] = [];
+    for (let q = best; q >= 0 && q !== rig.parent[root]; q = rig.parent[q]) path.unshift(q);
+    return path.map((i) => skel.nodes[i].name);
+  };
+  const lr = (q: { a: number; b: number }) => (vdot(vsub(rig.worldT[q.a], rig.worldT[q.b]), left) > 0 ? [q.a, q.b] : [q.b, q.a]);
+  const chains: RigDetection["chains"] & { wing_l?: string[]; wing_r?: string[] } = {};
+  const [fl, fr] = lr(sorted[0]);
+  chains.wing_l = branch(fl);
+  chains.wing_r = branch(fr);
+  if (sorted[1]) {
+    const [hl, hr] = lr(sorted[1]);
+    chains.leg_l = branch(hl);
+    chains.leg_r = branch(hr);
+  }
+  // таз — ближайший общий предок оснований пар (сустав скина)
+  const anc = (i: number) => { const a: number[] = []; for (let q = rig.parent[i]; q >= 0; q = rig.parent[q]) a.push(q); return a; };
+  const common = anc(sorted[0].a).find((x) => sorted.every((q) => anc(q.a).includes(x)) && skel.nodes[x].isJoint);
+  if (common != null) {
+    chains.pelvis = [skel.nodes[common].name];
+    // голова и хвост — непарные листья, дальше всего вперёд и назад от таза
+    const leaves = free.filter((i) => i !== common && anc(i).includes(common) && !kids(i).some((k) => !inPair.has(k)));
+    const toward = (sgn: number) => leaves.filter((i) => sgn * (along(i) - along(common)) > 0.05 * size).sort((a, b) => sgn * (along(b) - along(a)))[0];
+    const path = (leaf: number | undefined) => {
+      if (leaf == null) return undefined;
+      const p: number[] = [];
+      for (let q = leaf; q >= 0 && q !== common; q = rig.parent[q]) if (!inPair.has(q)) p.unshift(q);
+      return p.map((i) => skel.nodes[i].name);
+    };
+    const head = path(toward(1)), tail = path(toward(-1));
+    if (head?.length) chains.head = head;
+    if (tail?.length) chains.tail = tail;
+  }
+  const method = Object.fromEntries(Object.keys(chains).map((k) => [k, "geometry"])) as RigDetection["method"];
+  return { chains, feet: {}, hands: {}, method, notes: [`ласты/плавники: пар ${top.length}, передняя — wing_l/wing_r${sorted[1] ? ", задняя — leg_l/leg_r" : ""}`], forward: F, pairs: top.length };
+}
+
 function depth(rig: Rig, i: number) { let d = 0; for (let p = rig.parent[i]; p >= 0; p = rig.parent[p]) d++; return d; }
 
 export type { Vec3 };

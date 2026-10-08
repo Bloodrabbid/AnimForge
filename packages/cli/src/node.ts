@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { COMMANDS, Clip, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectForward, detectMultiLeg, detectWings, detectQuadruped, detectRig, emptyProject, frameTimes, posePartsAt, readSkeleton, runCommand, samplePreset, suggestAlign, writeClips } from "../../core/src/index.ts";
+import { COMMANDS, Clip, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectFins, detectForward, detectMultiLeg, detectWings, detectQuadruped, detectRig, emptyProject, frameTimes, posePartsAt, readSkeleton, runCommand, samplePreset, suggestAlign, writeClips } from "../../core/src/index.ts";
 import { loadSkinScene, skinFrame, skinTopology } from "./skin.ts";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -309,7 +309,10 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
       const quad = detectQuadruped(ctx.skeleton, ctx.project.up) ?? detectMultiLeg(ctx.skeleton, ctx.project.up);
       const fw = quad ? { forward: quad.forward, by: "head" as const } : detectForward(ctx.skeleton, ctx.project.up);
       ctx.project.forward = fw.forward.map((x) => +x.toFixed(4)) as [number, number, number];
-      const det = { ...(quad ?? detectRig(ctx.skeleton, ctx.project)), body: quad ? ("legCount" in quad ? "multileg" : "quadruped") : ctx.project.chains.leg_l || detectRig(ctx.skeleton, ctx.project).chains.leg_l ? "biped" : "other", forward: ctx.project.forward, forwardBy: fw.by };
+      const fresh = quad ? null : detectRig(ctx.skeleton, ctx.project);
+      // ласты проверяем до «двуногого»: записанные прошлым разом leg_l у черепахи — это задние ласты, а не ноги
+      const finCheck = !quad && !fresh!.chains.leg_l ? detectFins(ctx.skeleton, ctx.project.up) : null;
+      const det = { ...(quad ?? fresh!), body: quad ? ("legCount" in quad ? "multileg" : "quadruped") : finCheck ? "other" : ctx.project.chains.leg_l || fresh!.chains.leg_l ? "biped" : "other", forward: ctx.project.forward, forwardBy: fw.by };
       // крылья: длинные «руки» — цепочки wing_l/wing_r на всю длину, руки не выравниваем
       const wings = quad ? null : detectWings(ctx.skeleton, ctx.project.up, det);
       if (wings) {
@@ -319,6 +322,22 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
         det.notes.push(`крылатое: размах ${wings.span.toFixed(2)}, крылья — wing_l/wing_r`);
         delete ctx.project.chains.arm_l; delete ctx.project.chains.arm_r;
         if (ctx.project.align) { delete ctx.project.align.arm_l; delete ctx.project.align.arm_r; }
+      }
+      // без ног и без крыльев — может быть, ласты или плавники (черепаха, скат): пары веток в стороны
+      if (det.body === "other") {
+        const fins = finCheck;
+        if (fins) {
+          // догадки detectRig по геометрии для такого тела ложны (голова на кончике ласта) — берём только найденное здесь
+          for (const k of ["pelvis", "spine", "chest", "neck", "head", "arm_l", "arm_r", "leg_l", "leg_r", "tail"]) {
+            delete (det.chains as Record<string, unknown>)[k];
+            if (ctx.project.chains[k] && det.method[k as keyof typeof det.method] !== "names") delete ctx.project.chains[k];
+          }
+          det.chains = { ...det.chains, ...fins.chains } as typeof det.chains;
+          (det as { body: string }).body = "finned";
+          ctx.project.forward = fins.forward.map((x) => +x.toFixed(4)) as [number, number, number];
+          det.forward = ctx.project.forward;
+          det.notes.push(...fins.notes);
+        }
       }
       for (const [k, v] of Object.entries(det.chains)) if (v) ctx.project.chains[k] = v;
       // руки в T/A-позе сначала опускаются вниз — от этой позы считаются все махи рецептов

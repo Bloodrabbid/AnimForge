@@ -66,6 +66,7 @@ const BODY_FIRST: Record<string, string[]> = {
   quadruped: ["quad", "small", "swim"],
   multileg: ["multi", "swim"],
   winged: ["wing", "hover"],
+  finned: ["wing", "swim", "hover"],
   biped: ["walk", "fight", "hover"],
   other: ["swim", "emerge", "fight"],
 };

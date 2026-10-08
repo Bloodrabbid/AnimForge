@@ -511,7 +511,7 @@ test("масштаб корня (FBX в сантиметрах) входит в 
 });
 
 // ── четвероногие ──
-import { detectQuadruped } from "./rig.ts";
+import { detectFins, detectQuadruped } from "./rig.ts";
 
 /** Безымянное четвероногое (кости b0, b1…), смотрит на +X: таз → 3 позвонка → шея → голова, хвост, 4 лапы по 3 кости. */
 function quadSkel(hindFirst = false): Skeleton {
@@ -785,4 +785,42 @@ test("layer.remove, layer.set, clip.remove: слои убираются и вы�
   assert.throws(() => runCommand(ctx, "layer.remove", { clip: "c", layer: "nope" }), /нет слоя/);
   runCommand(ctx, "clip.remove", { clip: "c" });
   assert.equal(ctx.project.clips.length, 0);
+});
+
+/** Черепаха без имён (кроме головы), смотрит на +X: корень, 2 передних ласта по 2 кости, задний блок с 2 ластами, голова. */
+function turtleSkel(): Skeleton {
+  const pts: [string, string | null, Vec3][] = [
+    ["root", null, [0, 0.2, 0]], ["head", "root", [0.3, 0.25, 0]],
+    ["fl0", "root", [0.1, 0.15, -0.15]], ["fl1", "fl0", [0.05, 0.08, -0.4]], ["fr0", "root", [0.1, 0.15, 0.15]], ["fr1", "fr0", [0.05, 0.08, 0.4]],
+    ["back", "root", [-0.3, 0.12, 0]], ["hl", "back", [-0.4, 0.06, -0.2]], ["hr", "back", [-0.4, 0.06, 0.2]],
+  ];
+  const pos = new Map(pts.map(([n, , p]) => [n, p]));
+  const nm = (n: string) => (n === "head" ? "head" : `j${pts.findIndex((h) => h[0] === n)}`);
+  return { nodes: pts.map(([n, par, p]) => ({ name: nm(n), parent: par ? nm(par) : null, restT: (par ? vsub(p, pos.get(par)!) : p) as Vec3, restR: [0, 0, 0, 1] as Quat, restS: [1, 1, 1] as Vec3, isJoint: true })) };
+}
+
+test("ласты: пары веток в стороны — передняя wing_l/wing_r, задняя leg_l/leg_r, стороны по направлению к голове", () => {
+  const sk = turtleSkel();
+  const j = (n: string) => `j${["root", "head", "fl0", "fl1", "fr0", "fr1", "back", "hl", "hr"].indexOf(n)}`;
+  const d = detectFins(sk)!;
+  assert.ok(d, "ласты найдены");
+  // смотрит на +X, верх +Y → влево = Y × X = −Z: левые ласты при z < 0
+  assert.deepEqual(d.chains.wing_l, [j("fl0"), j("fl1")], "передний левый — оба звена");
+  assert.deepEqual(d.chains.wing_r, [j("fr0"), j("fr1")]);
+  assert.deepEqual(d.chains.leg_l, [j("hl")]);
+  assert.deepEqual(d.chains.leg_r, [j("hr")]);
+  assert.deepEqual(d.chains.pelvis, [j("root")]);
+  assert.deepEqual(d.chains.head, ["head"]);
+  assert.deepEqual(d.chains.tail, [j("back")]);
+  close(d.forward[0], 1, 1e-6, "вперёд — к голове");
+  // развёрнутая на −X: голова решает, где перёд, и стороны меняются (влево = Y × −X = +Z)
+  const flip = turtleSkel();
+  for (const n of flip.nodes) n.restT = [-n.restT[0], n.restT[1], n.restT[2]];
+  const f = detectFins(flip)!;
+  close(f.forward[0], -1, 1e-6, "развёрнутая смотрит на −X");
+  assert.deepEqual(f.chains.wing_l, [j("fr0"), j("fr1")], "левый теперь при z > 0");
+  // асимметричная «пара» — не ласты: сдвигаем один задний ласт вперёд
+  const bad = turtleSkel();
+  bad.nodes.find((n) => n.name === j("hr"))!.restT = [0.3, -0.06, 0.2];
+  assert.equal(detectFins(bad)!.pairs, 1, "кривая пара отброшена, осталась передняя");
 });
