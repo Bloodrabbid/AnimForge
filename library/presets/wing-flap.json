@@ -56,6 +56,72 @@
      }
     }
    ]
+  },
+  {
+   "name": "tlj-crow-flap",
+   "help": "Ворона TLJ: ровный взмах ~3.7 Гц, вниз и вверх поровну, перо отстаёт на 20–40 мс.",
+   "params": {
+    "period": 0.27,
+    "amp": 34,
+    "mean": 5,
+    "down": 0.5,
+    "lag": 0.11,
+    "fold": 10,
+    "bob": 0.04,
+    "tailPitch": 6,
+    "tuck": 50
+   },
+   "provenance": [
+    {
+     "source": "research/tlj",
+     "ref": "05-nonhuman.md ворона, крылья; lag = 30 мс / 270 мс; mean, bob, tuck — на глаз",
+     "ranges": {
+      "period": [
+       0.26,
+       0.28
+      ],
+      "amp": [
+       28.5,
+       39
+      ],
+      "down": [
+       0.48,
+       0.52
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "toolsup-butterfly",
+   "help": "Бабочка Tools Up!: 4 Гц, крылья вверх за 20% цикла, наверху складываются наполовину.",
+   "params": {
+    "period": 0.25,
+    "amp": 60,
+    "mean": 20,
+    "down": 0.8,
+    "lag": 0.05,
+    "fold": 45,
+    "bob": 0.08,
+    "tailPitch": 0,
+    "tuck": 0
+   },
+   "provenance": [
+    {
+     "source": "research/toolsup",
+     "ref": "05-nonhuman.md бабочка; amp, mean, fold — на глаз",
+     "ranges": {
+      "period": [
+       0.25,
+       0.25
+      ],
+      "down": [
+       0.8,
+       0.8
+      ]
+     }
+    }
+   ]
   }
  ]
 }

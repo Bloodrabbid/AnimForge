@@ -125,3 +125,23 @@ pnpm af clip.ground --clip walk --bones <4 лапы из rig.detect: paws> --mod
 - Пресеты: `witcher-dog-walk` (шаг, пары почти диагональные), `witcher-dog-run` (поперечный галоп),
   `trot` (рысь) и `pace` (иноходь). В двух последних фазы взяты из определения аллюра, а кривые — от шага собаки.
 - Проверено на лисе Khronos Fox (glTF Sample Assets, CC-BY 4.0) и на шаблоне `quadruped`, у которого теперь есть ступни.
+
+## Бестиарий: многоногие, крылатые, парящие, щупальца, водные
+
+`rig.detect` возвращает `body`: `quadruped`, `multileg` (6 и больше ног, цепочки `leg_l0…`, `leg_r0…` спереди назад),
+`winged` (размах рук больше 1.6 роста — цепочки `wing_l/wing_r`), `biped` или `other`. Рецепты вешаются через `recipe.rig`,
+а слой из готового пресета — через `preset.apply` (у `recipe.add` аргумент `preset` — только пометка происхождения).
+
+| рецепт | для кого | пресеты (игра) |
+|---|---|---|
+| `multileg-gait` | насекомые, пауки, сколопендры, кикиморы | `tripod`, `witcher-centipede`, `witcher-kikimora-trot/run`, `witcher-kosh-walk` |
+| `quadruped-gait` | звери, ходьба на кулаках | `witcher-dog-*`, `trot`, `pace`, `witcher-gigant-knuckle/bound` |
+| `waddle-walk` | големы, мелкие двуногие | `witcher-golem-walk`, `witcher-zjad-walk` |
+| `wing-flap` | птицы, ласты, бабочки | `witcher-cockatrice-flap`, `tlj-crow-flap`, `toolsup-butterfly`, `dredge-turtle-stroke` |
+| `hover` | призраки, ифриты | `witcher-wraith-move/idle/ready`, `witcher-ifryt-dive` |
+| `tentacle-strike` | щупальца, хлысты | `witcher-tentacle-slam`, `witcher-echinops-whip/slam` |
+| `emerge` | из-под земли или воды и обратно | `witcher-tentacle-up/down`, `witcher-dagon-surface`, `witcher-zeugl-rise`, `witcher-wraith-vanish`, `witcher-drowner-dive` |
+| `wave` | рыбы, змеи, черви, хвосты | `dredge-ghost-shark-*`, `dredge-great-white`, `dredge-leviathan`, `dredge-twisted-strand`, `dredge-dog-tail-wag`, `tlj-mermaid-tail`, `tlj-snapjaw-idle`, `toolsup-dog-tail-*` |
+
+Шаблоны `template.make`: `quadruped`, `insect`, `spider`, `centipede`, `bird`, `ghost`, `plant`. Разборы, из которых взяты числа:
+`research/` (Witcher — главы 05–06, DREDGE — глава 04, TLJ, Biped и Tools Up! — главы 05).
