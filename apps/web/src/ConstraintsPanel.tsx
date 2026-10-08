@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { bodyFrame, posePartsAt, targetAt, worldPose, type Clip, type Constraint, type Project, type Rig, type Skeleton } from "../../../packages/core/src/index.ts";
 import type { Step } from "./api.ts";
 import { Icon } from "./Icon.tsx";
+import { Menu } from "./Menu.tsx";
 
 interface Props {
   project: Project;
@@ -78,6 +79,14 @@ export function ConstraintsPanel({ project, skeleton, rig, clip, t, active, read
   const [who, setWho] = useState(chainNames.includes("ear_l") ? "c:ear_l" : `c:${chainNames[0] ?? ""}`);
   const [src, setSrc] = useState(chainNames.includes("ear_r") ? "c:ear_r" : `c:${chainNames[1] ?? chainNames[0] ?? ""}`);
   const [mirror, setMirror] = useState(true);
+  const [showCopy, setShowCopy] = useState(false);
+  // ступни: последняя кость цепочки ноги (или её дочерняя)
+  const feet = ["leg_l", "leg_r"].map((c) => tipOf(project, skeleton, c)).filter((x): x is string => !!x && !list.some((k) => k.type === "ik" && k.tip === x));
+  const pinFeet = () =>
+    runMany(
+      feet.map((tip) => ({ name: "ik.add", args: { clip: clip.name, tip, target: fmt(at(tip)), id: id(`pin_${tip}`) } })),
+      "ступни закреплены",
+    );
   const addCopy = () => {
     const arg = (v: string, chainKey: string, boneKey: string) => (v.startsWith("c:") ? { [chainKey]: v.slice(2) } : { [boneKey]: v.slice(2) });
     const cid = id(`copy_${who.slice(2)}`);
@@ -108,41 +117,58 @@ export function ConstraintsPanel({ project, skeleton, rig, clip, t, active, read
   return (
     <div className="targets panel">
       <div className="lim-tools">
-        {LIMBS.filter(([c]) => tipOf(project, skeleton, c)).map(([c, label]) => (
-          <button key={c} disabled={readOnly} onClick={() => addIK(c)} title={`кончик цепочки ${c} тянется к цели; сгибаются две кости над ним`}>
-            <Icon name="plus" size={12} /> IK: {label}
-          </button>
-        ))}
-        {hasHead && (
-          <button disabled={readOnly} onClick={addAim} title="голова и шея смотрят на цель">
-            <Icon name="plus" size={12} /> Взгляд
-          </button>
-        )}
+        <Menu label={<><Icon name="plus" size={12} /> Добавить</>} title="новая цель или связь">
+          {(close) => (
+            <>
+              {LIMBS.filter(([c]) => tipOf(project, skeleton, c)).map(([c, label]) => (
+                <button key={c} disabled={readOnly} onClick={() => (close(), addIK(c))} title={`кончик цепочки ${c} тянется к цели`}>
+                  <span className="dot-i ik" /> IK: {label}
+                </button>
+              ))}
+              {hasHead && (
+                <button disabled={readOnly} onClick={() => (close(), addAim())}>
+                  <span className="dot-i aim" /> Взгляд на точку
+                </button>
+              )}
+              {feet.length > 0 && (
+                <button disabled={readOnly} onClick={() => (close(), pinFeet())} title="ступни остаются там, где стоят сейчас: тяните таз в режиме «Поза» — персонаж присядет">
+                  <span className="dot-i ik" /> Закрепить ступни
+                </button>
+              )}
+              <div className="sep" />
+              <button disabled={readOnly} onClick={() => (close(), setShowCopy(true))}>
+                <span className="dot-i copy" /> Копия поворота…
+              </button>
+            </>
+          )}
+        </Menu>
+        {!list.length && <span className="muted small">IK, взгляд, копия поворота</span>}
       </div>
-      <div className="copy-form">
-        <span className="muted small">Копия поворота:</span>
-        <select value={who} disabled={readOnly} onChange={(e) => setWho(e.target.value)} title="кто повторяет">
-          {options}
-        </select>
-        <span className="muted">←</span>
-        <select value={src} disabled={readOnly} onChange={(e) => setSrc(e.target.value)} title="за кем">
-          {options}
-        </select>
-        <label className="small" title="зеркально через плоскость симметрии тела: левое ухо за правым">
-          <input type="checkbox" checked={mirror} disabled={readOnly} onChange={(e) => setMirror(e.target.checked)} /> зеркально
-        </label>
-        <button disabled={readOnly || who === src} onClick={addCopy}>
-          <Icon name="plus" size={12} /> Добавить
-        </button>
-      </div>
+      {showCopy && (
+        <div className="copy-form">
+          <span className="muted small">Повторяет:</span>
+          <select value={who} disabled={readOnly} onChange={(e) => setWho(e.target.value)} title="кто повторяет">
+            {options}
+          </select>
+          <span className="muted">за</span>
+          <select value={src} disabled={readOnly} onChange={(e) => setSrc(e.target.value)} title="за кем">
+            {options}
+          </select>
+          <label className="small" title="зеркально через плоскость симметрии тела: левое ухо за правым">
+            <input type="checkbox" checked={mirror} disabled={readOnly} onChange={(e) => setMirror(e.target.checked)} /> зеркально
+          </label>
+          <button disabled={readOnly || who === src} onClick={() => (setShowCopy(false), addCopy())}>
+            Добавить
+          </button>
+          <button className="ghost" onClick={() => setShowCopy(false)}>
+            Отмена
+          </button>
+        </div>
+      )}
       {!list.length ? (
-        <p className="muted">
-          IK — кисть или стопа тянется к точке: взять предмет, опереться о стену, поставить ногу на ступеньку. Взгляд — голова провожает цель.
-          Копия поворота — кость повторяет движение другой: второе ухо за первым, хвост за тазом. Пределы суставов из соседней вкладки
-          действуют и тут.
-        </p>
+        <p className="muted small">IK — кисть или стопа тянется к точке. Взгляд — голова провожает цель. Копия поворота — кость повторяет движение другой. Пределы суставов действуют и тут.</p>
       ) : (
-        <p className="muted small">Цель — цветной шарик на модели: выберите строку и тащите стрелки. Если у цели есть ключи, перетаскивание ставит ключ в текущем кадре.</p>
+        active && <p className="muted small">Тащите цветной шарик на модели стрелками.</p>
       )}
       {list.map((c) => {
         if (c.type === "copy") return <CopyRow key={c.id} c={c} active={c.id === active} readOnly={readOnly} onActive={onActive} set={set} remove={() => runMany([{ name: "constraint.remove", args: { clip: clip.name, id: c.id } }], "убран")} />;
@@ -153,7 +179,7 @@ export function ConstraintsPanel({ project, skeleton, rig, clip, t, active, read
             <div className="target-head">
               <span className={`dot ${c.type}`} />
               <b>{c.id}</b>
-              <span className="muted">{c.type === "ik" ? `IK · ${c.tip}` : `взгляд · ${c.bones.join(" → ")}`}</span>
+              <span className="muted">{c.type === "ik" ? `IK · ${c.tip}` : `взгляд · ${c.bones.join(" → ")}`}{c.weight != null && c.weight < 1 ? ` · ${Math.round(c.weight * 100)}%` : ""}{keyed ? " · движется" : ""}</span>
               <span className="spacer" />
               <button className="icon" disabled={readOnly} title={c.muted ? "включить" : "выключить"} onClick={(e) => (e.stopPropagation(), set(c, { muted: !c.muted }, c.muted ? "включён" : "выключен"))}>
                 <Icon name={c.muted ? "eye-off" : "eye"} size={14} />
@@ -162,6 +188,8 @@ export function ConstraintsPanel({ project, skeleton, rig, clip, t, active, read
                 <Icon name="trash" size={14} />
               </button>
             </div>
+            {c.id === active && (
+              <>
             <div className="target-row muted small">
               {c.target.bone ? `цель — кость ${c.target.bone}` : p ? `цель ${fmt(p)}` : "—"}
               {keyed && ` · ключей ${c.target.keys!.length}`}
@@ -219,6 +247,8 @@ export function ConstraintsPanel({ project, skeleton, rig, clip, t, active, read
                 </select>
               )}
             </div>
+              </>
+            )}
           </div>
         );
       })}
@@ -242,6 +272,8 @@ function CopyRow({ c, active, readOnly, onActive, set, remove }: { c: Extract<Co
           <Icon name="trash" size={14} />
         </button>
       </div>
+      {active && (
+        <>
       <div className="target-row muted small">{c.bones.map((b, k) => `${b} ← ${c.source[k]}`).join(" · ")}</div>
       <div className="target-row" onClick={(e) => e.stopPropagation()}>
         <label className="muted small" title="−1 — в обратную сторону, 0.5 — вполовину">множитель</label>
@@ -258,6 +290,8 @@ function CopyRow({ c, active, readOnly, onActive, set, remove }: { c: Extract<Co
         />
         <span className="num-label">×{w.toFixed(2)}</span>
       </div>
+        </>
+      )}
     </div>
   );
 }

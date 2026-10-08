@@ -57,9 +57,9 @@ export function LayersPanel({ project, clip, library, readOnly, setProject, runM
           key={g.key}
           g={g}
           lib={library.find((l) => l.recipe === g.recipe)}
-          open={open[g.key] ?? gi === 0}
+          open={open[g.key] ?? (gi === 0 && groups.length === 1)}
           readOnly={readOnly}
-          onToggle={() => setOpen({ ...open, [g.key]: !(open[g.key] ?? gi === 0) })}
+          onToggle={() => setOpen({ ...open, [g.key]: !(open[g.key] ?? (gi === 0 && groups.length === 1)) })}
           onPreview={(k, v) => preview(g.layers.map((l) => l.id), k, v)}
           onCommit={(params) => runMany(g.layers.map((l) => ({ name: "recipe.set", args: { clip: clip.name, layer: l.id, params } })), "recipe.set")}
           onResetPreset={(preset) => runMany(g.layers.map((l) => ({ name: "recipe.set", args: { clip: clip.name, layer: l.id, params: resetParams(l, preset, library) } })), "вернуть пресет")}

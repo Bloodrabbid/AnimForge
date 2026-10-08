@@ -22,6 +22,7 @@ import {
 import { WeightsPanel } from "./WeightsPanel.tsx";
 import { LimitsPanel } from "./LimitsPanel.tsx";
 import { ConstraintsPanel } from "./ConstraintsPanel.tsx";
+import { Menu } from "./Menu.tsx";
 import type { Brush, WeightPainter } from "./weightPaint.ts";
 import { BoneTree } from "./BoneTree.tsx";
 import { Icon } from "./Icon.tsx";
@@ -68,6 +69,11 @@ export function App() {
   const [leftTab, setLeftTab] = useState<"library" | "bones">((query.get("left") as "bones") ?? "library");
   const [rightTab, setRightTab] = useState<"layers" | "keys" | "weights" | "limits" | "targets">((query.get("right") as "weights") ?? "layers");
   const [activeTarget, setActiveTarget] = useState<string | null>(query.get("target"));
+  const group = rightTab === "layers" || rightTab === "keys" ? "motion" : rightTab === "weights" ? "skin" : "body";
+  // в группу возвращаемся на ту вкладку, где были
+  const lastSub = useRef<{ motion: "layers" | "keys"; body: "targets" | "limits" }>({ motion: "layers", body: "targets" });
+  if (group === "motion") lastSub.current.motion = rightTab as "layers";
+  if (group === "body") lastSub.current.body = rightTab as "targets";
   const [poseMode, setPoseMode] = useState(query.get("pose") === "1");
   const [poseLength, setPoseLength] = useState(Number(query.get("plen") ?? 2) || 2);
   const [brush, setBrush] = useState<Brush>({ mode: "add", radius: 0.06, strength: 0.25 });
@@ -466,12 +472,6 @@ export function App() {
           </div>
           <div className="overlay tr toolbar">
             <div className="group">
-              <ToolBtn icon="fit" title="показать целиком (F)" onClick={() => setView((v) => ({ kind: "fit", n: v.n + 1 }))} />
-              <ToolBtn icon="front" title="спереди (1)" onClick={() => setView((v) => ({ kind: "front", n: v.n + 1 }))} />
-              <ToolBtn icon="side" title="сбоку (2)" onClick={() => setView((v) => ({ kind: "side", n: v.n + 1 }))} />
-              <ToolBtn icon="top" title="сверху (3)" onClick={() => setView((v) => ({ kind: "top", n: v.n + 1 }))} />
-            </div>
-            <div className="group">
               <ToolBtn
                 icon="hand"
                 title="поза (P): тяните суставы мышью — сгибаются кости с учётом пределов, поза пишется ключом в текущий кадр; таз — переносит тело; Alt+клик — закрепить"
@@ -494,9 +494,37 @@ export function App() {
               )}
             </div>
             <div className="group">
-              <ToolBtn icon="bones" title="скелет (S)" on={showSkeleton} onClick={() => setShowSkeleton((v) => !v)} />
-              <ToolBtn icon="wire" title="каркас (W)" on={wireframe} onClick={() => setWireframe((v) => !v)} />
-              <ToolBtn icon="floor" title="пол и тень (G)" on={showFloor} onClick={() => setShowFloor((v) => !v)} />
+              <Menu label={<Icon name="fit" />} title="ракурс камеры" align="right">
+                {(close) =>
+                  (
+                    [
+                      ["fit", "Показать целиком", "F"],
+                      ["front", "Спереди", "1"],
+                      ["side", "Сбоку", "2"],
+                      ["top", "Сверху", "3"],
+                    ] as const
+                  ).map(([kind, label, key]) => (
+                    <button key={kind} onClick={() => (setView((v) => ({ kind, n: v.n + 1 })), close())}>
+                      <Icon name={kind} size={14} /> {label} <span className="kbd">{key}</span>
+                    </button>
+                  ))
+                }
+              </Menu>
+              <Menu label={<Icon name="eye" />} title="что показывать: скелет, каркас, пол" align="right">
+                {() => (
+                  <>
+                    <label>
+                      <input type="checkbox" checked={showSkeleton} onChange={() => setShowSkeleton((v) => !v)} /> Скелет <span className="kbd">S</span>
+                    </label>
+                    <label>
+                      <input type="checkbox" checked={wireframe} onChange={() => setWireframe((v) => !v)} /> Каркас <span className="kbd">W</span>
+                    </label>
+                    <label>
+                      <input type="checkbox" checked={showFloor} onChange={() => setShowFloor((v) => !v)} /> Пол и тень <span className="kbd">G</span>
+                    </label>
+                  </>
+                )}
+              </Menu>
             </div>
           </div>
           {!clip && !trial && (
@@ -559,20 +587,15 @@ export function App() {
 
       <aside className="right">
         <div className="tabs">
-          <button className={rightTab === "layers" ? "on" : ""} onClick={() => setRightTab("layers")}>
-            Слои <span className="n">{clip?.layers.length ?? 0}</span>
+          {/* три группы по задаче: движение клипа, тело (цели и пределы суставов), кожа */}
+          <button className={group === "motion" ? "on" : ""} onClick={() => setRightTab(lastSub.current.motion)} title="слои и ключи клипа">
+            Движение <span className="n">{clip?.layers.length ?? 0}</span>
           </button>
-          <button className={rightTab === "keys" ? "on" : ""} onClick={() => setRightTab("keys")}>
-            Ключи
+          <button className={group === "body" ? "on" : ""} onClick={() => setRightTab(lastSub.current.body)} title="цели (IK, взгляд, копии) и пределы суставов">
+            Тело {(clip?.constraints?.length ?? 0) + Object.keys(shown.limits ?? {}).length > 0 && <span className="n">{(clip?.constraints?.length ?? 0) + Object.keys(shown.limits ?? {}).length}</span>}
           </button>
-          <button className={rightTab === "limits" ? "on" : ""} onClick={() => setRightTab("limits")} title="ограничения: диапазон движения костей">
-            Пределы {shown.limits && <span className="n">{Object.keys(shown.limits).length}</span>}
-          </button>
-          <button className={rightTab === "targets" ? "on" : ""} onClick={() => setRightTab("targets")} title="цели: IK рук и ног, взгляд">
-            Цели {!!clip?.constraints?.length && <span className="n">{clip.constraints.length}</span>}
-          </button>
-          <button className={rightTab === "weights" ? "on" : ""} onClick={() => setRightTab("weights")} title="веса кожи: кисть по модели">
-            Веса {strokes > 0 && <span className="n dirty-dot">●</span>}
+          <button className={group === "skin" ? "on" : ""} onClick={() => setRightTab("weights")} title="веса кожи: кисть по модели">
+            Кожа {strokes > 0 && <span className="n dirty-dot">●</span>}
           </button>
           {clip && !trial && (
             <button
@@ -584,6 +607,18 @@ export function App() {
             </button>
           )}
         </div>
+        {group !== "skin" && (
+          <div className="subtabs">
+            {(group === "motion"
+              ? ([["layers", "Слои"], ["keys", "Ключи"]] as const)
+              : ([["targets", `Цели${clip?.constraints?.length ? ` · ${clip.constraints.length}` : ""}`], ["limits", `Пределы${shown.limits ? ` · ${Object.keys(shown.limits).length}` : ""}`]] as const)
+            ).map(([k, label]) => (
+              <button key={k} className={rightTab === k ? "on" : ""} onClick={() => setRightTab(k)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="tab-body">
           {!clip ? (
             <div className="empty-state">
