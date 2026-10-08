@@ -1071,7 +1071,7 @@ test("команды констрейнов: ik.add по цепочке нахо
   assert.equal(c.tip, "hand_l");
   assert.equal(c.id, "ik_arm_l");
   runCommand(ctx, "constraint.key", { clip: "c", id: "ik_arm_l", t: 1, target: "0.5,1.0,0.3" });
-  const tg = ctx.project.clips[0].constraints![0].target;
+  const tg = (ctx.project.clips[0].constraints![0] as any).target as import("./project.ts").ConstraintTarget;
   assert.deepEqual(tg.keys!.map((k) => k.t), [0, 1], "прежняя точка стала ключом в 0");
   assert.equal(tg.pos, undefined);
   runCommand(ctx, "constraint.set", { clip: "c", id: "ik_arm_l", weight: 0.3, muted: true });
@@ -1087,4 +1087,41 @@ test("команды констрейнов: ik.add по цепочке нахо
   runCommand(ctx, "constraint.remove", { clip: "c", id: "ik_arm_l" });
   runCommand(ctx, "constraint.remove", { clip: "c", id: "aim" });
   assert.equal(ctx.project.clips[0].constraints, undefined);
+});
+
+test("копия поворота: кость повторяет движение источника, с множителем и зеркально; поверх своей анимации", () => {
+  const key = (bone: string, axis: string, v: number) => ({ bone, axis, keys: [{ t: 0, v }] });
+  const pr = (cons: any[], tracks: any[]) => conProject(cons, { clips: [{ name: "c", duration: 1, fps: 10, loop: false, layers: [{ id: "k", type: "keys", tracks }], constraints: cons }] } as any);
+  const dirOf = (r: ReturnType<typeof W>, a: string, b: string) => vn(vsub(r.at(b), r.at(a)));
+  // правое плечо поднято pitch 30: левое повторяет — то же мировое движение
+  const src = W(pr([], [key("uarm_r", "yaw", 30)]));
+  const same = W(pr([{ id: "c", type: "copy", bones: ["uarm_l"], source: ["uarm_r"] }], [key("uarm_r", "yaw", 30)]));
+  const ref = W(pr([], [key("uarm_r", "yaw", 30), key("uarm_l", "yaw", 30)]));
+  close(dist(same.at("hand_l"), ref.at("hand_l")), 0, 1e-9, "как свой ключ pitch 30");
+  void src;
+  // множитель −1 — в обратную сторону
+  const inv = W(pr([{ id: "c", type: "copy", bones: ["uarm_l"], source: ["uarm_r"], weight: -1 }], [key("uarm_r", "yaw", 30)]));
+  const refInv = W(pr([], [key("uarm_l", "yaw", -30)]));
+  close(dist(inv.at("hand_l"), refInv.at("hand_l")), 0, 1e-9, "×−1");
+  // зеркально: правая рука вбок-вверх (bank) — левая симметрично, а не в ту же сторону
+  const mir = W(pr([{ id: "c", type: "copy", bones: ["uarm_l"], source: ["uarm_r"], mirror: true }], [key("uarm_r", "bank", 25)]));
+  const r = dirOf(mir, "uarm_r", "hand_r"), l = dirOf(mir, "uarm_l", "hand_l");
+  close(l[0], -r[0], 1e-9, "x зеркален");
+  close(l[1], r[1], 1e-9, "y как у источника");
+  close(l[2], r[2], 1e-9, "z как у источника");
+  assert.ok(Math.abs(r[1]) > 0.1, "источник действительно повернулся");
+  // поверх своей анимации: свой ключ yaw 20 + копия pitch 30
+  const both = W(pr([{ id: "c", type: "copy", bones: ["uarm_l"], source: ["uarm_r"] }], [key("uarm_r", "yaw", 30), key("uarm_l", "bank", 20)]));
+  const refBoth = W(pr([], [key("uarm_l", "bank", 20), key("uarm_l", "yaw", 30)]));
+  close(dist(both.at("hand_l"), refBoth.at("hand_l")), 0, 1e-9, "своя анимация сохраняется");
+  // выравнивание позы покоя не копируется: обе руки опущены из T-позы, копия без движения ничего не меняет
+  const al = (cons: any[]) => W({ ...pr(cons, []), align: { arm_l: { to: "down" }, arm_r: { to: "down" } }, chains: { arm_l: ["uarm_l", "farm_l"], arm_r: ["uarm_r", "farm_r"], neck: ["neck"], head: ["head"] } } as Project);
+  close(dist(al([{ id: "c", type: "copy", bones: ["uarm_l"], source: ["uarm_r"], mirror: true }]).at("hand_l"), al([]).at("hand_l")), 0, 1e-9, "опущенная рука на месте");
+  // команда: цепочки попарно, себя повторять нельзя
+  const ctx = { project: conProject([]), skeleton: plain() };
+  ctx.project.chains.arm_r = ["uarm_r", "farm_r"];
+  const c = runCommand(ctx, "copy.add", { clip: "c", chain: "arm_l", sourceChain: "arm_r", mirror: true }) as any;
+  assert.deepEqual([c.bones, c.source, c.mirror], [["uarm_l", "farm_l"], ["uarm_r", "farm_r"], true]);
+  assert.throws(() => runCommand(ctx, "copy.add", { clip: "c", bone: "head", source: "head" }), /сама себя/);
+  assert.throws(() => runCommand(ctx, "constraint.key", { clip: "c", id: "copy_arm_l", t: 1, target: "0,0,0" }), /нет цели/);
 });

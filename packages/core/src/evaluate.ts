@@ -290,12 +290,33 @@ export function targetAt(rig: Rig, parts: PoseParts | null, clip: Clip, tg: Cons
 }
 
 function solveConstraint(acc: Acc, rig: Rig, project: Project, clip: Clip, c: Constraint, t: number) {
+  if (c.type === "copy") return copyRotation(acc, rig, project, c.bones, c.source, c.weight ?? 1, !!c.mirror);
   const P = targetAt(rig, c.target.bone ? acc.parts() : null, clip, c.target, t);
   if (!P) return;
   const w = Math.max(0, Math.min(1, c.weight ?? 1));
   if (w === 0) return;
   if (c.type === "ik") twoBoneIK(acc, rig, project, c.tip, P, c.pole, w, !!c.end);
   else aim(acc, rig, project, c.bones, P, w);
+}
+
+/** Копия поворота: движение источника (дельта к позе покоя и выравниванию) в мировых осях позы покоя —
+ * той же оси и на тот же угол·weight поворачивается кость (поверх её собственной анимации). */
+function copyRotation(acc: Acc, rig: Rig, project: Project, bones: string[], source: string[], weight: number, mirror: boolean) {
+  const side = bodyFrame(project).side;
+  bones.forEach((bone, k) => {
+    const src = source[k], i = rig.index.get(bone), j = src ? rig.index.get(src) : undefined;
+    if (i == null || j == null) return;
+    const d = acc.rot.get(src) ?? QI;
+    let m = qmul(qmul(rig.worldR[j], qmul(d, qinv(acc.base.get(src) ?? QI))), qinv(rig.worldR[j]));
+    if (mirror) {
+      // отражение через плоскость с нормалью side: ось отражается, угол меняет знак
+      const v: Vec3 = [m[0], m[1], m[2]];
+      const r = vsub(v, vscale(side, 2 * vdot(v, side)));
+      m = [-r[0], -r[1], -r[2], m[3]];
+    }
+    const add = qscale(m, weight);
+    acc.turn(bone, qnorm(qmul(qmul(qinv(rig.worldR[i]), add), rig.worldR[i])));
+  });
 }
 
 /** Взгляд: «вперёд» последней кости — на цель; каждая кость от основания берёт свою долю оставшегося поворота. */

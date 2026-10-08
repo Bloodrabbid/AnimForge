@@ -471,6 +471,49 @@ const defs: CommandDef[] = [
     },
   },
   {
+    name: "copy.add",
+    help: "Копия поворота: кости повторяют движение других костей (попарно). bone/chain — кто повторяет, source/sourceChain — за кем. weight — множитель (−1 — наоборот), mirror — зеркально (левое ухо за правым). Цепочки — кость к кости, по меньшей длине.",
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      bone: { type: "string", help: "кость, которая повторяет" },
+      chain: { type: "string", help: "или цепочка" },
+      source: { type: "string", help: "кость-источник" },
+      sourceChain: { type: "string", help: "или цепочка-источник" },
+      weight: { type: "number", help: "множитель, по умолчанию 1; −1 — в обратную сторону" },
+      mirror: { type: "boolean", help: "зеркально через плоскость симметрии тела" },
+      id: { type: "string", help: "имя, по умолчанию copy_<кто>" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const clip = clipOf(ctx, a.clip);
+      const pick = (bone: unknown, chain: unknown, what: string) => {
+        if (chain) {
+          const c = ctx.project.chains[String(chain)];
+          need(c, `нет цепочки «${chain}»`);
+          return c!;
+        }
+        need(bone, `нужна ${what}: кость или цепочка`);
+        need(ctx.skeleton.nodes.some((n) => n.name === bone), `нет кости «${bone}»`);
+        return [String(bone)];
+      };
+      const bones = pick(a.bone, a.chain, "кто повторяет");
+      const source = pick(a.source, a.sourceChain, "за кем");
+      const n = Math.min(bones.length, source.length);
+      need(!bones.slice(0, n).some((b, k) => b === source[k]), "кость не может повторять сама себя");
+      need(a.weight == null || (Number.isFinite(+a.weight) && Math.abs(+a.weight) <= 3), "weight — от −3 до 3");
+      const c: Constraint = {
+        id: a.id ?? `copy_${a.chain ?? a.bone}`,
+        type: "copy",
+        bones: bones.slice(0, n),
+        source: source.slice(0, n),
+        ...(a.weight != null && +a.weight !== 1 ? { weight: +a.weight } : {}),
+        ...(a.mirror ? { mirror: true } : {}),
+      };
+      addConstraint(clip, c);
+      return c;
+    },
+  },
+  {
     name: "constraint.key",
     help: "Ключ цели констрейна во времени t: цель едет по ключам (рука тянется к двигающемуся предмету, взгляд провожает).",
     args: {
@@ -484,6 +527,7 @@ const defs: CommandDef[] = [
     run(ctx, a) {
       const clip = clipOf(ctx, a.clip);
       const c = constraintOf(clip, a.id);
+      if (c.type === "copy") throw new Error("у копии поворота нет цели");
       const pos = vec(a.target, "target");
       const keys = (c.target.keys ??= []);
       // первая точка ключей — там, где цель стояла (иначе до первого ключа цель прыгнет)
@@ -517,7 +561,8 @@ const defs: CommandDef[] = [
     run(ctx, a) {
       const c = constraintOf(clipOf(ctx, a.clip), a.id);
       if (a.weight != null) {
-        need(+a.weight >= 0 && +a.weight <= 1, "weight — от 0 до 1");
+        if (c.type === "copy") need(Math.abs(+a.weight) <= 3, "weight копии — от −3 до 3");
+        else need(+a.weight >= 0 && +a.weight <= 1, "weight — от 0 до 1");
         if (+a.weight === 1) delete c.weight;
         else c.weight = +a.weight;
       }
@@ -525,7 +570,8 @@ const defs: CommandDef[] = [
         if (a.muted) c.muted = true;
         else delete c.muted;
       }
-      if (a.target != null || a.targetBone != null) c.target = targetOf(ctx, a);
+      if (c.type === "copy") need(a.target == null && a.targetBone == null && a.offset == null, "у копии поворота нет цели");
+      else if (a.target != null || a.targetBone != null) c.target = targetOf(ctx, a);
       else if (a.offset != null) c.target.offset = vec(a.offset, "offset");
       if (a.pole != null && c.type === "ik") {
         if (a.pole === "none") delete c.pole;

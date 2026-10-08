@@ -99,7 +99,21 @@ export interface IKConstraint {
   muted?: boolean;
 }
 
-export type Constraint = AimConstraint | IKConstraint;
+/** Копия поворота: кости bones повторяют движение костей source (попарно) — хвост вслед за тазом, второе ухо
+ * за первым, пальцы за одним. Берётся движение источника от его позы покоя и выравнивания, в мировых осях позы
+ * покоя, и добавляется поверх своей анимации. weight — множитель (−1 — в обратную сторону, 0.5 — вполовину);
+ * mirror — зеркально через плоскость симметрии тела (левая рука повторяет правую). */
+export interface CopyConstraint {
+  id: string;
+  type: "copy";
+  bones: string[];
+  source: string[];
+  weight?: number;
+  mirror?: boolean;
+  muted?: boolean;
+}
+
+export type Constraint = AimConstraint | IKConstraint | CopyConstraint;
 
 export interface Clip {
   name: string;

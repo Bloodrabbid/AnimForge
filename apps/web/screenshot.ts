@@ -123,7 +123,7 @@ try {
   if (process.env.AF_CLICK) {
     // нажать кнопку по началу её текста (например «Ключ в t») и дождаться ответа команды в строке статуса
     const before = await send("Runtime.evaluate", { expression: "document.querySelector('.status')?.textContent ?? ''", returnByValue: true }, sessionId);
-    const click = `(() => { const b = [...document.querySelectorAll('button')].find((b) => b.textContent.startsWith(${JSON.stringify(process.env.AF_CLICK)})); b?.click(); return !!b; })()`;
+    const click = `(() => { const b = [...document.querySelectorAll('button')].find((b) => b.textContent.trim().startsWith(${JSON.stringify(process.env.AF_CLICK)})); b?.click(); return !!b; })()`;
     const r = await send("Runtime.evaluate", { expression: click, returnByValue: true }, sessionId);
     if (!r.result.value) throw new Error(`нет кнопки «${process.env.AF_CLICK}»`);
     for (const until = Date.now() + 10000; ; ) {

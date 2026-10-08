@@ -242,7 +242,7 @@ export function Viewport(props: Props) {
         const over = drag ?? (performance.now() < dropUntil ? dropped : null);
         let clipNow = p.clip;
         if (over && clipNow?.constraints) {
-          clipNow = { ...clipNow, constraints: clipNow.constraints.map((c) => (c.id === over.id ? { ...c, target: { pos: over.pos } } : c)) };
+          clipNow = { ...clipNow, constraints: clipNow.constraints.map((c) => (c.id === over.id && c.type !== "copy" ? { ...c, target: { pos: over.pos } } : c)) };
         }
         const pose: ReturnType<typeof posePartsAt> = clipNow ? posePartsAt(p.project, p.rig, clipNow, p.t) : { rot: new Map(), pos: new Map(), scl: new Map() };
         for (const [name, { obj, rest, restPos, restScale }] of m.bones) {
@@ -278,7 +278,7 @@ export function Viewport(props: Props) {
           }
         });
         // цели
-        const cons = p.showTargets && clipNow?.constraints ? clipNow.constraints : [];
+        const cons = p.showTargets && clipNow?.constraints ? clipNow.constraints.filter((c) => c.type !== "copy") : [];
         while (tgtPool.length < cons.length) {
           const mesh = new THREE.Mesh(tgtGeo, new THREE.MeshBasicMaterial({ depthTest: false, transparent: true, opacity: 0.95 }));
           mesh.renderOrder = 12;
@@ -290,7 +290,7 @@ export function Viewport(props: Props) {
         let activeAt: THREE.Vector3 | null = null;
         let activeMovable = false;
         tgtPool.forEach(({ mesh, line }, k) => {
-          const c = cons[k];
+          const c = cons[k] as Exclude<(typeof cons)[number], { type: "copy" }> | undefined;
           const tp = c ? targetAt(p.rig, pose, clipNow!, c.target, p.t) : null;
           mesh.visible = line.visible = !!tp;
           if (!c || !tp) return;

@@ -1599,3 +1599,18 @@ table.keys tbody tr:hover {
   gap: 4px;
   white-space: nowrap;
 }
+.target .dot.copy {
+  background: #ffb547;
+}
+.copy-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r);
+}
+.copy-form select {
+  max-width: 120px;
+}

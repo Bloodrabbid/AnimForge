@@ -430,7 +430,7 @@ export function App() {
             activeTarget={rightTab === "targets" && !trial ? activeTarget : null}
             onMoveTarget={(id, pos) => {
               const c = clip?.constraints?.find((x) => x.id === id);
-              if (!c || !clip) return;
+              if (!c || !clip || c.type === "copy") return;
               const target = pos.join(",");
               // у цели с ключами — ключ в текущем кадре, у неподвижной — новая точка
               runMany(
@@ -723,6 +723,10 @@ function Shortcuts({ onClose }: { onClose(): void }) {
 }
 
 function short(v: unknown) {
+  // констрейн: имя и что он делает, а не весь объект
+  const c = v as { id?: string; type?: string; tip?: string; bones?: string[] } | null;
+  if (c && typeof c === "object" && c.id && (c.type === "ik" || c.type === "aim" || c.type === "copy"))
+    return `${c.id} (${c.type === "ik" ? `IK · ${c.tip}` : c.type === "aim" ? `взгляд · ${c.bones?.join(" → ")}` : `копия · ${c.bones?.join(", ")}`})`;
   const s = JSON.stringify(v);
   return s && s.length > 120 ? s.slice(0, 120) + "…" : s ?? "";
 }
