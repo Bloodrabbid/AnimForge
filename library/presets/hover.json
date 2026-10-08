@@ -1,0 +1,62 @@
+{
+ "recipe": "hover",
+ "presets": [
+  {
+   "name": "witcher-wraith-move",
+   "help": "Призрак Witcher в движении (cr_wraith M_walk): ±0.2 м за 1.47 с, наклон вперёд 15°.",
+   "params": {
+    "period": 1.467,
+    "bob": 0.119,
+    "lean": 15,
+    "pitch": 5.4,
+    "roll": 4.1,
+    "chestYaw": 7.3,
+    "look": 0
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/06-creatures-tentacle-float.md: §4, M_walk"
+    }
+   ]
+  },
+  {
+   "name": "witcher-wraith-idle",
+   "help": "Призрак на месте (M_pause1): медленнее и ниже, откинут назад.",
+   "params": {
+    "period": 3.067,
+    "bob": 0.084,
+    "lean": -5.7,
+    "pitch": 4.4,
+    "roll": 1.2,
+    "chestYaw": 5.8,
+    "look": 0
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/06-creatures-tentacle-float.md: §4, M_pause1"
+    }
+   ]
+  },
+  {
+   "name": "witcher-wraith-ready",
+   "help": "Призрак в боевой стойке (M_ready): почти висит, озирается.",
+   "params": {
+    "period": 3.9,
+    "bob": 0.036,
+    "lean": -8.5,
+    "pitch": 1.7,
+    "roll": 0.5,
+    "chestYaw": 9.3,
+    "look": 24
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/06-creatures-tentacle-float.md: §4, M_ready"
+    }
+   ]
+  }
+ ]
+}

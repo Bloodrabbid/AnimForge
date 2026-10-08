@@ -1,152 +1,198 @@
 {
-  "recipe": "wave",
-  "presets": [
+ "recipe": "wave",
+ "presets": [
+  {
+   "name": "fish-fast",
+   "help": "Лёгкая быстрая рыба: частый чистый синус, почти полволны по телу.",
+   "params": {
+    "plane": "lateral",
+    "period": 1.2,
+    "tipAmp": 11,
+    "growth": 1.5,
+    "bodyDelay": 160,
+    "headAmp": 8,
+    "headLead": 90
+   },
+   "provenance": [
     {
-      "name": "fish-fast",
-      "help": "Лёгкая быстрая рыба: частый чистый синус, почти полволны по телу.",
-      "params": {
-        "plane": "lateral",
-        "period": 1.2,
-        "tipAmp": 11,
-        "growth": 1.5,
-        "bodyDelay": 160,
-        "headAmp": 8,
-        "headLead": 90
-      },
-      "provenance": [
-        {
-          "source": "research/dredge",
-          "ref": "02-clip-anatomy.md §5.1, столбец «лёгкая быстрая рыба»",
-          "ranges": {
-            "period": [
-              0.8,
-              1.7
-            ],
-            "tipAmp": [
-              9,
-              13
-            ],
-            "headAmp": [
-              8,
-              8
-            ],
-            "bodyDelay": [
-              140,
-              180
-            ]
-          }
-        }
+     "source": "research/dredge",
+     "ref": "02-clip-anatomy.md §5.1, столбец «лёгкая быстрая рыба»",
+     "ranges": {
+      "period": [
+       0.8,
+       1.7
+      ],
+      "tipAmp": [
+       9,
+       13
+      ],
+      "headAmp": [
+       8,
+       8
+      ],
+      "bodyDelay": [
+       140,
+       180
       ]
-    },
-    {
-      "name": "fish-medium",
-      "help": "Средняя рыба, скат, крокодил: медленнее, задержка меньше, хвост гнётся дугой.",
-      "params": {
-        "plane": "lateral",
-        "period": 3.0,
-        "tipAmp": 13.5,
-        "growth": 2,
-        "bodyDelay": 78,
-        "headAmp": 7,
-        "headLead": 90
-      },
-      "provenance": [
-        {
-          "source": "research/dredge",
-          "ref": "02-clip-anatomy.md §5.1, столбец «средняя»",
-          "ranges": {
-            "period": [
-              2.7,
-              3.3
-            ],
-            "tipAmp": [
-              12,
-              15
-            ],
-            "headAmp": [
-              4.6,
-              9.7
-            ],
-            "bodyDelay": [
-              64,
-              92
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "name": "whale-large",
-      "help": "Крупный кит: очень медленный вертикальный взмах, маленькая амплитуда, голова почти неподвижна.",
-      "params": {
-        "plane": "vertical",
-        "period": 5.2,
-        "tipAmp": 7,
-        "growth": 2,
-        "bodyDelay": 53,
-        "headAmp": 1.3,
-        "headLead": 90
-      },
-      "provenance": [
-        {
-          "source": "research/dredge",
-          "ref": "02-clip-anatomy.md §5.1, столбец «крупный кит»",
-          "ranges": {
-            "period": [
-              5.2,
-              5.2
-            ],
-            "tipAmp": [
-              7,
-              7
-            ],
-            "headAmp": [
-              1.3,
-              1.3
-            ],
-            "bodyDelay": [
-              53,
-              53
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "name": "snake-slither",
-      "help": "Змея: на теле полторы волны, амплитуда почти ровная по длине.",
-      "params": {
-        "plane": "lateral",
-        "period": 1.8,
-        "tipAmp": 16,
-        "growth": 0.6,
-        "bodyDelay": 540,
-        "headAmp": 0
-      },
-      "provenance": [
-        {
-          "source": "hand-tuned",
-          "ref": "подобрано на глаз по шаблону snake; замеров пока нет — заменить после разбора игры со змеями"
-        }
-      ]
-    },
-    {
-      "name": "tentacle-sway",
-      "help": "Щупальце: медленное покачивание с бегущей вверх волной.",
-      "params": {
-        "plane": "lateral",
-        "period": 3.2,
-        "tipAmp": 14,
-        "growth": 1.4,
-        "bodyDelay": 200,
-        "headAmp": 0
-      },
-      "provenance": [
-        {
-          "source": "hand-tuned",
-          "ref": "подобрано на глаз; в DREDGE щупальца SBMonster/rigtentacles ещё не замерены"
-        }
-      ]
+     }
     }
-  ]
+   ]
+  },
+  {
+   "name": "fish-medium",
+   "help": "Средняя рыба, скат, крокодил: медленнее, задержка меньше, хвост гнётся дугой.",
+   "params": {
+    "plane": "lateral",
+    "period": 3.0,
+    "tipAmp": 13.5,
+    "growth": 2,
+    "bodyDelay": 78,
+    "headAmp": 7,
+    "headLead": 90
+   },
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "02-clip-anatomy.md §5.1, столбец «средняя»",
+     "ranges": {
+      "period": [
+       2.7,
+       3.3
+      ],
+      "tipAmp": [
+       12,
+       15
+      ],
+      "headAmp": [
+       4.6,
+       9.7
+      ],
+      "bodyDelay": [
+       64,
+       92
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "whale-large",
+   "help": "Крупный кит: очень медленный вертикальный взмах, маленькая амплитуда, голова почти неподвижна.",
+   "params": {
+    "plane": "vertical",
+    "period": 5.2,
+    "tipAmp": 7,
+    "growth": 2,
+    "bodyDelay": 53,
+    "headAmp": 1.3,
+    "headLead": 90
+   },
+   "provenance": [
+    {
+     "source": "research/dredge",
+     "ref": "02-clip-anatomy.md §5.1, столбец «крупный кит»",
+     "ranges": {
+      "period": [
+       5.2,
+       5.2
+      ],
+      "tipAmp": [
+       7,
+       7
+      ],
+      "headAmp": [
+       1.3,
+       1.3
+      ],
+      "bodyDelay": [
+       53,
+       53
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "snake-slither",
+   "help": "Змея: на теле полторы волны, амплитуда почти ровная по длине.",
+   "params": {
+    "plane": "lateral",
+    "period": 1.8,
+    "tipAmp": 16,
+    "growth": 0.6,
+    "bodyDelay": 540,
+    "headAmp": 0
+   },
+   "provenance": [
+    {
+     "source": "hand-tuned",
+     "ref": "подобрано на глаз по шаблону snake; замеров пока нет — заменить после разбора игры со змеями"
+    }
+   ]
+  },
+  {
+   "name": "tentacle-sway",
+   "help": "Щупальце: медленное покачивание с бегущей вверх волной.",
+   "params": {
+    "plane": "lateral",
+    "period": 3.2,
+    "tipAmp": 14,
+    "growth": 1.4,
+    "bodyDelay": 200,
+    "headAmp": 0
+   },
+   "provenance": [
+    {
+     "source": "hand-tuned",
+     "ref": "подобрано на глаз; в DREDGE щупальца SBMonster/rigtentacles ещё не замерены"
+    }
+   ]
+  },
+  {
+   "name": "witcher-tentacle-sway",
+   "help": "Щупальце Witcher в стойке (cr_tenta M_ready): вся цепочка качается одной дугой, без бегущей волны.",
+   "params": {
+    "plane": "lateral",
+    "period": 2.5,
+    "tipAmp": 20,
+    "growth": 0.5,
+    "bodyDelay": 4,
+    "headAmp": 0,
+    "headLead": 90
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/06-creatures-tentacle-float.md: §1, M_ready: 5, 20, 9, 12, 13, 12, 12, 27° по костям, сдвиг фазы ≈0"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "tipAmp/growth подобраны под профиль амплитуд по костям — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "witcher-echinops-sway",
+   "help": "Стебель эхинопса (cr_echin M_ready): медленная дуга вбок ±22°.",
+   "params": {
+    "plane": "lateral",
+    "period": 4.9,
+    "tipAmp": 18,
+    "growth": 0.4,
+    "bodyDelay": 9,
+    "headAmp": 0,
+    "headLead": 90
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/06-creatures-tentacle-float.md: §3, M_ready: 18–28° на кость в середине, у основания 0, сдвиг +0.006 цикла на кость"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "tipAmp/growth подобраны под профиль амплитуд по костям — на глаз"
+    }
+   ]
+  }
+ ]
 }

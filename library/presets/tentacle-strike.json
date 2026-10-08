@@ -1,0 +1,80 @@
+{
+ "recipe": "tentacle-strike",
+ "presets": [
+  {
+   "name": "witcher-tentacle-slam",
+   "help": "Щупальце Witcher бьёт сверху (cr_tenta M_att_S3): большой замах, вся цепочка разом.",
+   "params": {
+    "plane": "vertical",
+    "amp": 12,
+    "windup": 1.18,
+    "growth": 0.8,
+    "windupT": 0.25,
+    "strikeT": 0.1,
+    "hold": 0.1,
+    "returnT": 0.4,
+    "delay": 0
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/06-creatures-tentacle-float.md: §1, M_att_S3: замах −7.3 м, пик 6.2 м, возврат к 0.8 с"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "amp на кость и growth — под замеренный вынос конца, на глаз"
+    }
+   ]
+  },
+  {
+   "name": "witcher-echinops-whip",
+   "help": "Эхинопс кусает хлыстом (cr_echin M_att_S1): удар бежит по стеблю, 0.057 с на кость.",
+   "params": {
+    "plane": "vertical",
+    "amp": 10,
+    "windup": 0.34,
+    "growth": 2,
+    "windupT": 0.12,
+    "strikeT": 0.15,
+    "hold": 0.05,
+    "returnT": 0.6,
+    "delay": 0.057
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/06-creatures-tentacle-float.md: §3, M_att_S1: замах −1.1 м, пик +3.2 м, ω 105 → 904 °/с"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "amp на кость и growth — под замеренный вынос конца, на глаз"
+    }
+   ]
+  },
+  {
+   "name": "witcher-echinops-slam",
+   "help": "Эхинопс бьёт головой о землю (M_att_S3): замах вверх-назад, удар, долгий подъём.",
+   "params": {
+    "plane": "vertical",
+    "amp": 8,
+    "windup": 0.8,
+    "growth": 1,
+    "windupT": 0.25,
+    "strikeT": 0.1,
+    "hold": 0.3,
+    "returnT": 0.8,
+    "delay": 0.002
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/06-creatures-tentacle-float.md: §3, M_att_S3: −5.3 м за 0.25 с, удар 0.1 с, 0.3 с на земле, подъём ≈0.8 с"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "amp на кость и growth — под замеренный вынос конца, на глаз"
+    }
+   ]
+  }
+ ]
+}

@@ -46,7 +46,7 @@ const wave: RecipeDef = {
     plane: { type: "enum", default: "lateral", options: ["lateral", "vertical"], help: "lateral — вбок (рыбы, скаты), vertical — вверх-вниз (киты, дельфины)" },
     period: { type: "number", default: 1.6, min: 0.2, max: 8, unit: "с", help: "период одного взмаха" },
     tipAmp: { type: "number", default: 12, min: 0, max: 60, unit: "°", help: "амплитуда кончика (последней кости)" },
-    growth: { type: "number", default: 1.5, min: 0.5, max: 3, help: "рост амплитуды к кончику: A_i = tipAmp·((i+1)/n)^growth; 1 — дельфин, 2 — кит" },
+    growth: { type: "number", default: 1.5, min: 0, max: 3, help: "рост амплитуды к кончику: A_i = tipAmp·((i+1)/n)^growth; 0 — ровно по всей длине (щупальце Witcher), 1 — дельфин, 2 — кит" },
     bodyDelay: { type: "number", default: 120, min: 0, max: 720, unit: "°", help: "задержка фазы по всему телу от первой кости до кончика (не зависит от числа костей); > 360 — на теле больше одной волны, как у змеи" },
     headAmp: { type: "number", default: 0, min: 0, max: 30, unit: "°", help: "если > 0, первая кость цепочки — голова: качается с опережением headLead" },
     headLead: { type: "number", default: 90, min: 0, max: 180, unit: "°", help: "опережение головы по фазе (в DREDGE ≈ четверть периода)" },
@@ -642,9 +642,115 @@ const wingFlap: RecipeDef = {
   },
 };
 
-export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap };
+// ── парение (призрак Witcher, cr_wraith) ─────────────────────────────────────────────────────────────────────────
+const hover: RecipeDef = {
+  name: "hover",
+  roles: { pelvis: { chain: "pelvis" }, chest: { chain: "chest", optional: true }, head: { chain: "head", optional: true } },
+  help:
+    "Парение без ног (призрак Witcher): таз поднимается и опускается почти чистым синусом, корпус кивает и кренится, грудь рыщет, " +
+    "в движении наклон вперёд. Скорость перемещения задаёт игра — клип на месте. Руки и полы одежды — jiggle.",
+  params: {
+    role: { type: "enum", default: "pelvis", options: ["pelvis", "chest", "head"], help: "таз (подъём, тангаж, крен, наклон), грудь (рыскание) или голова (озирается)" },
+    period: { type: "number", default: 1.467, min: 0.3, max: 8, unit: "с", help: "цикл (Witcher: движение 1.47, idle 3.07, боевая стойка 3.9)" },
+    bob: { type: "number", default: 0.119, min: 0, max: 0.4, help: "подъём таза — доля его высоты (Witcher: движение ±0.196 м при 1.65 м = 11.9 %, idle 8.4 %, стойка 3.6 %)" },
+    lean: { type: "number", default: 15, min: -30, max: 45, unit: "°", help: "постоянный наклон вперёд (в движении 15, на месте −6…−9)" },
+    pitch: { type: "number", default: 5.4, min: 0, max: 20, unit: "°", help: "кивок таза (назад ходом ±10.4)" },
+    roll: { type: "number", default: 4.1, min: 0, max: 20, unit: "°", help: "крен таза" },
+    chestYaw: { type: "number", default: 7.3, min: 0, max: 30, unit: "°", help: "рыскание груди" },
+    look: { type: "number", default: 0, min: 0, max: 40, unit: "°", help: "голова озирается (боевая стойка: ±24 + 2-я гармоника ±29)" },
+  },
+  evaluate(p, i, n, t, info) {
+    if (i > 0) return {};
+    const s = t / p.period, c = (peak: number, k = 1) => Math.cos(2 * Math.PI * k * (s - peak));
+    // пики гармоник — из M_walk: подъём 0.75, тангаж 0.93, крен 0.18, рыскание груди 0.78 (доли цикла)
+    if (p.role === "pelvis") return { move_up: p.bob * (info?.height ?? 0) * c(0.75), pitch: p.lean + p.pitch * c(0.93), bank: p.roll * c(0.18) };
+    if (p.role === "chest") return { yaw: p.chestYaw * c(0.78) };
+    return p.look ? { yaw: p.look * c(0.3) + 1.2 * p.look * c(0.1, 2) } : {};
+  },
+};
 
-export { QUAD, flapProfile, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
+// ── удар щупальцем или стеблем (cr_tenta, cr_echin, cr_zeugl) ─────────────────────────────────────────────────────
+/** Профиль удара в момент t (без задержки по костям): замах −windup, удар +1, удержание, возврат по экспоненте. */
+function strikeCurve(p: Record<string, any>, t: number): number {
+  const t1 = p.windupT, t2 = t1 + p.strikeT, t3 = t2 + p.hold, t4 = t3 + p.returnT;
+  if (t <= 0) return 0;
+  if (t < t1) return -p.windup * smooth(t / t1);
+  if (t < t2) { const u = (t - t1) / p.strikeT; return -p.windup + (1 + p.windup) * u * u * (3 - 2 * u); }
+  if (t < t3) return 1;
+  if (t < t4) return 1 - smooth((t - t3) / p.returnT); // эхинопс S3: 6.6 → 0 плавно, без отскока
+  return 0;
+}
+const tentacleStrike: RecipeDef = {
+  name: "tentacle-strike",
+  help:
+    "Удар щупальцем, стеблем или хвостом (Witcher: щупальце, эхинопс, зейгл): замах назад, удар за доли секунды, удержание, " +
+    "медленный возврат. delay — задержка удара на кость: 0 — вся цепочка бьёт разом (щупальце Witcher), 0.057 с — настоящий хлыст " +
+    "(эхинопс). Изгиб растёт к концу цепочки. Событие hit — в момент удара конца.",
+  params: {
+    plane: { type: "enum", default: "vertical", options: ["vertical", "lateral"], help: "vertical — сверху вниз, lateral — вбок" },
+    amp: { type: "number", default: 12, min: -60, max: 60, unit: "°", help: "изгиб на кость в момент удара (середина цепочки)" },
+    windup: { type: "number", default: 0.8, min: 0, max: 2, help: "замах — доля от удара в обратную сторону (S3 щупальца: −7.3 м против +6.2 м)" },
+    growth: { type: "number", default: 1, min: 0, max: 3, help: "рост изгиба к концу: A_i = amp·(0.4 + 0.6·((i+1)/n)^growth)" },
+    windupT: { type: "number", default: 0.25, min: 0.02, max: 2, unit: "с", help: "время замаха (0.2–0.25)" },
+    strikeT: { type: "number", default: 0.1, min: 0.02, max: 1, unit: "с", help: "время удара (0.1)" },
+    hold: { type: "number", default: 0.2, min: 0, max: 2, unit: "с", help: "удержание после удара (0.1–0.3)" },
+    returnT: { type: "number", default: 0.6, min: 0.05, max: 3, unit: "с", help: "возврат (0.4–0.8)" },
+    delay: { type: "number", default: 0, min: 0, max: 0.2, unit: "с", help: "задержка на кость (0 — разом, 0.057 — хлыст эхинопса)" },
+  },
+  evaluate(p, i, n, t) {
+    const a = p.amp * (0.4 + 0.6 * Math.pow((i + 1) / n, p.growth));
+    return { [p.plane as SemanticAxis]: a * strikeCurve(p, t - i * p.delay) };
+  },
+  events(p) {
+    // удар основания; при delay > 0 конец бьёт позже на delay·(n − 1) — число костей рецепту здесь неизвестно
+    return [{ t: +(p.windupT + p.strikeT).toFixed(4), name: "hit" }];
+  },
+};
+
+// ── появление и уход (из воды, из земли) ──────────────────────────────────────────────────────────────────────────
+/** 0 → 1 (появление) или 1 → 0 (уход) с предварительным ходом и перелётом; доля пути от времени u ∈ [0, 1]. */
+function emergeCurve(p: Record<string, any>, u: number): number {
+  u = Math.min(1, Math.max(0, u));
+  const pre = p.anticipation > 0 ? p.preT : 0;
+  if (p.mode === "submerge") {
+    // замах вверх (призрак +30 %, утопец +35 %), потом уход с ускорением
+    if (u < pre) return 1 + p.anticipation * Math.sin((Math.PI / 2) * (u / pre));
+    const v = (u - pre) / (1 - pre);
+    return (1 + p.anticipation) * (1 - Math.pow(v, p.easeIn));
+  }
+  if (u < pre) return -p.anticipation * Math.sin(Math.PI * (u / pre));
+  const v = (u - pre) / (1 - pre);
+  // быстрый подъём до 1 + overshoot к доле rise, затем оседание
+  if (v < p.rise) { const w = v / p.rise; return (1 + p.overshoot) * (1 - Math.pow(1 - w, 3)); }
+  const w = (v - p.rise) / (1 - p.rise);
+  return 1 + p.overshoot * (1 - smooth(w));
+}
+const emerge: RecipeDef = {
+  name: "emerge",
+  help:
+    "Появление из воды или земли и уход (Witcher): корень цепочки поднимается из глубины depth. Щупальце и стебель выбрасываются " +
+    "почти линейно, Дагон перелетает на 15 % и оседает, зейгл сначала приседает; уход — с ускорением, у призрака и утопца перед ним " +
+    "замах вверх на 30–35 %. Ставь на первую кость тела (таз, основание щупальца).",
+  params: {
+    mode: { type: "enum", default: "emerge", options: ["emerge", "submerge"], help: "появление или уход" },
+    depth: { type: "number", default: 1, min: 0, max: 50, help: "глубина — доля высоты кости над землёй (щупальце 9.5 м ≈ 1.2, утопец ≈ 2.3)" },
+    duration: { type: "number", default: 1, min: 0.1, max: 10, unit: "с", help: "время всего движения" },
+    rise: { type: "number", default: 0.35, min: 0.05, max: 1, help: "доля времени на основной подъём (щупальце 0.3 / 0.32 с, зейгл 0.45)" },
+    overshoot: { type: "number", default: 0, min: 0, max: 0.5, help: "перелёт (Дагон 0.15, призрак 0.06, утопец 0.02)" },
+    anticipation: { type: "number", default: 0, min: 0, max: 0.5, help: "предварительный ход: появление — присед вниз (зейгл 0.035), уход — вверх (призрак 0.3, утопец 0.35)" },
+    preT: { type: "number", default: 0.25, min: 0.02, max: 0.8, help: "доля времени на предварительный ход" },
+    easeIn: { type: "number", default: 2, min: 1, max: 4, help: "ускорение ухода (2 — квадратичное)" },
+  },
+  evaluate(p, i, n, t, info) {
+    if (i > 0) return {};
+    const h = (info?.height ?? 1) * p.depth;
+    return { move_up: -h * (1 - emergeCurve(p, t / p.duration)) };
+  },
+};
+
+export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge };
+
+export { QUAD, emergeCurve, strikeCurve, flapProfile, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
 
 export function withDefaults(def: RecipeDef, params: Record<string, unknown>): Record<string, any> {
   const out: Record<string, any> = {};

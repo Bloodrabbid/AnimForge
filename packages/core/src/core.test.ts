@@ -699,3 +699,40 @@ test("wing-flap: рабочий ход вниз — доля down; подъём 
   const v = (i: number, t: number) => RECIPES["wing-flap"].evaluate(p, i, 3, t).vertical ?? 0;
   assert.ok(v(1, p.down * p.period + 0.01) < v(1, p.down * p.period - 0.01), "кончик ещё опускается");
 });
+
+// ── парение, удар щупальцем, появление ──
+import { emergeCurve, strikeCurve } from "./recipes.ts";
+
+test("tentacle-strike: замах назад, удар к моменту hit, удержание, возврат в ноль; хлыст — задержка на кость", () => {
+  const d = RECIPES["tentacle-strike"], p = withDefaults(d, { windup: 0.8, windupT: 0.25, strikeT: 0.1, hold: 0.2, returnT: 0.6 });
+  close(strikeCurve(p, 0.25), -0.8, 1e-9, "конец замаха"); close(strikeCurve(p, 0.35), 1, 1e-9, "удар"); close(strikeCurve(p, 0.5), 1, 1e-9, "удержание");
+  close(strikeCurve(p, 1.2), 0, 1e-9, "вернулось"); close(strikeCurve(p, 0.25 - 1e-6), strikeCurve(p, 0.25 + 1e-6), 1e-4, "без скачка");
+  assert.deepEqual(d.events!(p), [{ t: 0.35, name: "hit" }]);
+  const w = withDefaults(d, { delay: 0.05 });
+  const peak = (i: number) => { let b = -1, bt = 0; for (let k = 0; k < 2000; k++) { const v = d.evaluate(w, i, 6, k / 1000)[w.plane as "vertical"]!; if (v > b) { b = v; bt = k / 1000; } } return bt; };
+  close(peak(4) - peak(0), 0.2, 0.002, "пик бежит по цепочке");
+  assert.ok(Math.abs(d.evaluate(w, 5, 6, 0.6).vertical!) > Math.abs(d.evaluate(w, 0, 6, 0.4).vertical!), "к концу изгиб больше");
+});
+
+test("emerge: появление из глубины с перелётом и приседом; уход с замахом вверх", () => {
+  const d = RECIPES.emerge;
+  const up = withDefaults(d, { overshoot: 0.15, rise: 0.2, anticipation: 0.05, preT: 0.1 });
+  close(emergeCurve(up, 0), 0); close(emergeCurve(up, 1), 1, 1e-9, "дошло");
+  let mx = 0, mn = 0;
+  for (let k = 0; k <= 1000; k++) { mx = Math.max(mx, emergeCurve(up, k / 1000)); mn = Math.min(mn, emergeCurve(up, k / 1000)); }
+  close(mx, 1.15, 1e-3, "перелёт"); close(mn, -0.05, 1e-3, "присед");
+  close(d.evaluate(withDefaults(d, {}), 0, 1, 0, { height: 2 }).move_up!, -2, 1e-9, "старт из глубины");
+  const dn = withDefaults(d, { mode: "submerge", anticipation: 0.3, preT: 0.4 });
+  close(emergeCurve(dn, 0), 1); close(emergeCurve(dn, 0.4), 1.3, 1e-9, "замах вверх"); close(emergeCurve(dn, 1), 0, 1e-9, "ушло");
+  // без скачков: соседние отсчёты (шаг 0.001) отличаются меньше чем на 0.02
+  for (const c of [up, dn]) for (let k = 0; k < 1000; k++) assert.ok(Math.abs(emergeCurve(c, (k + 1) / 1000) - emergeCurve(c, k / 1000)) < 0.02, `${c.mode}: скачок в ${k / 1000}`);
+});
+
+test("hover: подъём таза — доля его высоты, наклон вперёд постоянный, кивок вокруг него", () => {
+  const d = RECIPES.hover, p = withDefaults(d, { role: "pelvis", bob: 0.12, lean: 15, pitch: 5 });
+  const at = (t: number) => d.evaluate(p, 0, 1, t, { height: 1.65 });
+  close(at(0.75 * p.period).move_up!, 0.12 * 1.65, 1e-9, "верх в пике 0.75");
+  close(at(0.25 * p.period).move_up!, -0.12 * 1.65, 1e-9, "низ через полцикла");
+  let s = 0; for (let k = 0; k < 100; k++) s += at((k / 100) * p.period).pitch!;
+  close(s / 100, 15, 1e-6, "средний наклон");
+});

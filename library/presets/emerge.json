@@ -1,0 +1,113 @@
+{
+ "recipe": "emerge",
+ "presets": [
+  {
+   "name": "witcher-tentacle-up",
+   "help": "Щупальце выбрасывается из воды (cr_tenta Appear): почти линейно, половина пути за 0.15 с.",
+   "params": {
+    "mode": "emerge",
+    "depth": 1.2,
+    "duration": 0.34,
+    "rise": 0.95,
+    "overshoot": 0,
+    "anticipation": 0
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/06-creatures-tentacle-float.md: §8: +11.6 м, t50 0.15 с, 95 % к 0.32 с"
+    }
+   ]
+  },
+  {
+   "name": "witcher-tentacle-down",
+   "help": "Щупальце уходит под воду (Disappear): с ускорением.",
+   "params": {
+    "mode": "submerge",
+    "depth": 1.5,
+    "duration": 0.9,
+    "anticipation": 0,
+    "easeIn": 2.5
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/06-creatures-tentacle-float.md: §8: −14.9 м, t50 0.70 с из 0.87"
+    }
+   ]
+  },
+  {
+   "name": "witcher-dagon-surface",
+   "help": "Дагон всплывает (Appear): быстро, перелёт 15 % и оседание.",
+   "params": {
+    "mode": "emerge",
+    "depth": 1,
+    "duration": 1.9,
+    "rise": 0.15,
+    "overshoot": 0.15,
+    "anticipation": 0
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/06-creatures-tentacle-float.md: §8: +2.2 м, t50 0.17 с, перелёт +15 %"
+    }
+   ]
+  },
+  {
+   "name": "witcher-zeugl-rise",
+   "help": "Зейгл поднимается (Appear): присед 3.5 %, быстро до 85 %, потом дотягивается.",
+   "params": {
+    "mode": "emerge",
+    "depth": 1,
+    "duration": 1.4,
+    "rise": 0.45,
+    "overshoot": 0,
+    "anticipation": 0.035,
+    "preT": 0.08
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/06-creatures-tentacle-float.md: §8: +4.55 м, t50 0.35 с, присед −3.5 %"
+    }
+   ]
+  },
+  {
+   "name": "witcher-wraith-vanish",
+   "help": "Призрак уходит (Disappear): сначала вверх на 30 %, потом вниз.",
+   "params": {
+    "mode": "submerge",
+    "depth": 1,
+    "duration": 1.7,
+    "anticipation": 0.3,
+    "preT": 0.4,
+    "easeIn": 2
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/06-creatures-tentacle-float.md: §8: −3.6 м, замах вверх 1.1 м"
+    }
+   ]
+  },
+  {
+   "name": "witcher-drowner-dive",
+   "help": "Утопец ныряет (cr_aquatic Disappear): подпрыгивает на 35 % и уходит.",
+   "params": {
+    "mode": "submerge",
+    "depth": 1,
+    "duration": 1.15,
+    "anticipation": 0.35,
+    "preT": 0.3,
+    "easeIn": 2
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/06-creatures-tentacle-float.md: §8: −2.1 м, +35 % перед нырком"
+    }
+   ]
+  }
+ ]
+}
