@@ -4,9 +4,9 @@ import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { buildRig, posePartsAt } from "../../core/src/index.ts";
+import { RECIPES, buildRig, posePartsAt, withDefaults } from "../../core/src/index.ts";
 import { checkClip, checkProject, loadMesh } from "./checks.ts";
-import { ROOT, loadCtx, smoothWeights } from "./node.ts";
+import { ROOT, call, loadCtx, smoothWeights } from "./node.ts";
 import { skinFrame, stretchOf } from "./skin.ts";
 
 const tmp = mkdtempSync(join(tmpdir(), "af-checks-"));
@@ -93,7 +93,8 @@ test("таран корпусом: удар рукой, который рвёт 
   assert.ok(npc.work.layers.some((l) => l.type === "recipe" && l.recipe === "body-ram"));
   assert.ok(!npc.work.layers.some((l) => l.type === "recipe" && l.recipe === "melee-strike"));
   assert.ok(npc.work.layers.some((l) => l.id === "ear_l"), "уши и прочие слои остаются");
-  assert.deepEqual(npc.steps.map((s) => s.name), ["layer.remove", "recipe.add", "clip.set"]);
+  assert.deepEqual(npc.steps.map((s) => s.name), ["layer.remove", "recipe.add", "recipe.add", "clip.set"]);
+  assert.deepEqual(npc.work.layers.filter((l) => l.type === "recipe" && l.recipe === "body-ram").map((l) => [(l as { target: { chain: string } }).target.chain, (l as { params: { role?: string } }).params.role]), [["pelvis", "pelvis"], ["head", "head"]], "таз ведёт, голова держит линию");
   assert.equal(ramSwap({ ...ctx.project, style: { role: "player" } }, hammer, hammer, tears)!.preset, "ram-player");
   assert.equal(ramSwap(ctx.project, hammer, hammer, () => 0.5), null, "кожа цела — удар остаётся");
   assert.equal(ramSwap(ctx.project, hammer, hammer, () => 5), null, "рвётся и без руки (колено) — таран не про это");
@@ -131,4 +132,28 @@ test("починка весов: не помогло — модель как б�
   assert.ok(!reps.some((r) => r.findings.some((f) => /веса сглажены/.test(f.msg))));
   assert.ok(!existsSync(model.replace(/\.glb$/, ".orig.glb")), "бэкап остался");
   assert.ok(readFileSync(model).equals(before), "модель не восстановлена");
+});
+
+test("body-ram из библиотеки (recipe.rig) ставит два слоя: таз и голову", async () => {
+  const dir = copy("ram-rig");
+  await call(dir, "clip.add", { name: "ram", duration: 2.5, loop: false });
+  await call(dir, "recipe.rig", { clip: "ram", recipe: "body-ram", preset: "ram-npc" });
+  const c = (await loadCtx(dir)).project.clips.find((x) => x.name === "ram")!;
+  assert.deepEqual(c.layers.map((l) => (l as { params?: { role?: string } }).params?.role).sort(), ["head", "pelvis"]);
+});
+
+test("body-ram: голова гасит наклон корпуса и догоняет с запаздыванием", () => {
+  const def = RECIPES["body-ram"];
+  const p = withDefaults(def, {});
+  const hit = def.events!(p).find((e) => e.name === "hit")!.t;
+  const at = (role: string, t: number) => def.evaluate({ ...p, role }, 0, 1, t).pitch ?? 0;
+  const body = at("pelvis", hit), head = at("head", hit);
+  // в мире голова = корпус + свой слой: наклон меньше корпусного, но того же знака
+  assert.ok(body > 10 && body + head > 0 && body + head < body * 0.7, `корпус ${body}, голова в мире ${body + head}`);
+  // на контакте (поза держится) голова в мире ≈ (1 − hold) от корпуса
+  const still = hit + 0.1;
+  assert.ok(Math.abs(at("pelvis", still) + at("head", still) - (1 - p.headHold) * at("pelvis", still)) < 1.5, "голова не гасит наклон");
+  // на быстром броске голова отстаёт: в мире она ещё позади доли (1 − hold) от корпуса
+  const mid = hit - 0.05;
+  assert.ok(at("pelvis", mid) + at("head", mid) < (1 - p.headHold) * at("pelvis", mid) - 0.5, "без запаздывания");
 });

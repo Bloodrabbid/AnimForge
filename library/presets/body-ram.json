@@ -10,10 +10,10 @@
     "strikeT": 0.12,
     "contact": 0.15,
     "recover": 0.7,
-    "settle": 0.5,
+    "settle": 0.55,
     "back": 24,
     "forward": 24,
-    "overshoot": 7,
+    "overshoot": 10,
     "bank": 8,
     "push": 0.09,
     "lift": 0.02,
@@ -22,7 +22,7 @@
    "provenance": [
     {
      "source": "hand-tuned",
-     "note": "на глаз: пять кругов с критиком (critic/CRITIC.md) на колобке-пекаре, 08.10.2026; замах NPC — в духе NPC Witcher 0.31–1.2 с до удара"
+     "note": "на глаз: пять кругов с критиком (critic/CRITIC.md) на колобке-пекаре, 08.10.2026; замах NPC — в духе NPC Witcher 0.31–1.2 с до удара; второй день: перелёт 10° и голова держит линию удара (headHold 0.4) — по замечаниям критика"
     }
    ]
   },

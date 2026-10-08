@@ -319,7 +319,9 @@ export function ramSwap(project: Project, clip: Clip, work: Clip, score: (c: Cli
   const preset = findPreset(name).preset;
   const ram = structuredClone(clip);
   ram.layers = ram.layers.filter((l) => !strikes.some((x) => x.id === l.id));
-  ram.layers.push({ id: "pelvis_body-ram", type: "recipe", recipe: "body-ram", target: { chain: "pelvis" }, params: { ...(preset.params as Record<string, number>) }, preset: name });
+  // таз ведёт удар, голова (если есть) держится на линии удара — роли рецепта
+  const parts = (["pelvis", "head"] as const).filter((r) => project.chains[r]);
+  for (const r of parts) ram.layers.push({ id: `${r}_body-ram`, type: "recipe", recipe: "body-ram", target: { chain: r }, params: { ...(preset.params as Record<string, unknown>), role: r }, preset: name });
   ram.duration = RECIPES["body-ram"].length!(withDefaults(RECIPES["body-ram"], preset.params));
   ram.ground = work.ground;
   if (score(ram) >= now) return null;
@@ -328,7 +330,7 @@ export function ramSwap(project: Project, clip: Clip, work: Clip, score: (c: Cli
     preset: name,
     steps: [
       { name: "layer.remove", args: { clip: clip.name, layer: strikes.map((x) => x.id).join(",") } },
-      { name: "recipe.add", args: { clip: clip.name, recipe: "body-ram", chain: "pelvis", id: "pelvis_body-ram", params: preset.params, preset: name } },
+      ...parts.map((r) => ({ name: "recipe.add", args: { clip: clip.name, recipe: "body-ram", chain: r, id: `${r}_body-ram`, params: { ...preset.params, role: r }, preset: name } })),
       { name: "clip.set", args: { clip: clip.name, duration: ram.duration } },
     ],
   };

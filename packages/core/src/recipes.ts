@@ -198,6 +198,7 @@ const waddleWalk: RecipeDef = {
     headLag: { type: "number", default: 54, min: 0, max: 120, unit: "°", help: "отставание крена головы по фазе (≈0.07 с)" },
     bob: { type: "number", default: 0.248, min: 0, max: 0.4, help: "подскок таза — доля его высоты (24.8 %; спокойные 14.5–21 %)" },
     armSwing: { type: "number", default: 30, min: 0, max: 60, unit: "°", help: "маятник рук, в противофазе ногам (UpperArm ±30)" },
+    armLag: { type: "number", default: 0, min: 0, max: 90, unit: "°", help: "руки отстают от шага по фазе — оверлап; нужен, когда мах маленький (колобок), иначе руки «приклеены»" },
     legSwing: { type: "number", default: 30, min: 0, max: 60, unit: "°", help: "мах бедра (Witcher: шаг ±24.7, бег ±31.8; TLJ ±14–17)" },
     knee: { type: "number", default: 45, min: 0, max: 120, unit: "°", help: "подгиб колена в переносе ноги (на глаз)" },
     chestBow: { type: "number", default: 0, min: 0, max: 30, unit: "°", help: "поклон груди на каждом шаге, 2-я гармоника (голем Witcher ±15; Tools Up! 0)" },
@@ -229,7 +230,7 @@ const waddleWalk: RecipeDef = {
       case "arm_r": {
         if (i > 0) return {};
         const s = p.role === "arm_l" ? 1 : -1;
-        return { pitch: -s * p.armSwing * sw }; // − : свисающая рука вперёд
+        return { pitch: -s * p.armSwing * Math.sin(w - (p.armLag ?? 0) * rad) }; // − : свисающая рука вперёд
       }
       default: {
         // нога: бедро — маятник в противофазе своей руке; колено гнётся, пока нога идёт вперёд (перенос)
@@ -803,21 +804,25 @@ const RAM_KEYS = (p: Record<string, any>) => {
 const bodyRam: RecipeDef = {
   name: "body-ram",
   main: ["windupT", "back", "forward", "contact", "recover"],
-  roles: { pelvis: { chain: "pelvis" } },
+  // голова — своим слоем: держится на линии удара и чуть отстаёт (критик: «голова с колпаком опережает корпус, силуэт размыт»)
+  roles: { pelvis: { chain: "pelvis", params: { role: "pelvis" } }, head: { chain: "head", params: { role: "head" }, optional: true } },
   help:
     "Таран корпусом (на глаз, по кругам с критиком): удар всем телом от корня — для персонажей, у которых руки не двигаются " +
     "(слеплены с телом). Замах назад с задержкой, бросок вперёд с задержкой на контакте, откат за нейтраль, оседание. " +
     "События: effort, whoosh, hit, window_open/close.",
   params: {
+    role: { type: "enum", default: "pelvis", options: ["pelvis", "head"], help: "что крутит слой: таз ведёт удар, голова гасит его наклон" },
+    headHold: { type: "number", default: 0.4, min: 0, max: 1, help: "голова гасит эту долю наклона корпуса — остаётся на линии удара, а не ныряет вперёд" },
+    headLag: { type: "number", default: 0.03, min: 0, max: 0.2, unit: "с", help: "голова догоняет корпус с запаздыванием — масса читается" },
     windupT: { type: "number", default: 0.5, min: 0.1, max: 1.5, unit: "с", help: "замах назад (NPC — длиннее, игрок — короче)" },
     hold: { type: "number", default: 0.2, min: 0, max: 1, unit: "с", help: "задержка в замахе — антиципация" },
     strikeT: { type: "number", default: 0.12, min: 0.04, max: 0.5, unit: "с", help: "бросок до контакта" },
     contact: { type: "number", default: 0.15, min: 0, max: 0.6, unit: "с", help: "задержка на контакте" },
     recover: { type: "number", default: 0.7, min: 0.1, max: 1.5, unit: "с", help: "откат за нейтраль" },
-    settle: { type: "number", default: 0.5, min: 0.1, max: 1.5, unit: "с", help: "оседание в стойку" },
+    settle: { type: "number", default: 0.55, min: 0.1, max: 1.5, unit: "с", help: "оседание в стойку" },
     back: { type: "number", default: 24, min: 0, max: 45, unit: "°", help: "отклон назад в замахе" },
     forward: { type: "number", default: 24, min: 0, max: 60, unit: "°", help: "наклон вперёд на контакте (больше замаха — удар читается вперёд)" },
-    overshoot: { type: "number", default: 7, min: 0, max: 20, unit: "°", help: "откат назад за нейтраль" },
+    overshoot: { type: "number", default: 10, min: 0, max: 20, unit: "°", help: "откат назад за нейтраль" },
     bank: { type: "number", default: 8, min: 0, max: 25, unit: "°", help: "крен вбок в замахе (на контакте крена нет)" },
     push: { type: "number", default: 0.09, min: 0, max: 0.3, help: "бросок вперёд — доля высоты таза" },
     lift: { type: "number", default: 0.02, min: 0, max: 0.1, help: "корень приподнят в замахе и на контакте — доля высоты таза (ноги не уходят в пол)" },
@@ -828,16 +833,19 @@ const bodyRam: RecipeDef = {
     if (i > 0) return {};
     const { t: T } = RAM_KEYS(p);
     const H = info?.height ?? 1;
-    const curve = (v: number[]) => {
+    const curve = (v: number[], t: number) => {
       if (t <= 0) return v[0];
       for (let k = 1; k < T.length; k++) if (t < T[k]) { const u = (t - T[k - 1]) / (T[k] - T[k - 1]); return v[k - 1] + (v[k] - v[k - 1]) * u * u * (3 - 2 * u); }
       return v[v.length - 1];
     };
+    const PITCH = [0, -p.back, -p.back * 1.05, p.forward, p.forward * 0.95, -p.overshoot, p.overshoot * 0.3, 0];
+    // голова в мире = (1 − hold) · наклон корпуса с запаздыванием; слой отдаёт разницу с корпусом, который она наследует
+    if (p.role === "head") return { pitch: (1 - p.headHold) * curve(PITCH, t - p.headLag) - curve(PITCH, t) };
     return {
-      pitch: curve([0, -p.back, -p.back * 1.05, p.forward, p.forward * 0.95, -p.overshoot, p.overshoot * 0.3, 0]),
-      bank: curve([0, -p.bank, -p.bank * 1.1, 0, 0, p.bank * 0.1, 0, 0]),
-      move_forward: curve([0, -p.push * 0.45, -p.push * 0.5, p.push, p.push, -p.push * 0.15, p.push * 0.04, 0]) * H,
-      move_up: curve([0, p.lift * 0.6, p.lift * 0.6, p.lift, p.lift, 0, 0, 0]) * H,
+      pitch: curve(PITCH, t),
+      bank: curve([0, -p.bank, -p.bank * 1.1, 0, 0, p.bank * 0.1, 0, 0], t),
+      move_forward: curve([0, -p.push * 0.45, -p.push * 0.5, p.push, p.push, -p.push * 0.15, p.push * 0.04, 0], t) * H,
+      move_up: curve([0, p.lift * 0.6, p.lift * 0.6, p.lift, p.lift, 0, 0, 0], t) * H,
     };
   },
   events(p) {
