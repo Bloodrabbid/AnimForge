@@ -1,6 +1,6 @@
 // Автопроверки по коже на настоящей модели (рабочий Tools Up!): что ловят и что умеют чинить.
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
@@ -80,4 +80,55 @@ test("пакет для критика: кадров по длине клипа,
   assert.ok(ts.some((t) => Math.abs(t - hit) < 1e-3), `${hit} в ${ts}`);
   assert.equal(ts[0], 0);
   assert.equal(reviewTimes({ ...hammer, duration: 3 }).length, 12, "3 с — потолок 12 кадров");
+});
+
+test("таран корпусом: удар рукой, который рвёт кожу при любой силе, заменяется body-ram по роли; не рвёт — не трогаем", async () => {
+  const { ramSwap } = await import("./checks.ts");
+  const ctx = await loadCtx(join(ROOT, "projects/worker-demo"));
+  const hammer = ctx.project.clips.find((c) => c.name === "hammer")!;
+  // подставная «кожа»: рвётся, пока рука в ударе двигается
+  const tears = (c: typeof hammer) => (c.layers.some((l) => l.type === "recipe" && l.recipe === "melee-strike" && /^arm_/.test(l.target.chain) && (l.weight ?? 1) > 0) ? 5 : 0.2);
+  const npc = ramSwap({ ...ctx.project, style: { role: "npc" } }, hammer, hammer, tears)!;
+  assert.equal(npc.preset, "ram-npc");
+  assert.ok(npc.work.layers.some((l) => l.type === "recipe" && l.recipe === "body-ram"));
+  assert.ok(!npc.work.layers.some((l) => l.type === "recipe" && l.recipe === "melee-strike"));
+  assert.ok(npc.work.layers.some((l) => l.id === "ear_l"), "уши и прочие слои остаются");
+  assert.deepEqual(npc.steps.map((s) => s.name), ["layer.remove", "recipe.add", "clip.set"]);
+  assert.equal(ramSwap({ ...ctx.project, style: { role: "player" } }, hammer, hammer, tears)!.preset, "ram-player");
+  assert.equal(ramSwap(ctx.project, hammer, hammer, () => 0.5), null, "кожа цела — удар остаётся");
+  assert.equal(ramSwap(ctx.project, hammer, hammer, () => 5), null, "рвётся и без руки (колено) — таран не про это");
+});
+
+test("body-ram: замах назад, контакт вперёд на событии hit, корень не ниже покоя, длина до конца окна", async () => {
+  const { RECIPES, withDefaults } = await import("../../core/src/index.ts");
+  const def = RECIPES["body-ram"], p = withDefaults(def, {});
+  const ev = def.events!(p), hit = ev.find((e) => e.name === "hit")!.t;
+  assert.ok(Math.abs(hit - (p.windupT + p.hold + p.strikeT)) < 1e-9);
+  const at = (t: number) => def.evaluate(p, 0, 1, t, { height: 1, size: 1 }) as Record<string, number>;
+  assert.ok(at(p.windupT + p.hold / 2).pitch < -15, "замах назад");
+  assert.ok(at(hit + p.contact / 2).pitch > 20, "контакт вперёд, сильнее замаха");
+  assert.equal(at(hit + p.contact / 2).bank, 0, "на контакте без крена");
+  for (let t = 0; t < def.length!(p); t += 0.02) assert.ok(at(t).move_up >= -1e-9, `корень в полу при ${t}`);
+  assert.equal(def.length!(p), +(ev.find((e) => e.name === "window_close")!.t).toFixed(3));
+});
+
+test("окно ввода: нулевое у удара — предупреждение, починка ставит tail и удлиняет клип", async () => {
+  const ctx = await loadCtx(join(ROOT, "projects/worker-demo"));
+  const m = await loadMesh(ctx);
+  const hammer = ctx.project.clips.find((c) => c.name === "hammer")!; // toolsup-hammer: tail 0
+  const { report, steps } = checkClip(ctx.project, ctx, m, hammer, true);
+  assert.ok(report.findings.some((f) => /окно ввода нулевое/.test(f.msg)));
+  assert.ok(steps.some((s) => s.name === "recipe.set" && (s.args.params as { tail: number }).tail === 0.3));
+  assert.ok(steps.some((s) => s.name === "clip.set" && s.args.fit));
+});
+
+test("починка весов: не помогло — модель как была и без *.orig.glb, в отчёте про сглаживание ни слова", async () => {
+  const dir = copy("smooth-noop");
+  const model = join(dir, (await loadCtx(dir)).project.model);
+  const before = readFileSync(model);
+  // ноль итераций — сглаживание ничего не меняет, но модель переписывается и бэкап создаётся, как у настоящего
+  const reps = await checkProject(dir, ["hammer"], true, (d) => smoothWeights(d, 3, 0));
+  assert.ok(!reps.some((r) => r.findings.some((f) => /веса сглажены/.test(f.msg))));
+  assert.ok(!existsSync(model.replace(/\.glb$/, ".orig.glb")), "бэкап остался");
+  assert.ok(readFileSync(model).equals(before), "модель не восстановлена");
 });

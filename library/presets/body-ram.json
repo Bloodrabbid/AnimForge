@@ -1,0 +1,55 @@
+{
+ "recipe": "body-ram",
+ "presets": [
+  {
+   "name": "ram-npc",
+   "help": "Таран корпусом у NPC: замах 0.5 с и задержка 0.2 с — читается заранее; контакт 0.15 с; откат за нейтраль 0.7 с (короче — критик видел выщёлкивание), затухающий отскок, окно 0.3 с.",
+   "params": {
+    "windupT": 0.5,
+    "hold": 0.2,
+    "strikeT": 0.12,
+    "contact": 0.15,
+    "recover": 0.7,
+    "settle": 0.5,
+    "back": 24,
+    "forward": 24,
+    "overshoot": 7,
+    "bank": 8,
+    "push": 0.09,
+    "lift": 0.02,
+    "tail": 0.3
+   },
+   "provenance": [
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: пять кругов с критиком (critic/CRITIC.md) на колобке-пекаре, 08.10.2026; замах NPC — в духе NPC Witcher 0.31–1.2 с до удара"
+    }
+   ]
+  },
+  {
+   "name": "ram-player",
+   "help": "Таран корпусом у персонажа игрока: замах короче (0.15 с), удар через 0.3 с — отзывчиво.",
+   "params": {
+    "windupT": 0.15,
+    "hold": 0.05,
+    "strikeT": 0.1,
+    "contact": 0.1,
+    "recover": 0.35,
+    "settle": 0.45,
+    "back": 12,
+    "forward": 22,
+    "overshoot": 5,
+    "bank": 4,
+    "push": 0.08,
+    "lift": 0.02,
+    "tail": 0.3
+   },
+   "provenance": [
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: удар игрока ≤ 0.35 с (быстрые стили Witcher 0.21–0.30 с, docs/review-criteria.md)"
+    }
+   ]
+  }
+ ]
+}

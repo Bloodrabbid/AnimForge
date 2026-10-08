@@ -4,9 +4,9 @@
 // Пороги — «на глаз», кроме помеченных источником; каждый записан рядом с проверкой.
 import { NodeIO } from "@gltf-transform/core";
 import { join } from "node:path";
-import { buildRig, clipEvents, motionAt, posePartsAt, RECIPES, type Clip, type Ctx, type Project } from "../../core/src/index.ts";
-import { readFileSync, writeFileSync } from "node:fs";
-import { call, loadCtx, smoothWeights } from "./node.ts";
+import { buildRig, clipEvents, motionAt, posePartsAt, RECIPES, withDefaults, type Clip, type Ctx, type Project } from "../../core/src/index.ts";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { call, findPreset, loadCtx, smoothWeights } from "./node.ts";
 import { heightOf, loadSkinScene, meshEdges, restVerts, skinFrame, stretchOf, type SkinScene } from "./skin.ts";
 
 export interface Finding {
@@ -100,8 +100,8 @@ export function checkClip(project: Project, ctx: Ctx, m: Mesh, clip: Clip, fix: 
     // жадно: на каждом шаге ослабляем на 30 % тот слой, после которого меньше всего плохого. Два этапа:
     // разрыв кожи недопустим — ради него слой можно гасить до нуля (главный — до 0,35); провал в пол на пару
     // процентов — меньшее зло, чем потерять характер походки, поэтому ради пола — не ниже 0,5
-    const weight = (c: Clip, id: string) => ((c.layers.find((l) => l.id === id) as { weight?: number }).weight ?? 1);
-    const ids = work.layers.filter((l) => l.type === "recipe").map((l) => l.id);
+    const weight = (c: Clip, id: string) => ((c.layers.find((l) => l.id === id) as { weight?: number } | undefined)?.weight ?? 1);
+    let ids = work.layers.filter((l) => l.type === "recipe").map((l) => l.id);
     const skinScore = (c: Clip, n = 17) => skinBad(project, rig, m, c, n).bad / LIMITS.skinBad;
     const floorScore = (c: Clip, n = 17) => Math.max(skinScore(c, n), sinkOf(project, rig, m, c, n).d / (LIMITS.floor * m.H));
     const greedy = (score: (c: Clip, n?: number) => number, lowest: (id: string) => number) => {
@@ -122,14 +122,25 @@ export function checkClip(project: Project, ctx: Ctx, m: Mesh, clip: Clip, fix: 
       }
     };
     if (skinF) greedy(skinScore, (id) => (isMainLayer(work, id) ? 0.35 : 0));
+    let swapped: string | null = null;
+    if (skinF) {
+      const r = ramSwap(project, clip, work, (c) => skinScore(c, 31));
+      if (r) {
+        work = r.work;
+        swapped = r.preset;
+        ids = work.layers.filter((l) => l.type === "recipe").map((l) => l.id);
+        steps.push(...r.steps);
+        greedy(skinScore, (id) => (id === "pelvis_body-ram" ? 0.5 : 0));
+      }
+    }
     if (floorF) greedy(floorScore, (id) => Math.min(weight(work, id), Math.max(0.5, isMainLayer(work, id) ? 0.5 : 0)));
-    const changed = ids.filter((id) => weight(work, id) !== weight(clip, id));
+    const changed = ids.filter((id) => weight(work, id) !== weight(clip, id) && !(swapped && id === "pelvis_body-ram" && weight(work, id) === 1));
     for (const id of changed) steps.push({ name: "layer.set", args: { clip: clip.name, layer: id, weight: weight(work, id) } });
     s = skinBad(project, rig, m, work);
     const sink1 = sinkOf(project, rig, m, work);
     metrics.skinAfter = +(s.bad * 100).toFixed(2);
     metrics.sinkAfter = +((sink1.d / m.H) * 100).toFixed(2);
-    const what = [work.ground && JSON.stringify(work.ground) !== JSON.stringify(clip.ground) ? "ступни на пол (IK, опорная стопа плоско)" : "", changed.length ? `ослаблены слои: ${changed.map((id) => `${id} ×${weight(work, id)}`).join(", ")}` : ""].filter(Boolean).join("; ");
+    const what = [swapped ? `удар рукой рвёт кожу при любой силе — заменён тараном корпусом (body-ram, ${swapped})` : "", work.ground && JSON.stringify(work.ground) !== JSON.stringify(clip.ground) ? "ступни на пол (IK, опорная стопа плоско)" : "", changed.length ? `ослаблены слои: ${changed.map((id) => `${id} ×${weight(work, id)}`).join(", ")}` : ""].filter(Boolean).join("; ");
     if (skinF) {
       skinF.fixed = `${what} → рвётся ${metrics.skinAfter} %`;
       if (s.bad <= LIMITS.skinBad) skinF.level = "warn";
@@ -199,6 +210,19 @@ export function checkClip(project: Project, ctx: Ctx, m: Mesh, clip: Clip, fix: 
     if (/enemy|npc|враг/.test(role) && hit.t < 0.3) findings.push({ check: "timing", level: "warn", msg: `замах врага ${hit.t.toFixed(2)} с — короче 0,3 с игрок не успеет прочитать (NPC Witcher 0,31–1,2 с)`, value: hit.t });
   }
 
+  // 6б. окно ввода: у удара открытие и закрытие в один миг — комбо не связать (у toolsup-hammer tail = 0; заметил критик)
+  const wo = events.find((e) => e.name === "window_open"), wc = events.find((e) => e.name === "window_close");
+  if (wo && wc && wc.t - wo.t < 0.05) {
+    const f: Finding = { check: "timing", level: "warn", msg: `окно ввода нулевое (${wo.t.toFixed(2)}–${wc.t.toFixed(2)} с): следующий удар не связать` };
+    const layers = work.layers.filter((l) => l.type === "recipe" && "tail" in RECIPES[l.recipe].params);
+    if (fix && layers.length) {
+      for (const l of layers) steps.push({ name: "recipe.set", args: { clip: clip.name, layer: l.id, params: { tail: 0.3 } } });
+      steps.push({ name: "clip.set", args: { clip: clip.name, fit: true } });
+      f.fixed = "окно 0,3 с (tail), клип удлинён до конца окна";
+    }
+    findings.push(f);
+  }
+
   // 7. длина: разовый клип не должен обрезать свои события
   const last = Math.max(0, ...events.map((e) => e.t));
   const recipe = work.layers.find((l) => l.type === "recipe" && RECIPES[l.recipe]?.events);
@@ -208,7 +232,7 @@ export function checkClip(project: Project, ctx: Ctx, m: Mesh, clip: Clip, fix: 
 }
 
 /** Проверить клипы проекта (и починить, если fix): правки — командами ядра, потом проверка ещё раз — что осталось. */
-export async function checkProject(dir: string, clips?: string[], fix = false): Promise<ClipReport[]> {
+export async function checkProject(dir: string, clips?: string[], fix = false, smooth: (dir: string) => Promise<{ changed: number; backup: string }> = smoothWeights): Promise<ClipReport[]> {
   let ctx = await loadCtx(dir);
   let m = await loadMesh(ctx);
   if (!m.sc.parts.length) throw new Error("в модели нет мешей — проверять нечего");
@@ -221,16 +245,21 @@ export async function checkProject(dir: string, clips?: string[], fix = false): 
   if (fix) {
     const tear = (mm: Mesh) => list.reduce((a, c) => a + skinBad(ctx.project, rig, mm, c, 17).bad, 0);
     const before = tear(m);
-    if (list.some((c) => skinBad(ctx.project, rig, m, c, 17).bad > LIMITS.skinBad)) {
+    // пробуем и без брака: у пекаря сглаживание сняло половину растяжения в ходьбе (0,24 → 0,13 %), хотя порог не был превышен
+    if (before > 0 && !existsSync(join(dir, ctx.project.model).replace(/\.glb$/, ".orig.glb"))) {
       const file = join(dir, ctx.project.model);
       const keep = readFileSync(file);
-      const r = await smoothWeights(dir);
+      const r = await smooth(dir);
       const m2 = await loadMesh(ctx);
       const after = tear(m2);
-      if (after < before * 0.8) {
+      if (after < before * 0.7) {
         m = m2;
         weightsNote = { check: "skin", level: "warn", msg: `веса сглажены у суставов (${r.changed} вершин): рвалось ${(before * 100).toFixed(1)}, стало ${(after * 100).toFixed(1)} (сумма % по клипам)`, fixed: `weights.smooth, исходник — ${r.backup}` };
-      } else writeFileSync(file, keep);
+      } else {
+        // не помогло — модель как была и без *.orig.glb: «исходник» должен значить «до правок», а правок не было
+        writeFileSync(file, keep);
+        rmSync(r.backup, { force: true });
+      }
     }
   }
   for (const clip of list) {
@@ -272,4 +301,35 @@ export function footBones(project: Project, ctx: Ctx): string[] {
     const kid = ctx.skeleton.nodes.findIndex((n, k) => n.isJoint && rig.parent[k] === i);
     return [kid >= 0 ? ctx.skeleton.nodes[kid].name : end];
   });
+}
+
+/** Удар рукой рвёт кожу и на силе 0,35 — рука слеплена с телом (колобок-пекарь). Тогда бьёт всё тело: таран корпусом
+ * (body-ram, пресет по роли из карточки стиля), остальные слои клипа — как были. Так пять кругов с критиком на
+ * пекаре закончились «принято». score — «насколько рвётся» (> 1 — брак); замена — только если с ней меньше. */
+export function ramSwap(project: Project, clip: Clip, work: Clip, score: (c: Clip) => number) {
+  const strikes = work.layers.filter((l) => l.type === "recipe" && /^(melee-strike|charge-release)$/.test(l.recipe));
+  if (!strikes.length || !project.chains.pelvis) return null;
+  const now = score(work);
+  if (now <= 1) return null;
+  // виновата ли рука: без неё кожа цела. Иначе рвётся другое (колено с жёсткими весами) — таран не поможет по делу
+  const armless = structuredClone(work);
+  for (const l of armless.layers) if (l.type === "recipe" && strikes.some((x) => x.id === l.id) && /^arm_/.test(l.target.chain)) l.weight = 0;
+  if (score(armless) > 1) return null;
+  const name = /player|игрок/.test(project.style?.role ?? "") ? "ram-player" : "ram-npc";
+  const preset = findPreset(name).preset;
+  const ram = structuredClone(clip);
+  ram.layers = ram.layers.filter((l) => !strikes.some((x) => x.id === l.id));
+  ram.layers.push({ id: "pelvis_body-ram", type: "recipe", recipe: "body-ram", target: { chain: "pelvis" }, params: { ...(preset.params as Record<string, number>) }, preset: name });
+  ram.duration = RECIPES["body-ram"].length!(withDefaults(RECIPES["body-ram"], preset.params));
+  ram.ground = work.ground;
+  if (score(ram) >= now) return null;
+  return {
+    work: ram,
+    preset: name,
+    steps: [
+      { name: "layer.remove", args: { clip: clip.name, layer: strikes.map((x) => x.id).join(",") } },
+      { name: "recipe.add", args: { clip: clip.name, recipe: "body-ram", chain: "pelvis", id: "pelvis_body-ram", params: preset.params, preset: name } },
+      { name: "clip.set", args: { clip: clip.name, duration: ram.duration } },
+    ],
+  };
 }

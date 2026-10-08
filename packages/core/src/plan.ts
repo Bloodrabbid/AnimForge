@@ -37,14 +37,14 @@ export const CATEGORIES: { id: string; title: string; recipes: string[] }[] = [
   { id: "wing", title: "Крылья и ласты", recipes: ["wing-flap"] },
   { id: "swim", title: "Плавание и хвосты", recipes: ["wave", "curl"] },
   { id: "hover", title: "Парение", recipes: ["hover"] },
-  { id: "fight", title: "Удары", recipes: ["melee-strike", "charge-release", "tentacle-strike"] },
+  { id: "fight", title: "Удары", recipes: ["melee-strike", "charge-release", "tentacle-strike", "body-ram"] },
   { id: "emerge", title: "Появление", recipes: ["emerge"] },
   { id: "small", title: "Мелочи", recipes: ["blink", "jiggle"] },
 ];
 export const categoryOf = (recipe: string) => CATEGORIES.find((c) => c.recipes.includes(recipe))?.id ?? "small";
 
 /** Рецепты на один раз (удар, появление) — клип не зациклен. */
-export const ONE_SHOT = new Set(["melee-strike", "charge-release", "tentacle-strike", "emerge"]);
+export const ONE_SHOT = new Set(["melee-strike", "charge-release", "tentacle-strike", "emerge", "body-ram"]);
 
 /** Цепочки, которые подходят рецепту без ролей, — в порядке предпочтения. */
 const CHAIN_PREF: Record<string, string[]> = {
@@ -116,6 +116,7 @@ export function clipSteps(
 const WORDS: { stems: string[]; cats?: string[]; recipes?: string[]; hints?: string[]; need?: boolean; clip: string }[] = [
   { stems: ["бег", "бежит", "run", "галоп", "рысь", "trot"], cats: ["walk", "quad", "multi"], hints: ["бег", "run", "галоп", "рысь"], clip: "run" },
   { stems: ["ходьб", "ход", "шаг", "иде", "идт", "иду", "походк", "гуля", "walk", "step"], cats: ["walk", "quad", "multi"], clip: "walk" },
+  { stems: ["таран", "толк", "пузом", "корпусом", "ram", "bump"], cats: ["fight"], hints: ["таран"], clip: "attack" },
   { stems: ["удар", "атак", "бьёт", "бьет", "бить", "замах", "выпад", "punch", "strike", "attack", "hit", "хлыст", "кус"], cats: ["fight"], clip: "attack" },
   { stems: ["плав", "плыв", "волн", "swim", "wave", "ползе", "ползт", "змея", "рыб"], cats: ["swim"], clip: "swim" },
   { stems: ["хвост", "виля", "tail"], cats: ["swim", "small"], hints: ["хвост"], need: true, clip: "tail" },

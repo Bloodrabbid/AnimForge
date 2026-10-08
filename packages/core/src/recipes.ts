@@ -791,7 +791,62 @@ const emerge: RecipeDef = {
   },
 };
 
-export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge };
+/** Таран корпусом: удар у персонажа, которому нельзя махать руками (руки слеплены с телом — колобок-пекарь).
+ * Позы корня по времени: замах назад с задержкой → бросок вперёд с задержкой на контакте → откат за нейтраль →
+ * оседание. Собрано в пять кругов с критиком на пекаре (critic/CRITIC.md): антиципация видна заранее (NPC),
+ * на контакте — без крена вбок (иначе в фас «ком на камеру»), корень приподнят (иначе ноги в полу), возврат долгий. */
+const RAM_KEYS = (p: Record<string, any>) => {
+  // e — откат за нейтраль, g — затухающий отскок обратно, f — стойка: без него тело «выщёлкивается» в нейтраль (критик)
+  const a = p.windupT, b = a + p.hold, c = b + p.strikeT, d = c + p.contact, e = d + p.recover, g = e + p.settle * 0.45, f = e + p.settle;
+  return { t: [0, a, b, c, d, e, g, f], ev: { a, b, c, d, e, f } };
+};
+const bodyRam: RecipeDef = {
+  name: "body-ram",
+  main: ["windupT", "back", "forward", "contact", "recover"],
+  roles: { pelvis: { chain: "pelvis" } },
+  help:
+    "Таран корпусом (на глаз, по кругам с критиком): удар всем телом от корня — для персонажей, у которых руки не двигаются " +
+    "(слеплены с телом). Замах назад с задержкой, бросок вперёд с задержкой на контакте, откат за нейтраль, оседание. " +
+    "События: effort, whoosh, hit, window_open/close.",
+  params: {
+    windupT: { type: "number", default: 0.5, min: 0.1, max: 1.5, unit: "с", help: "замах назад (NPC — длиннее, игрок — короче)" },
+    hold: { type: "number", default: 0.2, min: 0, max: 1, unit: "с", help: "задержка в замахе — антиципация" },
+    strikeT: { type: "number", default: 0.12, min: 0.04, max: 0.5, unit: "с", help: "бросок до контакта" },
+    contact: { type: "number", default: 0.15, min: 0, max: 0.6, unit: "с", help: "задержка на контакте" },
+    recover: { type: "number", default: 0.7, min: 0.1, max: 1.5, unit: "с", help: "откат за нейтраль" },
+    settle: { type: "number", default: 0.5, min: 0.1, max: 1.5, unit: "с", help: "оседание в стойку" },
+    back: { type: "number", default: 24, min: 0, max: 45, unit: "°", help: "отклон назад в замахе" },
+    forward: { type: "number", default: 24, min: 0, max: 60, unit: "°", help: "наклон вперёд на контакте (больше замаха — удар читается вперёд)" },
+    overshoot: { type: "number", default: 7, min: 0, max: 20, unit: "°", help: "откат назад за нейтраль" },
+    bank: { type: "number", default: 8, min: 0, max: 25, unit: "°", help: "крен вбок в замахе (на контакте крена нет)" },
+    push: { type: "number", default: 0.09, min: 0, max: 0.3, help: "бросок вперёд — доля высоты таза" },
+    lift: { type: "number", default: 0.02, min: 0, max: 0.1, help: "корень приподнят в замахе и на контакте — доля высоты таза (ноги не уходят в пол)" },
+    tail: { type: "number", default: 0.3, min: 0, max: 2, unit: "с", help: "окно на следующий ввод после оседания" },
+  },
+  length: (p) => +(RAM_KEYS(p).ev.f + p.tail).toFixed(3),
+  evaluate(p, i, n, t, info) {
+    if (i > 0) return {};
+    const { t: T } = RAM_KEYS(p);
+    const H = info?.height ?? 1;
+    const curve = (v: number[]) => {
+      if (t <= 0) return v[0];
+      for (let k = 1; k < T.length; k++) if (t < T[k]) { const u = (t - T[k - 1]) / (T[k] - T[k - 1]); return v[k - 1] + (v[k] - v[k - 1]) * u * u * (3 - 2 * u); }
+      return v[v.length - 1];
+    };
+    return {
+      pitch: curve([0, -p.back, -p.back * 1.05, p.forward, p.forward * 0.95, -p.overshoot, p.overshoot * 0.3, 0]),
+      bank: curve([0, -p.bank, -p.bank * 1.1, 0, 0, p.bank * 0.1, 0, 0]),
+      move_forward: curve([0, -p.push * 0.45, -p.push * 0.5, p.push, p.push, -p.push * 0.15, p.push * 0.04, 0]) * H,
+      move_up: curve([0, p.lift * 0.6, p.lift * 0.6, p.lift, p.lift, 0, 0, 0]) * H,
+    };
+  },
+  events(p) {
+    const { a, b, c, d, f } = RAM_KEYS(p).ev;
+    return [{ t: a * 0.5, name: "effort" }, { t: b + (c - b) * 0.3, name: "whoosh" }, { t: c, name: "hit" }, { t: d, name: "trail_off" }, { t: f, name: "window_open" }, { t: f + p.tail, name: "window_close" }];
+  },
+};
+
+export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam };
 
 export { QUAD, emergeCurve, strikeCurve, flapProfile, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
 
