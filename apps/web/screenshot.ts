@@ -11,7 +11,8 @@ import { dirname, join, resolve } from "node:path";
 const [query = "paused=1", out = "out/web/shot.png"] = process.argv.slice(2);
 const port = Number(process.env.PORT ?? 5178);
 const dir = process.env.AF_DIR ?? "projects/fish-demo";
-const url = `http://localhost:${port}/?dir=${encodeURIComponent(dir)}&${query}`;
+// AF_URL — снять любую страницу (например, чужой сервис для сравнения): ждём AF_WAIT_MS вместо загрузки модели
+const url = process.env.AF_URL ?? `http://localhost:${port}/?dir=${encodeURIComponent(dir)}&${query}`;
 
 function browser(): string {
   if (process.env.CHROME) return process.env.CHROME;
@@ -70,7 +71,8 @@ try {
   await send("Emulation.setDeviceMetricsOverride", { width: 1400, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId);
   await send("Page.navigate", { url }, sessionId);
   const deadline = Date.now() + 20000;
-  for (;;) {
+  if (process.env.AF_URL) await new Promise((r) => setTimeout(r, Number(process.env.AF_WAIT_MS ?? 8000)));
+  else for (;;) {
     const r = await send("Runtime.evaluate", { expression: "document.body?.dataset.modelLoaded === '1'", returnByValue: true }, sessionId);
     if (r.result.value) break;
     if (Date.now() > deadline) throw new Error("модель не загрузилась за 20 с");
@@ -86,6 +88,11 @@ try {
       if (Date.now() > until) throw new Error("страница не обновилась после изменения на диске");
       await new Promise((r) => setTimeout(r, 200));
     }
+  }
+  if (process.env.AF_EVAL) {
+    // произвольный JS на странице перед снимком (клик по карточке и т.п.), потом пауза AF_WAIT_MS
+    await send("Runtime.evaluate", { expression: process.env.AF_EVAL, awaitPromise: true }, sessionId);
+    await new Promise((r) => setTimeout(r, Number(process.env.AF_WAIT_MS ?? 3000)));
   }
   if (process.env.AF_CLICK) {
     // нажать кнопку по началу её текста (например «Ключ в t») и дождаться ответа команды в строке статуса

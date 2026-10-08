@@ -15,13 +15,17 @@ const io = new NodeIO();
 
 export const projectFile = (dir: string) => join(dir, "animforge.json");
 
+// Примерка: пока идёт dryRun, проект читается из песочницы и пишется в неё же — файл на диске не трогается
+let sandbox: { project: Project } | null = null;
+
 export async function loadCtx(dir: string): Promise<Ctx & { dir: string }> {
-  const project: Project = JSON.parse(readFileSync(projectFile(dir), "utf8"));
+  const project: Project = sandbox ? structuredClone(sandbox.project) : JSON.parse(readFileSync(projectFile(dir), "utf8"));
   const doc = await io.read(join(dir, project.model));
   return { project, skeleton: readSkeleton(doc), dir };
 }
 
 export function saveProject(dir: string, p: Project) {
+  if (sandbox) return void (sandbox.project = structuredClone(p));
   writeFileSync(projectFile(dir), JSON.stringify(p, null, 2) + "\n");
 }
 
@@ -414,6 +418,23 @@ export async function call(dir: string, name: string, args: Record<string, any>)
   const res = runCommand(ctx, name, args);
   if (COMMANDS[name].mutates) saveProject(dir, ctx.project);
   return res;
+}
+
+/** Команды, которые меняют только animforge.json, — их можно примерять (рендер и экспорт пишут другие файлы). */
+export const DRY_OK = new Set(["clip.add", "recipe.add", "recipe.set", "recipe.rig", "preset.apply", "clip.ground", "key.set", "key.clear", "chain.set", "layer.remove", "layer.set", "clip.remove"]);
+
+/** Выполнить шаги на копии проекта (base или с диска) и вернуть, что получилось, ничего не записывая.
+ * Вызывать строго по очереди (как и call): песочница одна на процесс. */
+export async function dryRun(dir: string, steps: { name: string; args: Record<string, any> }[], base?: Project) {
+  for (const s of steps) if (!DRY_OK.has(s.name)) throw new Error(`«${s.name}» нельзя примерить — только ${[...DRY_OK].join(", ")}`);
+  sandbox = { project: structuredClone(base ?? JSON.parse(readFileSync(projectFile(dir), "utf8"))) };
+  try {
+    const results = [];
+    for (const s of steps) results.push(await call(dir, s.name, s.args));
+    return { results, project: sandbox.project };
+  } finally {
+    sandbox = null;
+  }
 }
 
 export function listAll() {

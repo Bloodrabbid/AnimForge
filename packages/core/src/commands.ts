@@ -215,6 +215,55 @@ const defs: CommandDef[] = [
       return { removed: before - layer.tracks.length };
     },
   },
+  {
+    name: "layer.remove",
+    help: "Убрать слои клипа по id (несколько — через запятую).",
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      layer: { type: "string", required: true, help: "id слоя или «id1,id2»" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const clip = clipOf(ctx, a.clip);
+      const ids = String(a.layer).split(",").map((s) => s.trim()).filter(Boolean);
+      for (const id of ids) need(clip.layers.some((l) => l.id === id), `нет слоя «${id}». Есть: ${clip.layers.map((l) => l.id).join(", ")}`);
+      clip.layers = clip.layers.filter((l) => !ids.includes(l.id));
+      return { removed: ids };
+    },
+  },
+  {
+    name: "layer.set",
+    help: "Вес слоя-рецепта: 1 — как есть, 0 — выключен, между — ослаблен (несколько слоёв — через запятую).",
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      layer: { type: "string", required: true, help: "id слоя или «id1,id2»" },
+      weight: { type: "number", required: true, help: "0…2" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const clip = clipOf(ctx, a.clip);
+      need(Number.isFinite(+a.weight) && +a.weight >= 0 && +a.weight <= 2, "weight — число от 0 до 2");
+      const ids = String(a.layer).split(",").map((s) => s.trim()).filter(Boolean);
+      const layers = ids.map((id) => {
+        const l = clip.layers.find((l) => l.id === id);
+        need(l && l.type === "recipe", `нет слоя-рецепта «${id}»`);
+        return l as RecipeLayer;
+      });
+      for (const l of layers) if (+a.weight === 1) delete l.weight; else l.weight = +a.weight;
+      return { layers: ids, weight: +a.weight };
+    },
+  },
+  {
+    name: "clip.remove",
+    help: "Удалить клип целиком.",
+    args: { clip: { type: "string", required: true, help: "клип" } },
+    mutates: true,
+    run(ctx, a) {
+      clipOf(ctx, a.clip);
+      ctx.project.clips = ctx.project.clips.filter((c) => c.name !== a.clip);
+      return { removed: a.clip };
+    },
+  },
 ];
 
 export const COMMANDS: Record<string, CommandDef> = Object.fromEntries(defs.map((d) => [d.name, d]));

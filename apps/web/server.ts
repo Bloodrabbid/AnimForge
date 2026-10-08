@@ -1,11 +1,12 @@
 // Dev-сервер веб-интерфейса AnimForge: Vite (страница) + маленький API поверх тех же адаптеров, что у CLI.
 // Логики анимации здесь нет: проект читается через loadCtx, любое действие — call() из packages/cli/src/node.ts.
-import { createReadStream, existsSync, readFileSync, watch, type FSWatcher } from "node:fs";
+import { createReadStream, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, watch, type FSWatcher } from "node:fs";
+import { tmpdir } from "node:os";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer as createVite } from "vite";
-import { ROOT, call, loadCtx, projectFile } from "../../packages/cli/src/node.ts";
+import { RECIPES, ROOT, call, dryRun, exportGlb, loadCtx, loadPresets, projectFile } from "../../packages/cli/src/node.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 5178);
@@ -105,6 +106,64 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     } catch (e: any) {
       return sendJson(res, 400, { ok: false, error: String(e?.message ?? e) });
     }
+  }
+  if (req.method === "POST" && path === "/api/preview") {
+    // примерка: шаги выполняются на копии проекта (body.project или с диска), ответ — получившийся проект, диск не трогается
+    const body = await readBody(req);
+    const dir = projectDir(body.dir);
+    try {
+      const r = await serial(() => dryRun(dir, body.steps ?? [], body.project));
+      return sendJson(res, 200, { ok: true, ...r });
+    } catch (e: any) {
+      return sendJson(res, 400, { ok: false, error: String(e?.message ?? e) });
+    }
+  }
+  if (req.method === "GET" && path === "/api/library") {
+    // пресеты с происхождением и что нужно рецепту от скелета: роли → цепочки
+    const lib = loadPresets().map((l) => {
+      const def = RECIPES[l.recipe];
+      const roles = def?.roles
+        ? Object.fromEntries(Object.entries(def.roles).map(([role, r]) => [role, { chain: typeof r.chain === "function" ? r.chain("r") : r.chain, optional: !!r.optional }]))
+        : null;
+      return { recipe: l.recipe, help: def?.help ?? "", roles, presets: l.presets };
+    });
+    return sendJson(res, 200, lib);
+  }
+  if (req.method === "GET" && path === "/api/projects") {
+    // все проекты внутри репозитория: projects/* и out/*/* (тестовые с чужими моделями)
+    const found: string[] = [];
+    const scan = (rel: string, depth: number) => {
+      const abs = join(ROOT, rel);
+      if (!existsSync(abs)) return;
+      for (const e of readdirSync(abs, { withFileTypes: true })) {
+        if (!e.isDirectory() || e.name.startsWith(".") || e.name === "node_modules") continue;
+        const r = `${rel}/${e.name}`;
+        if (existsSync(projectFile(join(ROOT, r)))) found.push(r);
+        else if (depth > 1) scan(r, depth - 1);
+      }
+    };
+    scan("projects", 1);
+    scan("out", 2);
+    return sendJson(res, 200, found);
+  }
+  if (req.method === "GET" && path === "/api/download") {
+    // запечь все клипы в glb и отдать файлом
+    const dir = projectDir(url.searchParams.get("dir"));
+    const tmp = mkdtempSync(join(tmpdir(), "af-dl-"));
+    try {
+      const ctx = await loadCtx(dir);
+      const out = join(tmp, `${ctx.project.name || "animforge"}.glb`);
+      await serial(() => exportGlb(ctx, out));
+      res.writeHead(200, {
+        "content-type": "model/gltf-binary",
+        "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(ctx.project.name || "animforge")}.glb`,
+        "cache-control": "no-store",
+      });
+      res.end(readFileSync(out));
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+    return;
   }
   if (req.method === "GET" && path === "/api/model") {
     const dir = projectDir(url.searchParams.get("dir"));

@@ -40,3 +40,37 @@ export interface PresetLib {
   recipe: string;
   presets: { name: string; help: string; params: Record<string, unknown> }[];
 }
+
+export interface Step {
+  name: string;
+  args: Record<string, unknown>;
+}
+
+/** Примерка: шаги на копии проекта; сервер возвращает получившийся проект и ничего не пишет. */
+export async function preview(dir: string, steps: Step[], project?: Project): Promise<Project> {
+  const r = await fetch("/api/preview", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ dir, steps, project }),
+  });
+  const body = await r.json();
+  if (!body.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+  return body.project;
+}
+
+export interface LibPreset {
+  name: string;
+  help: string;
+  params: Record<string, unknown>;
+  provenance?: { source: string; ref?: string }[];
+}
+export interface LibRecipe {
+  recipe: string;
+  help: string;
+  roles: Record<string, { chain: string; optional: boolean }> | null;
+  presets: LibPreset[];
+}
+
+export const fetchLibrary = (): Promise<LibRecipe[]> => fetch("/api/library").then((r) => r.json());
+export const fetchProjects = (): Promise<string[]> => fetch("/api/projects").then((r) => r.json());
+export const downloadUrl = (dir: string) => `/api/download?dir=${encodeURIComponent(dir)}`;

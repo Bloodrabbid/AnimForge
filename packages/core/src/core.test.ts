@@ -764,3 +764,25 @@ test("recipe.add: пресет без параметров — ошибка, а 
   runCommand(ctx, "recipe.add", { clip: "c", recipe: "wave", chain: "body", preset: "fish-fast", params: { period: 1.2 } });
   assert.equal((ctx.project.clips[0].layers[0] as any).params.period, 1.2);
 });
+
+test("layer.remove, layer.set, clip.remove: слои убираются и выключаются весом, поза меняется, клип удаляется", () => {
+  const ctx = { project: project([]), skeleton: skel };
+  runCommand(ctx, "recipe.add", { clip: "c", recipe: "wave", chain: "body", id: "w1", params: { tipAmp: 20 } });
+  runCommand(ctx, "recipe.add", { clip: "c", recipe: "wave", chain: "body", id: "w2", params: { tipAmp: 20 } });
+  const rig = buildRig(skel);
+  const angle = () => {
+    const q = poseAt(ctx.project, rig, ctx.project.clips[0], 0.2).get("c")!;
+    return 2 * Math.acos(Math.min(1, Math.abs(qmul(q, qinv([0, 0, 0, 1]))[3]))) / DEG;
+  };
+  const both = angle();
+  runCommand(ctx, "layer.set", { clip: "c", layer: "w2", weight: 0 });
+  const one = angle();
+  close(one * 2, both, 1e-6, "второй слой с весом 0 не добавляет поворот");
+  runCommand(ctx, "layer.set", { clip: "c", layer: "w2", weight: 1 });
+  assert.equal((ctx.project.clips[0].layers[1] as any).weight, undefined, "вес 1 — поле убрано");
+  runCommand(ctx, "layer.remove", { clip: "c", layer: "w1,w2" });
+  assert.equal(ctx.project.clips[0].layers.length, 0);
+  assert.throws(() => runCommand(ctx, "layer.remove", { clip: "c", layer: "nope" }), /нет слоя/);
+  runCommand(ctx, "clip.remove", { clip: "c" });
+  assert.equal(ctx.project.clips.length, 0);
+});
