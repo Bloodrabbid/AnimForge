@@ -1,0 +1,208 @@
+{
+ "presets": [
+  {
+   "name": "witcher_last_hit_shake",
+   "help": "Тряска на последнем ударе серии: 0.4 с, слабая (Shake 0.4 0.02).",
+   "target": "camera",
+   "duration": 0.4,
+   "tracks": [
+    {
+     "prop": "shake",
+     "shake": {
+      "amp": 0.02,
+      "freq": 12,
+      "attack": 0.02,
+      "sustain": 0.1,
+      "decay": 0.28,
+      "roll": 0,
+      "seed": 3
+     }
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "03 §3.1: DEC/player.lua:143-145 BehaviorMessage(\"Shake 0.4 0.02\")",
+     "note": "время и сила из игры; частота 12 Гц и огибающая — не из игры (формула Shake в движке не видна)"
+    }
+   ]
+  },
+  {
+   "name": "witcher_screen_shake",
+   "help": "Полноэкранная тряска события camshake: 4 качания за 0.5 с с нарастанием и обрывом.",
+   "target": "camera",
+   "duration": 0.5,
+   "tracks": [
+    {
+     "prop": "shake",
+     "shake": {
+      "amp": 0.015,
+      "freq": 8,
+      "attack": 0.45,
+      "sustain": 0.0,
+      "decay": 0.05,
+      "roll": 0,
+      "seed": 1
+     }
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "03 §3.1: DEC/fullscreenfx.lua:1218-1271 — y += 0.015·sin(t/0.5·8π)·(t/0.5), масштаб 1−0.1·|sin|",
+     "note": "в игре огибающая линейно растёт и обрывается; здесь attack 0.45 (smoothstep) + decay 0.05 — приближение; сдвиг в долях экрана, а не в h/v_offset"
+    }
+   ]
+  },
+  {
+   "name": "witcher_combat_pullback",
+   "help": "Вход в бой: камера отъезжает на 2 м за 2 с линейно.",
+   "target": "camera",
+   "duration": 2.0,
+   "tracks": [
+    {
+     "prop": "dolly",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 2.0,
+       "from": 0,
+       "to": -2.0,
+       "ease": "linear"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "03 §2.1: DEC/camera.lua COMBAT_DIST_BONUS 2, переход Interpolate(\"lnr\",\"gui\",2,…) строки 455-544",
+     "note": "ещё COMBAT_PITCH_BONUS −10 в шкале питча Witcher (90 = горизонт?) — знак в Godot не проверен, не включён"
+    }
+   ]
+  },
+  {
+   "name": "witcher_exterior_fov",
+   "help": "Переход интерьер → экстерьер: FOV 70 → 45 и отъезд с 4.3 до 5.3–8 м за 2 с.",
+   "target": "camera",
+   "duration": 2.0,
+   "tracks": [
+    {
+     "prop": "fov",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 2.0,
+       "from": 70,
+       "to": 45,
+       "ease": "linear"
+      }
+     ]
+    },
+    {
+     "prop": "dolly",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 2.0,
+       "from": 0,
+       "to": -2.35,
+       "ease": "linear"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "03 §2.1: DEC/camera.lua:130-179 INTERIOR LAZY_DIST 3..4.3 FOV 70, EXTERIOR 8..5.3 FOV 45; переход lnr 2 с",
+     "note": "dolly −2.35 = середина (5.3..8)=6.65 − 4.3"
+    }
+   ]
+  },
+  {
+   "name": "witcher_dialog_cu",
+   "help": "Диалог, крупный план: жёсткая склейка (0.01 с) на FOV 29.",
+   "target": "camera",
+   "duration": 0.01,
+   "tracks": [
+    {
+     "prop": "fov",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.01,
+       "from": 29,
+       "to": 29,
+       "ease": "step"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "03 §4: 2DA dlgcamshots RIGHT_CU (Dist 1.5, Offset −0.26, StartYaw 15, FOV 29); camera.lua:1490 max(0.01, TransTime=0)"
+    }
+   ]
+  },
+  {
+   "name": "witcher_dialog_xcu",
+   "help": "Диалог, сверхкрупный: длиннофокусный FOV 7.5 с дистанции 3.2 м, жёсткая склейка.",
+   "target": "camera",
+   "duration": 0.01,
+   "tracks": [
+    {
+     "prop": "fov",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.01,
+       "from": 7.5,
+       "to": 7.5,
+       "ease": "step"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "03 §4: dlgcamshots RIGHT_XCU (Pitch 90, Dist 3.2, FOV 7.5, DOF 0.007/0.03/3.15)"
+    }
+   ]
+  },
+  {
+   "name": "witcher_dialog_ws",
+   "help": "Диалог, общий план: FOV 40 с 2.8 м, жёсткая склейка.",
+   "target": "camera",
+   "duration": 0.01,
+   "tracks": [
+    {
+     "prop": "fov",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.01,
+       "from": 40,
+       "to": 40,
+       "ease": "step"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "03 §4: dlgcamshots RIGHT_WS (Pitch 75, Dist 2.8, Target both, StartYaw 85, FOV 40)"
+    }
+   ]
+  }
+ ]
+}

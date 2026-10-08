@@ -23,6 +23,58 @@
      "ref": "settle 0.1 с — на глаз"
     }
    ]
+  },
+  {
+   "name": "witcher-blink",
+   "help": "Моргание по дорожкам век Witcher: закрыть 0.133 с, открыть 0.167 с (медленнее закрытия), без удержания и перелёта, раз в ~2.9 с.",
+   "params": {
+    "interval": 2.87,
+    "close": 0.133,
+    "hold": 0.0,
+    "open": 0.167,
+    "overshoot": 1.0,
+    "settle": 0.02
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "02 §4.2, out/s4_idle_dialog.md §1: 30 клипов dialog_eye_over/*_eyelids*, 71 моргание (медианы); веко ignore_eye_top_r_relrot, поворот 44.6°",
+     "ranges": {
+      "interval": [
+       1.17,
+       4.63
+      ],
+      "close": [
+       0.067,
+       0.167
+      ],
+      "open": [
+       0.067,
+       0.233
+      ]
+     },
+     "note": "у Witcher веко вращается, а рецепт моргает масштабом — minY/widenX не переносятся (по умолчанию)"
+    }
+   ]
+  },
+  {
+   "name": "witcher-flutter",
+   "help": "Кокетливое «хлопанье ресницами»: моргания через 0.23–0.9 с.",
+   "params": {
+    "interval": 0.6,
+    "close": 0.133,
+    "hold": 0.0,
+    "open": 0.2,
+    "overshoot": 1.0,
+    "settle": 0.02
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "02 §4.2: dialog_eye_over/flirting_eyelids3 — 7 морганий за 10 с, интервалы 0.23, 0.23, 0.9, 2.5, 1.47, 1.73",
+     "note": "interval 0.6 — середина коротких интервалов"
+    }
+   ]
   }
  ]
 }

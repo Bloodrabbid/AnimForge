@@ -530,6 +530,523 @@
         "mode": "floor",
         "ik": true
       }
+    },
+    {
+      "name": "walk_geralt",
+      "duration": 1.233,
+      "fps": 30,
+      "loop": true,
+      "layers": [
+        {
+          "id": "pelvis",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "pelvis"
+          },
+          "params": {
+            "role": "pelvis",
+            "period": 1.233,
+            "pelvisYaw": 8.1,
+            "chestCounter": 0.89,
+            "headYaw": 0.8,
+            "pelvisRoll": 6.3,
+            "chestRoll": 5.8,
+            "headRoll": 7,
+            "rollPhase": 154,
+            "headLag": 54,
+            "bob": 0.065,
+            "armSwing": 27,
+            "legSwing": 24.7,
+            "chestPhase": -132
+          },
+          "preset": "witcher-geralt-walk"
+        },
+        {
+          "id": "chest",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "chest"
+          },
+          "params": {
+            "role": "chest",
+            "period": 1.233,
+            "pelvisYaw": 8.1,
+            "chestCounter": 0.89,
+            "headYaw": 0.8,
+            "pelvisRoll": 6.3,
+            "chestRoll": 5.8,
+            "headRoll": 7,
+            "rollPhase": 154,
+            "headLag": 54,
+            "bob": 0.065,
+            "armSwing": 27,
+            "legSwing": 24.7,
+            "chestPhase": -132
+          },
+          "preset": "witcher-geralt-walk"
+        },
+        {
+          "id": "head",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "head"
+          },
+          "params": {
+            "role": "head",
+            "period": 1.233,
+            "pelvisYaw": 8.1,
+            "chestCounter": 0.89,
+            "headYaw": 0.8,
+            "pelvisRoll": 6.3,
+            "chestRoll": 5.8,
+            "headRoll": 7,
+            "rollPhase": 154,
+            "headLag": 54,
+            "bob": 0.065,
+            "armSwing": 27,
+            "legSwing": 24.7,
+            "chestPhase": -132
+          },
+          "preset": "witcher-geralt-walk"
+        },
+        {
+          "id": "arm_l",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "arm_l"
+          },
+          "params": {
+            "role": "arm_l",
+            "period": 1.233,
+            "pelvisYaw": 8.1,
+            "chestCounter": 0.89,
+            "headYaw": 0.8,
+            "pelvisRoll": 6.3,
+            "chestRoll": 5.8,
+            "headRoll": 7,
+            "rollPhase": 154,
+            "headLag": 54,
+            "bob": 0.065,
+            "armSwing": 27,
+            "legSwing": 24.7,
+            "chestPhase": -132
+          },
+          "preset": "witcher-geralt-walk"
+        },
+        {
+          "id": "arm_r",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "arm_r"
+          },
+          "params": {
+            "role": "arm_r",
+            "period": 1.233,
+            "pelvisYaw": 8.1,
+            "chestCounter": 0.89,
+            "headYaw": 0.8,
+            "pelvisRoll": 6.3,
+            "chestRoll": 5.8,
+            "headRoll": 7,
+            "rollPhase": 154,
+            "headLag": 54,
+            "bob": 0.065,
+            "armSwing": 27,
+            "legSwing": 24.7,
+            "chestPhase": -132
+          },
+          "preset": "witcher-geralt-walk"
+        },
+        {
+          "id": "leg_l",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "leg_l"
+          },
+          "params": {
+            "role": "leg_l",
+            "period": 1.233,
+            "pelvisYaw": 8.1,
+            "chestCounter": 0.89,
+            "headYaw": 0.8,
+            "pelvisRoll": 6.3,
+            "chestRoll": 5.8,
+            "headRoll": 7,
+            "rollPhase": 154,
+            "headLag": 54,
+            "bob": 0.065,
+            "armSwing": 27,
+            "legSwing": 24.7,
+            "chestPhase": -132
+          },
+          "preset": "witcher-geralt-walk"
+        },
+        {
+          "id": "leg_r",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "leg_r"
+          },
+          "params": {
+            "role": "leg_r",
+            "period": 1.233,
+            "pelvisYaw": 8.1,
+            "chestCounter": 0.89,
+            "headYaw": 0.8,
+            "pelvisRoll": 6.3,
+            "chestRoll": 5.8,
+            "headRoll": 7,
+            "rollPhase": 154,
+            "headLag": 54,
+            "bob": 0.065,
+            "armSwing": 27,
+            "legSwing": 24.7,
+            "chestPhase": -132
+          },
+          "preset": "witcher-geralt-walk"
+        },
+        {
+          "id": "eye_l",
+          "type": "recipe",
+          "recipe": "blink",
+          "target": {
+            "chain": "eye_l"
+          },
+          "params": {
+            "interval": 1.233,
+            "close": 0.067,
+            "hold": 0.083,
+            "open": 0.05,
+            "minY": 0.3,
+            "widenX": 1.2,
+            "overshoot": 1.17
+          },
+          "preset": "toolsup-blink"
+        },
+        {
+          "id": "eye_r",
+          "type": "recipe",
+          "recipe": "blink",
+          "target": {
+            "chain": "eye_r"
+          },
+          "params": {
+            "interval": 1.233,
+            "close": 0.067,
+            "hold": 0.083,
+            "open": 0.05,
+            "minY": 0.3,
+            "widenX": 1.2,
+            "overshoot": 1.17
+          },
+          "preset": "toolsup-blink"
+        },
+        {
+          "id": "ear_l",
+          "type": "recipe",
+          "recipe": "jiggle",
+          "target": {
+            "chain": "ear_l"
+          },
+          "params": {
+            "hz": 1.6,
+            "damping": 0.31,
+            "inert": 0.5
+          },
+          "preset": "ear_floppy"
+        },
+        {
+          "id": "ear_r",
+          "type": "recipe",
+          "recipe": "jiggle",
+          "target": {
+            "chain": "ear_r"
+          },
+          "params": {
+            "hz": 1.6,
+            "damping": 0.31,
+            "inert": 0.5
+          },
+          "preset": "ear_floppy"
+        }
+      ],
+      "ground": {
+        "bones": [
+          "foot_l",
+          "foot_r"
+        ],
+        "mode": "floor",
+        "ik": true
+      }
+    },
+    {
+      "name": "walk_april",
+      "duration": 1.366,
+      "fps": 30,
+      "loop": true,
+      "layers": [
+        {
+          "id": "pelvis",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "pelvis"
+          },
+          "params": {
+            "role": "pelvis",
+            "period": 1.366,
+            "pelvisYaw": 3.5,
+            "chestCounter": 1,
+            "headYaw": 3.2,
+            "pelvisRoll": 3.1,
+            "chestRoll": 0.8,
+            "headRoll": 0.9,
+            "rollPhase": 108,
+            "headLag": 0,
+            "bob": 0.029,
+            "armSwing": 11,
+            "legSwing": 14.4,
+            "knee": 61,
+            "chestPhase": 50
+          },
+          "preset": "tlj-april-walk"
+        },
+        {
+          "id": "chest",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "chest"
+          },
+          "params": {
+            "role": "chest",
+            "period": 1.366,
+            "pelvisYaw": 3.5,
+            "chestCounter": 1,
+            "headYaw": 3.2,
+            "pelvisRoll": 3.1,
+            "chestRoll": 0.8,
+            "headRoll": 0.9,
+            "rollPhase": 108,
+            "headLag": 0,
+            "bob": 0.029,
+            "armSwing": 11,
+            "legSwing": 14.4,
+            "knee": 61,
+            "chestPhase": 50
+          },
+          "preset": "tlj-april-walk"
+        },
+        {
+          "id": "head",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "head"
+          },
+          "params": {
+            "role": "head",
+            "period": 1.366,
+            "pelvisYaw": 3.5,
+            "chestCounter": 1,
+            "headYaw": 3.2,
+            "pelvisRoll": 3.1,
+            "chestRoll": 0.8,
+            "headRoll": 0.9,
+            "rollPhase": 108,
+            "headLag": 0,
+            "bob": 0.029,
+            "armSwing": 11,
+            "legSwing": 14.4,
+            "knee": 61,
+            "chestPhase": 50
+          },
+          "preset": "tlj-april-walk"
+        },
+        {
+          "id": "arm_l",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "arm_l"
+          },
+          "params": {
+            "role": "arm_l",
+            "period": 1.366,
+            "pelvisYaw": 3.5,
+            "chestCounter": 1,
+            "headYaw": 3.2,
+            "pelvisRoll": 3.1,
+            "chestRoll": 0.8,
+            "headRoll": 0.9,
+            "rollPhase": 108,
+            "headLag": 0,
+            "bob": 0.029,
+            "armSwing": 11,
+            "legSwing": 14.4,
+            "knee": 61,
+            "chestPhase": 50
+          },
+          "preset": "tlj-april-walk"
+        },
+        {
+          "id": "arm_r",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "arm_r"
+          },
+          "params": {
+            "role": "arm_r",
+            "period": 1.366,
+            "pelvisYaw": 3.5,
+            "chestCounter": 1,
+            "headYaw": 3.2,
+            "pelvisRoll": 3.1,
+            "chestRoll": 0.8,
+            "headRoll": 0.9,
+            "rollPhase": 108,
+            "headLag": 0,
+            "bob": 0.029,
+            "armSwing": 11,
+            "legSwing": 14.4,
+            "knee": 61,
+            "chestPhase": 50
+          },
+          "preset": "tlj-april-walk"
+        },
+        {
+          "id": "leg_l",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "leg_l"
+          },
+          "params": {
+            "role": "leg_l",
+            "period": 1.366,
+            "pelvisYaw": 3.5,
+            "chestCounter": 1,
+            "headYaw": 3.2,
+            "pelvisRoll": 3.1,
+            "chestRoll": 0.8,
+            "headRoll": 0.9,
+            "rollPhase": 108,
+            "headLag": 0,
+            "bob": 0.029,
+            "armSwing": 11,
+            "legSwing": 14.4,
+            "knee": 61,
+            "chestPhase": 50
+          },
+          "preset": "tlj-april-walk"
+        },
+        {
+          "id": "leg_r",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "leg_r"
+          },
+          "params": {
+            "role": "leg_r",
+            "period": 1.366,
+            "pelvisYaw": 3.5,
+            "chestCounter": 1,
+            "headYaw": 3.2,
+            "pelvisRoll": 3.1,
+            "chestRoll": 0.8,
+            "headRoll": 0.9,
+            "rollPhase": 108,
+            "headLag": 0,
+            "bob": 0.029,
+            "armSwing": 11,
+            "legSwing": 14.4,
+            "knee": 61,
+            "chestPhase": 50
+          },
+          "preset": "tlj-april-walk"
+        },
+        {
+          "id": "eye_l",
+          "type": "recipe",
+          "recipe": "blink",
+          "target": {
+            "chain": "eye_l"
+          },
+          "params": {
+            "interval": 1.366,
+            "close": 0.067,
+            "hold": 0.083,
+            "open": 0.05,
+            "minY": 0.3,
+            "widenX": 1.2,
+            "overshoot": 1.17
+          },
+          "preset": "toolsup-blink"
+        },
+        {
+          "id": "eye_r",
+          "type": "recipe",
+          "recipe": "blink",
+          "target": {
+            "chain": "eye_r"
+          },
+          "params": {
+            "interval": 1.366,
+            "close": 0.067,
+            "hold": 0.083,
+            "open": 0.05,
+            "minY": 0.3,
+            "widenX": 1.2,
+            "overshoot": 1.17
+          },
+          "preset": "toolsup-blink"
+        },
+        {
+          "id": "ear_l",
+          "type": "recipe",
+          "recipe": "jiggle",
+          "target": {
+            "chain": "ear_l"
+          },
+          "params": {
+            "hz": 1.6,
+            "damping": 0.31,
+            "inert": 0.5
+          },
+          "preset": "ear_floppy"
+        },
+        {
+          "id": "ear_r",
+          "type": "recipe",
+          "recipe": "jiggle",
+          "target": {
+            "chain": "ear_r"
+          },
+          "params": {
+            "hz": 1.6,
+            "damping": 0.31,
+            "inert": 0.5
+          },
+          "preset": "ear_floppy"
+        }
+      ],
+      "ground": {
+        "bones": [
+          "foot_l",
+          "foot_r"
+        ],
+        "mode": "floor",
+        "ik": true
+      }
     }
   ]
 }

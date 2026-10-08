@@ -47,6 +47,60 @@
      "ref": "angle 3° — на глаз; изгиба спины при дыхании ещё нет ни в одном разборе"
     }
    ]
+  },
+  {
+   "name": "tlj-breathe-idle",
+   "help": "Дыхание стоя (April, idle 3 с): спина клонится вперёд-назад на 4° за вдох, раз в 3 с.",
+   "params": {
+    "plane": "vertical",
+    "angle": 2.0,
+    "growth": 0,
+    "pulse": 1,
+    "period": 3.0,
+    "phase": 0
+   },
+   "provenance": [
+    {
+     "source": "research/tlj",
+     "ref": "02 §4.1: april_idle_cycle.ani (Global.xarc) — мировой тангаж spine0…spine4 2.0/3.2/3.6/4.1/4.1° от кадра 0, 1 цикл за 3000 мс; out/s3b_april_detail.txt",
+     "ranges": {
+      "period": [
+       2.0,
+       6.7
+      ]
+     },
+     "note": "pulse=1 даёт размах 2·angle = 4°; в TLJ изгиб сосредоточен у основания спины (локально 2.0/1.2/0.4/0.5°), а curl умеет только рост к кончику — growth 0 ближе всего. Диапазон period — p10–p90 по 111 idle (02 §4.2), это «период» по пикам высоты груди, оценка грубая"
+    }
+   ]
+  },
+  {
+   "name": "witcher-breathe",
+   "help": "Спокойное дыхание стоя: торс отклоняется на ~1°, одно дыхание на 2.3–2.7 с.",
+   "params": {
+    "plane": "vertical",
+    "angle": 1.2,
+    "growth": 0,
+    "pulse": 1,
+    "period": 2.5,
+    "phase": 0
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "02 §4.1, out/s4b_idle.md: id_v/pose_pause1 (2.33 с, 0.6°), c_v/c_idle и id_v/pose_pause2 (2.67 с, 1.8°)",
+     "ranges": {
+      "angle": [
+       0.6,
+       1.8
+      ],
+      "period": [
+       2.33,
+       2.87
+      ]
+     },
+     "note": "angle — размах отклонения torso_g от средней позы, а не изгиб по цепочке; это первый замер изгиба спины в разборах"
+    }
+   ]
   }
  ]
 }

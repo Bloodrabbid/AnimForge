@@ -164,9 +164,10 @@ const waddleWalk: RecipeDef = {
     "каналы такие: roll — поворот вокруг вертикали (рыскание), lateral — крен вбок, vertical — мах вперёд-назад.",
   params: {
     role: { type: "enum", default: "pelvis", options: ["pelvis", "chest", "head", "arm_l", "arm_r", "leg_l", "leg_r"], help: "какую часть тела крутит слой (первая кость цепочки; у ног и рук — две кости)" },
-    period: { type: "number", default: 0.479, min: 0.3, max: 1.2, unit: "с", help: "цикл из двух шагов (Tools Up!: 0.479; с ношей 0.5–0.6)" },
+    period: { type: "number", default: 0.479, min: 0.3, max: 2, unit: "с", help: "цикл из двух шагов (Tools Up!: 0.479, с ношей 0.5–0.6; TLJ: ходьба 1.3–1.37, бег 0.73)" },
     pelvisYaw: { type: "number", default: 32, min: 0, max: 45, unit: "°", help: "рыскание таза, один раз за цикл (±32.7)" },
-    chestCounter: { type: "number", default: 0.49, min: 0, max: 1, help: "плечи в противофазе: доля от рыскания таза (16.1 / 32.7)" },
+    chestCounter: { type: "number", default: 0.49, min: 0, max: 2, help: "рыскание плеч — доля от таза (Tools Up! 16.1 / 32.7; бег Геральта 1.97)" },
+    chestPhase: { type: "number", default: 180, min: -180, max: 360, unit: "°", help: "фаза плеч к тазу: 180 — строго против (Tools Up!), Геральт −132 в шаге и −9 в боевом шаге" },
     headYaw: { type: "number", default: 6, min: 0, max: 15, unit: "°", help: "остаток рыскания головы после стабилизации (±5.9)" },
     pelvisRoll: { type: "number", default: 10, min: 0, max: 25, unit: "°", help: "крен таза «вразвалку» (±10.0)" },
     chestRoll: { type: "number", default: 14, min: 0, max: 25, unit: "°", help: "крен груди (±14.3)" },
@@ -175,8 +176,8 @@ const waddleWalk: RecipeDef = {
     headLag: { type: "number", default: 54, min: 0, max: 120, unit: "°", help: "отставание крена головы по фазе (≈0.07 с)" },
     bob: { type: "number", default: 0.248, min: 0, max: 0.4, help: "подскок таза — доля его высоты (24.8 %; спокойные 14.5–21 %)" },
     armSwing: { type: "number", default: 30, min: 0, max: 60, unit: "°", help: "маятник рук, в противофазе ногам (UpperArm ±30)" },
-    legSwing: { type: "number", default: 30, min: 0, max: 60, unit: "°", help: "мах бедра (на глаз — в игре ноги не замерены в углах)" },
-    knee: { type: "number", default: 45, min: 0, max: 90, unit: "°", help: "подгиб колена в переносе ноги (на глаз)" },
+    legSwing: { type: "number", default: 30, min: 0, max: 60, unit: "°", help: "мах бедра (Witcher: шаг ±24.7, бег ±31.8; TLJ ±14–17)" },
+    knee: { type: "number", default: 45, min: 0, max: 120, unit: "°", help: "подгиб колена в переносе ноги (на глаз)" },
   },
   evaluate(p, i, n, t, info) {
     const w = (2 * Math.PI * t) / p.period;
@@ -186,7 +187,7 @@ const waddleWalk: RecipeDef = {
     // поэтому слой отдаёт разницу «своё − родителя»: тогда в мире грудь крутится на −16°, а голова почти неподвижна.
     const world = {
       pelvis: { roll: p.pelvisYaw * sw, lateral: p.pelvisRoll * Math.sin(w + p.rollPhase * rad) },
-      chest: { roll: -p.chestCounter * p.pelvisYaw * sw, lateral: p.chestRoll * Math.sin(w + (p.rollPhase - 2) * rad) },
+      chest: { roll: p.chestCounter * p.pelvisYaw * Math.sin(w + p.chestPhase * rad), lateral: p.chestRoll * Math.sin(w + (p.rollPhase - 2) * rad) },
       head: { roll: p.headYaw * Math.sin(w + Math.PI), lateral: p.headRoll * Math.sin(w + (p.rollPhase + p.headLag) * rad) },
     };
     const rel = (a: { roll: number; lateral: number }, b: { roll: number; lateral: number }) => ({ roll: a.roll - b.roll, lateral: a.lateral - b.lateral });
@@ -226,7 +227,7 @@ const blink: RecipeDef = {
     interval: { type: "number", default: 1.8, min: 0.5, max: 6, unit: "с", help: "период морганий" },
     close: { type: "number", default: 0.067, min: 0.03, max: 0.15, unit: "с", help: "закрыть (2 кадра)" },
     hold: { type: "number", default: 0.083, min: 0, max: 0.2, unit: "с", help: "держать закрытым" },
-    open: { type: "number", default: 0.05, min: 0.03, max: 0.15, unit: "с", help: "открыть" },
+    open: { type: "number", default: 0.05, min: 0.03, max: 0.25, unit: "с", help: "открыть (Tools Up! 0.05; у Геральта медленнее закрытия — 0.167)" },
     minY: { type: "number", default: 0.3, min: 0, max: 0.6, help: "масштаб по вертикали в закрытом глазу (медиана 0.32)" },
     widenX: { type: "number", default: 1.2, min: 1, max: 1.5, help: "расширение вбок в закрытом глазу (1.21)" },
     overshoot: { type: "number", default: 1.17, min: 1, max: 1.3, help: "перелёт по вертикали при открытии" },

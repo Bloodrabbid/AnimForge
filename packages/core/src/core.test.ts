@@ -295,3 +295,36 @@ test("IK ступни: при опускании тела колено сгиб�
   const pl = legProject(lift, { bones: ["foot"], mode: "floor", ik: true });
   close(worldPose(rig, posePartsAt(pl, rig, pl.clips[0], 0)).T[3][1], 1 - Math.cos(40 * DEG), 1e-9, "перенос");
 });
+
+import { readdirSync, readFileSync } from "node:fs";
+import { samplePreset as sampleTween } from "./tweens.ts";
+
+test("библиотека: параметры пресетов есть в рецептах и в пределах, у всех есть происхождение", () => {
+  const dir = new URL("../../../library/presets/", import.meta.url);
+  const problems: string[] = [];
+  for (const f of readdirSync(dir).filter((f) => f.endsWith(".json"))) {
+    const lib = JSON.parse(readFileSync(new URL(f, dir), "utf8"));
+    const def = RECIPES[lib.recipe];
+    if (!def) { problems.push(`${f}: нет рецепта ${lib.recipe}`); continue; }
+    for (const p of lib.presets) {
+      if (!p.provenance?.length) problems.push(`${p.name}: нет provenance`);
+      for (const [k, v] of Object.entries(p.params)) {
+        const spec = def.params[k];
+        if (!spec) problems.push(`${p.name}: у ${lib.recipe} нет параметра ${k}`);
+        else if (spec.type === "number" && ((spec.min != null && (v as number) < spec.min) || (spec.max != null && (v as number) > spec.max))) problems.push(`${p.name}: ${k}=${v} вне ${spec.min}…${spec.max}`);
+        else if (spec.type === "enum" && !spec.options!.includes(v as string)) problems.push(`${p.name}: ${k}=${v} не из ${spec.options}`);
+      }
+    }
+  }
+  const tdir = new URL("../../../library/tweens/", import.meta.url);
+  const names = new Set<string>();
+  for (const f of readdirSync(tdir).filter((f) => f.endsWith(".json"))) {
+    for (const p of JSON.parse(readFileSync(new URL(f, tdir), "utf8")).presets) {
+      if (names.has(p.name)) problems.push(`твин ${p.name} повторяется`);
+      names.add(p.name);
+      if (!p.provenance?.length) problems.push(`твин ${p.name}: нет provenance`);
+      for (let t = 0; t <= p.duration; t += p.duration / 20) for (const v of Object.values(sampleTween(p, t))) if (!Number.isFinite(v)) problems.push(`твин ${p.name}: не число при t=${t}`);
+    }
+  }
+  assert.deepEqual(problems, []);
+});

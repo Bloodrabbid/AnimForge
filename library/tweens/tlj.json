@@ -1,0 +1,98 @@
+{
+ "presets": [
+  {
+   "name": "tlj_fade_in",
+   "help": "Проявление сцены из чёрного: 2 с, линейно (FadeScene по умолчанию).",
+   "target": "ui",
+   "duration": 2.0,
+   "tracks": [
+    {
+     "prop": "alpha",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 2.0,
+       "from": 0,
+       "to": 1,
+       "ease": "linear"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/tlj",
+     "ref": "03 §4.1: FadeScene 2000 мс в 76 из 123 команд (out/s6_scripts.txt); линейность — resources/location.cpp onGameLoop (fadePosition += ms/duration)",
+     "ranges": {
+      "duration": [
+       0.5,
+       4.0
+      ]
+     },
+     "note": "alpha здесь — прозрачность сцены (fade level), а не чёрной шторки: для шторки инвертировать"
+    }
+   ]
+  },
+  {
+   "name": "tlj_fade_out",
+   "help": "Уход сцены в чёрное: 2 с, линейно.",
+   "target": "ui",
+   "duration": 2.0,
+   "tracks": [
+    {
+     "prop": "alpha",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 2.0,
+       "from": 1,
+       "to": 0,
+       "ease": "linear"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/tlj",
+     "ref": "03 §4.1: FadeScene (fadeOut=1), location.cpp fadeOutInit/onGameLoop"
+    }
+   ]
+  },
+  {
+   "name": "tlj_rumble",
+   "help": "Дрожь сцены (землетрясение): сдвиг на 1 px из 640 каждый кадр, без нарастания и затухания, 4 с.",
+   "target": "camera",
+   "duration": 4.0,
+   "tracks": [
+    {
+     "prop": "shake",
+     "shake": {
+      "amp": 0.0016,
+      "freq": 15.0,
+      "attack": 0,
+      "sustain": 4.0,
+      "decay": 0,
+      "roll": 0,
+      "seed": 1
+     }
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/tlj",
+     "ref": "03 §4.2: Location::listRenderEntries — offset = getRandomBit()−1 (0 или −1 px) по x и y каждый кадр, пока идёт rumble; длительности RumbleScene 1000–6959 мс, чаще 4000 (out/s6_scripts.txt)",
+     "ranges": {
+      "duration": [
+       1.0,
+       6.96
+      ]
+     },
+     "note": "amp 0.0016 = 1/640 ширины кадра — в единицах h_offset пересчитать под камеру; в оригинале не шум из синусов, а случайный ступенчатый сдвиг с частотой кадров (30 Гц → freq≈15)"
+    }
+   ]
+  }
+ ]
+}

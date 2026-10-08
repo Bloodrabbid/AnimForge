@@ -58,6 +58,208 @@
      "ref": "02 §2.2 и §6.1: тяжёлое 0.933/(1.2×1.3) = 0.598 с; грудь ±13.6 рыскание, ±16.0 крен; руки ±17–28"
     }
    ]
+  },
+  {
+   "name": "tlj-april-walk",
+   "help": "Реалистичная спокойная ходьба April (1999): цикл 1.366 с, таз ±3.5°, подскок 2.9 % высоты таза, руки ±11°.",
+   "params": {
+    "period": 1.366,
+    "pelvisYaw": 3.5,
+    "chestCounter": 1.0,
+    "headYaw": 3.2,
+    "pelvisRoll": 3.1,
+    "chestRoll": 0.8,
+    "headRoll": 0.9,
+    "rollPhase": 108,
+    "headLag": 0,
+    "bob": 0.029,
+    "armSwing": 11,
+    "legSwing": 14.4,
+    "knee": 61,
+    "chestPhase": 50
+   },
+   "provenance": [
+    {
+     "source": "research/tlj",
+     "ref": "02 §3.1–3.2: april_newwalk.ani; амплитуды — первая гармоника по циклу (out/s2c_walk_phases.txt), подскок — размах/высота таза (out/s2_walk.md)",
+     "note": "грудь у April не в противофазе тазу: сдвиг ≈50° (в waddle-walk зашито 180°); chestCounter 1.0 ≈ 4.4°/3.5° с ограничением max=1; rollPhase и знаки — условные (оси Stark левые, см. 01 §5)"
+    },
+    {
+     "source": "research/tlj",
+     "ref": "03 §1: скорость перемещения 110 ед/с задаёт код (movementSpeed), ступни в клипе дают ≈70 ед/с"
+    },
+    {
+     "source": "research/tlj",
+     "ref": "02 §3.1–3.2 (сдвиг фазы груди ≈50°)",
+     "note": "знак условный: оси Stark левые"
+    }
+   ]
+  },
+  {
+   "name": "tlj-april-run",
+   "help": "Бег April: цикл 0.733 с, таз ±9.7°, подскок 9.5 %, руки ±31°, колено до 112°.",
+   "params": {
+    "period": 0.733,
+    "pelvisYaw": 9.7,
+    "chestCounter": 1.0,
+    "headYaw": 4.1,
+    "pelvisRoll": 4.0,
+    "chestRoll": 0.6,
+    "headRoll": 2.0,
+    "rollPhase": 106,
+    "headLag": 0,
+    "bob": 0.095,
+    "armSwing": 31,
+    "legSwing": 17.5,
+    "knee": 93
+   },
+   "provenance": [
+    {
+     "source": "research/tlj",
+     "ref": "02 §3.3: april_run.ani; out/s2c_walk_phases.txt, out/s2_walk.md",
+     "note": "грудь сдвинута к тазу на ≈110°, chestCounter ограничен 1 (нужно 11.6/9.7=1.2)"
+    }
+   ]
+  },
+  {
+   "name": "tlj-npc-walk-median",
+   "help": "Медиана по 43 ходьбам людей TLJ: цикл 1.3 с, таз ±3.9°, подскок 3 %, бедро ±15–18°, колено 65°.",
+   "params": {
+    "period": 1.3,
+    "pelvisYaw": 3.9,
+    "chestCounter": 1.0,
+    "headYaw": 3.7,
+    "pelvisRoll": 2.3,
+    "chestRoll": 2.2,
+    "headRoll": 2.7,
+    "bob": 0.03,
+    "armSwing": 7.4,
+    "legSwing": 16.7,
+    "knee": 60
+   },
+   "provenance": [
+    {
+     "source": "research/tlj",
+     "ref": "02 §3.4: out/s2b_walk_summary.txt (длина, подскок), out/s2c_walk_phases.txt (амплитуды гармоник)",
+     "ranges": {
+      "period": [
+       1.02,
+       2.03
+      ],
+      "bob": [
+       0.019,
+       0.068
+      ],
+      "pelvisYaw": [
+       0,
+       6.5
+      ],
+      "armSwing": [
+       1.8,
+       21.9
+      ]
+     },
+     "note": "фазы между персонажами разбросаны (разметка костей автоматическая), поэтому rollPhase/headLag не заданы; knee 60 — медиана максимума сгиба 65.5° минус типичный минимум ≈6°"
+    }
+   ]
+  },
+  {
+   "name": "witcher-geralt-walk",
+   "help": "Реалистичный шаг Геральта: цикл 1.233 с (97 шагов/мин), таз ±8°, грудь почти в противофазе, голова стабилизирована, подскок 6.5 % (размах).",
+   "params": {
+    "period": 1.233,
+    "pelvisYaw": 8.1,
+    "chestCounter": 0.89,
+    "headYaw": 0.8,
+    "pelvisRoll": 6.3,
+    "chestRoll": 5.8,
+    "rollPhase": 154,
+    "bob": 0.065,
+    "armSwing": 27,
+    "legSwing": 24.7,
+    "chestPhase": -132
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "02 §2, out/s2b_walk_harmonics.md: id_v/walk (c_v-набор Геральта, FK на cm_geralt), 1-я гармоника; bob — размах rootdummy 5.94 см / высота 0.908 м",
+     "ranges": {
+      "armSwing": [
+       24.2,
+       30.2
+      ]
+     },
+     "note": "фаза груди −132° (у рецепта жёстко 180°); bob у Tools Up! — доля высоты таза, здесь тоже размах/высоту корня — сверить определение; ось Aurora z-вверх переведена в roll/lateral/vertical рецепта"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "headRoll, headLag, knee — не замерены, остаются по умолчанию"
+    },
+    {
+     "source": "research/witcher",
+     "ref": "04 «что поменять в рецептах»: chestPhase=-132 — после расширения рецепта (chestPhase, chestCounter до 2)"
+    }
+   ]
+  },
+  {
+   "name": "witcher-geralt-run",
+   "help": "Бег Геральта: цикл 0.6 с (200 шагов/мин), грудь крутится сильнее таза и в противофазе, подскок 6.9 %.",
+   "params": {
+    "period": 0.6,
+    "pelvisYaw": 11.6,
+    "chestCounter": 1.97,
+    "headYaw": 1.3,
+    "pelvisRoll": 4.5,
+    "chestRoll": 7.3,
+    "rollPhase": 164,
+    "bob": 0.069,
+    "armSwing": 26,
+    "legSwing": 31.8
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "02 §2, out/s2b_walk_harmonics.md: id_v/run",
+     "ranges": {
+      "chestCounter": [
+       1.0,
+       1.97
+      ]
+     },
+     "note": "измеренное отношение груди к тазу 22.8/11.6 = 1.97 — больше max рецепта (1); стоит расширить диапазон chestCounter до 2"
+    },
+    {
+     "source": "research/witcher",
+     "ref": "04 «что поменять в рецептах»: chestCounter=1.97 — после расширения рецепта (chestPhase, chestCounter до 2)"
+    }
+   ]
+  },
+  {
+   "name": "witcher-combat-step",
+   "help": "Боевой шаг с мечом (сильный стиль): корпус «заперт» (грудь с тазом в фазе), руки не качаются, подскок 2.9 %.",
+   "params": {
+    "period": 0.7,
+    "pelvisYaw": 10.8,
+    "chestCounter": 0.0,
+    "headYaw": 3.3,
+    "pelvisRoll": 4.2,
+    "chestRoll": 5.3,
+    "bob": 0.029,
+    "armSwing": 4,
+    "legSwing": 27,
+    "chestPhase": -9
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "02 §2 и §3.2а: c_1hs_v/_1hS_walk (сырой 1.1 с; в игре virtual 1hS_walk 0.70 с, ×1.57)",
+     "note": "грудь в фазе с тазом (−9°): chestCounter=0 приближает; period — игровой темп"
+    },
+    {
+     "source": "research/witcher",
+     "ref": "04 «что поменять в рецептах»: chestPhase=-9 — после расширения рецепта (chestPhase, chestCounter до 2)"
+    }
+   ]
   }
  ]
 }
