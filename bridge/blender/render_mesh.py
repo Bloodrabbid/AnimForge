@@ -65,10 +65,14 @@ lo, hi = Vector(lo), Vector(hi)
 c = (lo + hi) / 2
 r = (hi - lo).length / 2
 set_frame(0)
-# пол — непрозрачный диск на z = 0: видно, как стоят ноги, и что ушло под землю или под воду
+# пол — непрозрачный диск на z = 0: видно, как стоят ноги, и что ушло под землю или под воду.
+# Если модель уже в первом кадре ниже нуля (центр у живота, как у черепахи DREDGE), пол опускаем под неё —
+# иначе диск закрывает ласты; «ушло под землю» в самой анимации так по-прежнему видно
+z0 = min(data[i] for i in range(2, per_frame, 3))
+floor_z = min(0.0, z0)
 fl = bpy.data.meshes.new("floor")
 R = max(r * 1.6, 1e-3)
-ring = [(c.x + R * math.cos(2 * math.pi * k / 48), c.y + R * math.sin(2 * math.pi * k / 48), 0.0) for k in range(48)]
+ring = [(c.x + R * math.cos(2 * math.pi * k / 48), c.y + R * math.sin(2 * math.pi * k / 48), floor_z) for k in range(48)]
 fl.from_pydata(ring, [], [list(range(48))])
 fm = bpy.data.materials.new("floor")
 fm.diffuse_color = (0.97, 0.97, 0.98, 1)  # в студийном свете плоскость темнеет — берём почти белый
