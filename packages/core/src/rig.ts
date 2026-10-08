@@ -147,7 +147,7 @@ export function detectRig(skel: Skeleton, project: Pick<Project, "up" | "forward
   const height = Math.max(...joints.map((j) => H(j.i))) - floor || 1;
 
   // таз: общий предок двух самых низких листьев по разные стороны
-  let pelvis = hips?.i;
+  let pelvis: number | undefined = hips?.i;
   const footL = det.feet.l ? rig.index.get(det.feet.l)! : lowest.find((i) => S(i) > 0.01 * height);
   const footR = det.feet.r ? rig.index.get(det.feet.r)! : lowest.find((i) => S(i) < -0.01 * height);
   if (pelvis == null && footL != null && footR != null) {
@@ -168,6 +168,23 @@ export function detectRig(skel: Skeleton, project: Pick<Project, "up" | "forward
       det.method[`leg_${s}`] = "geometry";
     }
   }
+  // ноги по геометрии — только настоящие: путь от таза к стопе идёт в основном вниз (опускание ≥ 0.6 длины).
+  // Нижние плавники рыбы и ласты черепахи тоже «самые низкие листья по сторонам», но идут вбок или назад
+  // (замерено на авториге: люди и птица 0.78–0.94, ласты 0.39, плавники 0.03–0.13) — такое тело разбирает detectFins
+  const pathLen = (from: number, to: number) => { let L = 0; for (let c = to; c >= 0 && c !== from && rig.parent[c] >= 0; c = rig.parent[c]) L += Math.hypot(...vsub(rig.worldT[c], rig.worldT[rig.parent[c]])); return L; };
+  if (pelvis != null && det.method.pelvis === "geometry") {
+    const sideways = (["l", "r"] as const).some((s) => {
+      if (det.method[`leg_${s}`] !== "geometry" || !det.feet[s]) return false;
+      const f = rig.index.get(det.feet[s]!)!;
+      return H(pelvis!) - H(f) < 0.6 * pathLen(pelvis!, f);
+    });
+    if (sideways) {
+      for (const s of ["l", "r"] as const) { delete det.chains[`leg_${s}`]; delete det.method[`leg_${s}`]; delete det.feet[s]; }
+      delete det.chains.pelvis; delete det.method.pelvis;
+      det.notes.push("нижние ветки идут вбок, а не вниз — не ноги (плавники, ласты?)");
+      pelvis = undefined;
+    }
+  }
   // голова и руки: от таза вверх по самой «высокой» ветке; руки — ветки в стороны выше середины роста
   if (pelvis != null && (!det.chains.head || !det.chains.arm_l || !det.chains.arm_r || !det.chains.chest)) {
     const top = [...leaves].filter((i) => isAncestor(pelvis!, i)).sort((a, b) => H(b) - H(a))[0];
@@ -182,7 +199,8 @@ export function detectRig(skel: Skeleton, project: Pick<Project, "up" | "forward
         if (det.chains[`arm_${s}`]) continue;
         const sign = s === "l" ? 1 : -1;
         // кисть — лист дальше всех в свою сторону среди потомков ствола (не ноги)
-        const hand = leaves.filter((i) => trunkBelow.some((t) => isAncestor(t, i)) && !isAncestor(rig.index.get(det.chains[`leg_${s}`]?.[0] ?? "")!, i) && H(i) - floor > 0.3 * height)
+        // у птицы без имён крылья растут прямо из таза (развилка ног и крыльев одна) — таз тоже годится
+        const hand = leaves.filter((i) => [pelvis!, ...trunkBelow].some((t) => isAncestor(t, i)) && !isAncestor(rig.index.get(det.chains[`leg_${s}`]?.[0] ?? "")!, i) && H(i) - floor > 0.3 * height)
           .sort((a, b) => sign * (S(b) - S(a)))[0];
         if (hand == null || sign * S(hand) < 0.1 * height) continue;
         const branch = pathUp(hand, pelvis).filter((i) => !trunk.includes(i));

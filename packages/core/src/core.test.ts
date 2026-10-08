@@ -824,3 +824,31 @@ test("ласты: пары веток в стороны — передняя win
   bad.nodes.find((n) => n.name === j("hr"))!.restT = [0.3, -0.06, 0.2];
   assert.equal(detectFins(bad)!.pairs, 1, "кривая пара отброшена, осталась передняя");
 });
+
+/** Безымянная птица после авторига: корень-таз, ноги вниз, крылья прямо из таза в стороны (±Z), голова вверх-вперёд; смотрит на +X. */
+function birdSkel(legDown = true): Skeleton {
+  const pts: [string, string | null, Vec3][] = [
+    ["root", null, [0, 0.5, 0]], ["neck", "root", [0.1, 0.62, 0]], ["head", "neck", [0.2, 0.7, 0]],
+    ["ll0", "root", [0, 0.4, -0.08]], ["ll1", "ll0", [0.02, 0.2, -0.08]], ["ll2", "ll1", [0.04, 0.0, -0.08]], ["ll3", "ll2", [0.12, 0.0, -0.08]],
+    ["lr0", "root", [0, 0.4, 0.08]], ["lr1", "lr0", [0.02, 0.2, 0.08]], ["lr2", "lr1", [0.04, 0.0, 0.08]], ["lr3", "lr2", [0.12, 0.0, 0.08]],
+    ["wl0", "root", [0, 0.55, -0.15]], ["wl1", "wl0", [0, 0.56, -0.5]], ["wl2", "wl1", [0, 0.56, -0.9]],
+    ["wr0", "root", [0, 0.55, 0.15]], ["wr1", "wr0", [0, 0.56, 0.5]], ["wr2", "wr1", [0, 0.56, 0.9]],
+  ];
+  // «ласты» вместо ног: те же ветки, но уходят назад, почти горизонтально
+  if (!legDown) for (const p of pts) if (/^l[lr]\d/.test(p[0])) { const k = Number(p[0][2]); p[2] = [-0.15 * (k + 1), 0.45 - 0.03 * k, p[2][2] * (1 + k)]; }
+  const pos = new Map(pts.map(([n, , p]) => [n, p]));
+  const nm = (n: string) => `j${pts.findIndex((h) => h[0] === n)}`;
+  return { nodes: pts.map(([n, par, p]) => ({ name: nm(n), parent: par ? nm(par) : null, restT: (par ? vsub(p, pos.get(par)!) : p) as Vec3, restR: [0, 0, 0, 1] as Quat, restS: [1, 1, 1] as Vec3, isJoint: true })) };
+}
+
+test("геометрия без имён: крылья из таза находятся как руки → крылья; ветки вбок-назад — не ноги", () => {
+  const sk = birdSkel(), project = { up: [0, 1, 0] as Vec3, forward: [1, 0, 0] as Vec3 };
+  const det = detectRig(sk, project);
+  assert.ok(det.chains.leg_l && det.chains.leg_r, "ноги вниз — ноги");
+  assert.ok(det.chains.arm_l && det.chains.arm_r, `крылья из таза — руки: ${det.notes}`);
+  const w = detectWings(sk, [0, 1, 0], det);
+  assert.ok(w, "размах больше 1.6 роста — крылатое");
+  const fins = detectRig(birdSkel(false), project);
+  assert.equal(fins.chains.leg_l, undefined, "ветки назад-вбок — не ноги");
+  assert.ok(fins.notes.some((n) => n.includes("вбок")), "в заметках — почему");
+});

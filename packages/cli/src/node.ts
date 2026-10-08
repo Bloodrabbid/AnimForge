@@ -11,6 +11,10 @@ import { loadSkinScene, skinFrame, skinTopology } from "./skin.ts";
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 export const GODOT = process.env.GODOT ?? "/Applications/Godot.app/Contents/MacOS/Godot";
 export const BLENDER = process.env.BLENDER ?? "/Applications/Blender.app/Contents/MacOS/Blender";
+// Свой каталог пользователя Blender: наши фоновые запуски не видят расширений владельца. Иначе каждый запуск
+// синхронизирует колёса расширений в его site-packages, и параллельные запуски (плитки бестиария, авториг)
+// стирают пакеты друг у друга — так однажды пропал blmcp у Blender MCP.
+const BLENDER_ENV = { ...process.env, BLENDER_USER_RESOURCES: join(tmpdir(), "animforge-blender-user") };
 const io = new NodeIO();
 
 export const projectFile = (dir: string) => join(dir, "animforge.json");
@@ -87,7 +91,7 @@ async function renderFrames(ctx: Ctx & { dir: string }, clip: Clip, dir: string,
   const topo = join(dir, "topo.json"), bin = join(dir, "frames.bin");
   writeFileSync(topo, JSON.stringify(skinTopology(sc)));
   writeFileSync(bin, Buffer.concat(frames.map((f) => Buffer.from(f.buffer, f.byteOffset, f.byteLength))));
-  const log = execFileSync(BLENDER, ["-b", "--python", join(ROOT, "bridge/blender/render_mesh.py"), "--", topo, bin, dir, String(count), view, String(dist), String(size[0]), String(size[1])], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 });
+  const log = execFileSync(BLENDER, ["-b", "--factory-startup", "--python", join(ROOT, "bridge/blender/render_mesh.py"), "--", topo, bin, dir, String(count), view, String(dist), String(size[0]), String(size[1])], { env: BLENDER_ENV, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 });
   if (!log.includes("SHEET_OK")) throw new Error("Blender не отрендерил кадры:\n" + log.split("\n").filter((l) => /SHEET|Error|Traceback/.test(l)).join("\n"));
   return readdirSync(dir).filter((f) => f.endsWith(".png")).sort().map((f) => join(dir, f));
 }
@@ -134,7 +138,7 @@ export function makeTemplate(type: string, out: string, bones?: number) {
   const script = join(ROOT, `bridge/blender/template_${type}.py`);
   if (!existsSync(script)) throw new Error(`нет шаблона «${type}»`);
   mkdirSync(dirname(out), { recursive: true });
-  const log = execFileSync(BLENDER, ["-b", "--python", script, "--", out, ...(bones ? [String(bones)] : [])], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const log = execFileSync(BLENDER, ["-b", "--factory-startup", "--python", script, "--", out, ...(bones ? [String(bones)] : [])], { env: BLENDER_ENV, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   const ok = log.split("\n").find((l) => l.includes("_OK"));
   if (!ok) throw new Error("шаблон не собрался");
   return { out, log: ok };
@@ -208,8 +212,26 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
       return p;
     },
   },
+  "model.autorig": {
+    help: "Авториг модели без скелета: кости по форме тела (воксели → граф уровней от самой толстой точки) и веса кожи; выход — glb со скином. Любое тело: человек, зверь, рыба, щупальце.",
+    args: {
+      file: { type: "string", required: true, help: "исходный файл (FBX, glTF/GLB, OBJ, DAE, STL, PLY)" },
+      out: { type: "string", help: "куда (по умолчанию assets/model.glb)" },
+      res: { type: "number", help: "вокселей вдоль длинной стороны, по умолчанию 128 (тоньше — дольше; 64 — если ноги не касаются)" },
+      bones: { type: "number", help: "костей вдоль тела, по умолчанию 10" },
+    },
+    async run(dir, a) {
+      const src = resolve(process.env.INIT_CWD ?? process.cwd(), a.file);
+      const out = resolve(dir, a.out ?? "assets/model.glb");
+      mkdirSync(dirname(out), { recursive: true });
+      const log = execFileSync(BLENDER, ["-b", "--factory-startup", "--python", join(ROOT, "bridge/blender/autorig.py"), "--", src, out, String(a.res ?? 128), String(a.bones ?? 10)], { env: BLENDER_ENV, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 });
+      const ok = log.split("\n").find((l) => l.startsWith("AUTORIG_OK"));
+      if (!ok) throw new Error("авториг не удался:\n" + log.split("\n").filter((l) => /AUTORIG|Error|Traceback/.test(l)).join("\n"));
+      return { out, log: ok };
+    },
+  },
   "project.new": {
-    help: "Новый проект из чужой модели одним шагом: импорт через Blender (FBX, glTF/GLB, DAE) → assets/model.glb, проект, rig.detect.",
+    help: "Новый проект из чужой модели одним шагом: импорт через Blender (FBX, glTF/GLB, DAE, OBJ) → assets/model.glb, авториг, если скелета нет, проект, rig.detect.",
     args: { file: { type: "string", required: true, help: "исходный файл модели" }, name: { type: "string", help: "имя проекта" } },
     async run(dir, a) {
       if (existsSync(projectFile(dir))) throw new Error(`проект уже есть: ${dir}`);
@@ -218,9 +240,11 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
         await NODE_COMMANDS["model.import"].run(dir, { file: a.file, out: "assets/model.glb" });
         await NODE_COMMANDS.init.run(dir, { model: "assets/model.glb", name: a.name });
         const ctx = await loadCtx(dir);
-        if (!ctx.skeleton.nodes.some((n) => n.isJoint)) throw new Error("в модели нет скелета со скином — нужна заскиненная модель (авториг пока не умеем)");
+        // скелета нет — строим сами по форме тела
+        let autorig: unknown;
+        if (!ctx.skeleton.nodes.some((n) => n.isJoint)) autorig = await NODE_COMMANDS["model.autorig"].run(dir, { file: a.file, out: "assets/model.glb" });
         const detect = await NODE_COMMANDS["rig.detect"].run(dir, {});
-        return { dir, detect };
+        return { dir, detect, autorig };
       } catch (e) {
         rmSync(dir, { recursive: true, force: true }); // полупроект не оставляем
         throw e;
@@ -293,7 +317,7 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
       const src = resolve(process.env.INIT_CWD ?? process.cwd(), a.file);
       const out = resolve(dir, a.out ?? `assets/${src.replace(/^.*\//, "").replace(/\.[^.]+$/, "")}.glb`);
       mkdirSync(dirname(out), { recursive: true });
-      const log = execFileSync(BLENDER, ["-b", "--python", join(ROOT, "bridge/blender/import_model.py"), "--", src, out], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 });
+      const log = execFileSync(BLENDER, ["-b", "--factory-startup", "--python", join(ROOT, "bridge/blender/import_model.py"), "--", src, out], { env: BLENDER_ENV, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 });
       const ok = log.split("\n").find((l) => l.startsWith("IMPORT_OK"));
       if (!ok) throw new Error("Blender не импортировал модель:\n" + log.split("\n").filter((l) => /IMPORT|Error|Traceback/.test(l)).join("\n"));
       return { out, log: ok };
@@ -312,7 +336,7 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
       const fresh = quad ? null : detectRig(ctx.skeleton, ctx.project);
       // ласты проверяем до «двуногого»: записанные прошлым разом leg_l у черепахи — это задние ласты, а не ноги
       const finCheck = !quad && !fresh!.chains.leg_l ? detectFins(ctx.skeleton, ctx.project.up) : null;
-      const det = { ...(quad ?? fresh!), body: quad ? ("legCount" in quad ? "multileg" : "quadruped") : finCheck ? "other" : ctx.project.chains.leg_l || fresh!.chains.leg_l ? "biped" : "other", forward: ctx.project.forward, forwardBy: fw.by };
+      const det = { ...(quad ?? fresh!), body: quad ? ("legCount" in quad ? "multileg" : "quadruped") : finCheck ? "other" : fresh!.chains.leg_l ? "biped" : "other", forward: ctx.project.forward, forwardBy: fw.by };
       // крылья: длинные «руки» — цепочки wing_l/wing_r на всю длину, руки не выравниваем
       const wings = quad ? null : detectWings(ctx.skeleton, ctx.project.up, det);
       if (wings) {
@@ -333,12 +357,40 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
             if (ctx.project.chains[k] && det.method[k as keyof typeof det.method] !== "names") delete ctx.project.chains[k];
           }
           det.chains = { ...det.chains, ...fins.chains } as typeof det.chains;
-          (det as { body: string }).body = "finned";
+          // широкая передняя пара — крылья (птица без имён костей), иначе ласты
+          const rg = buildRig(ctx.skeleton), U = ctx.project.up;
+          const tip = (c?: string[]) => rg.worldT[rg.index.get(c![c!.length - 1])!];
+          const hs = ctx.skeleton.nodes.map((n, i) => (n.isJoint ? rg.worldT[i][0] * U[0] + rg.worldT[i][1] * U[1] + rg.worldT[i][2] * U[2] : NaN)).filter((x) => !Number.isNaN(x));
+          const span = Math.hypot(...[0, 1, 2].map((k) => tip(fins.chains.wing_l)[k] - tip(fins.chains.wing_r)[k]));
+          (det as { body: string }).body = span > 1.6 * (Math.max(...hs) - Math.min(...hs) || 1) ? "winged" : "finned";
           ctx.project.forward = fins.forward.map((x) => +x.toFixed(4)) as [number, number, number];
           det.forward = ctx.project.forward;
           det.notes.push(...fins.notes);
         }
       }
+      // тело-линия (рыба, змея, щупальце): цепочка body — самый длинный путь от корня, для волны и изгибов
+      if (det.body === "other" && !ctx.project.chains.body) {
+        const rg = buildRig(ctx.skeleton);
+        const js = ctx.skeleton.nodes.map((n, i) => i).filter((i) => ctx.skeleton.nodes[i].isJoint);
+        const root = js.find((i) => !js.includes(rg.parent[i]));
+        if (root != null) {
+          let best: number[] = [];
+          const walk = (i: number, path: number[]) => {
+            const kids = js.filter((j) => rg.parent[j] === i);
+            if (!kids.length && path.length > best.length) best = path;
+            for (const k of kids) walk(k, [...path, k]);
+          };
+          walk(root, [root]);
+          if (best.length >= 3) {
+            ctx.project.chains.body = best.map((i) => ctx.skeleton.nodes[i].name);
+            det.notes.push(`тело-линия: цепочка body из ${best.length} костей`);
+          }
+        }
+      }
+      // стандартные цепочки прошлого распознавания, которых теперь нет, убираем: иначе устаревшие leg_l у рыбы
+      // делают её «двуногой». Свои цепочки с другими именами (body, hem_0…) не трогаем
+      const std = (k: string) => /^(pelvis|spine|chest|neck|head|tail|arm_[lr]|leg_[lr]\d*|wing_[lr]|eye_[lr])$/.test(k);
+      for (const k of Object.keys(ctx.project.chains)) if (std(k) && !(det.chains as Record<string, unknown>)[k]) delete ctx.project.chains[k];
       for (const [k, v] of Object.entries(det.chains)) if (v) ctx.project.chains[k] = v;
       // руки в T/A-позе сначала опускаются вниз — от этой позы считаются все махи рецептов
       const al = suggestAlign(buildRig(ctx.skeleton), ctx.project);
