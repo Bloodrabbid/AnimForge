@@ -11,23 +11,27 @@ export interface Rig {
   parent: number[]; // индекс родителя, −1 у корня
   worldR: Quat[]; // мировой поворот узла в rest-позе
   worldT: Vec3[];
+  worldS: Vec3[];
 }
 
 export function buildRig(skel: Skeleton): Rig {
   const index = new Map(skel.nodes.map((n, i) => [n.name, i]));
-  const worldR: Quat[] = [], worldT: Vec3[] = [], parent: number[] = [];
+  const worldR: Quat[] = [], worldT: Vec3[] = [], worldS: Vec3[] = [], parent: number[] = [];
   skel.nodes.forEach((n, i) => {
     const p = n.parent == null ? -1 : index.get(n.parent)!;
     parent[i] = p;
     if (p < 0) {
       worldR[i] = n.restR;
       worldT[i] = n.restT;
+      worldS[i] = n.restS;
     } else {
+      // масштаб родителя растягивает сдвиг ребёнка — как в worldPose: у FBX-моделей корень часто в 0.01 (сантиметры)
       worldR[i] = qnorm(qmul(worldR[p], n.restR));
-      worldT[i] = vadd(worldT[p], qrot(worldR[p], n.restT));
+      worldT[i] = vadd(worldT[p], qrot(worldR[p], vmul(worldS[p], n.restT)));
+      worldS[i] = vmul(worldS[p], n.restS);
     }
   });
-  return { skel, index, parent, worldR, worldT };
+  return { skel, index, parent, worldR, worldT, worldS };
 }
 
 /** Оси тела: up, forward (ортогонализованный к up), side = up × forward (у персонажа, смотрящего на +Z, это +X — влево). */
@@ -38,9 +42,14 @@ export function bodyFrame(project: Project): { up: Vec3; forward: Vec3; side: Ve
   return { up, forward, side: vcross(up, forward) };
 }
 
-/** Направление кости в rest — её локальная ось +Y (так кости хранят Blender, Mixamo и большинство ригов).
- * Не «к первому ребёнку»: у головы первым ребёнком может оказаться глаз или ухо. */
+/** Направление одиночной кости в rest: от родителя-кости к ней (таз, грудь, голова смотрят «по ходу» скелета при любых
+ * локальных осях рига), а у корня — вдоль её локальной +Y (так кости хранят Blender и Mixamo). */
 function boneDir(rig: Rig, i: number): Vec3 {
+  const p = rig.parent[i];
+  if (p >= 0 && rig.skel.nodes[p].isJoint) {
+    const d = vsub(rig.worldT[i], rig.worldT[p]);
+    if (Math.hypot(...d) > 1e-6) return vnorm(d);
+  }
   return vnorm(qrot(rig.worldR[i], [0, 1, 0]));
 }
 
@@ -56,6 +65,21 @@ export function chainAxes(rig: Rig, project: Project, chain: string[]): Record<S
   if (Math.hypot(...vcross(along, up)) < 1e-3) up = body.forward;
   const side = vnorm(vcross(along, up));
   return { lateral: up, vertical: side, roll: along };
+}
+
+/** Какие руки надо опустить перед рецептами: те, что в rest отходят от «вниз» больше чем на 30° (T- и A-поза).
+ * Рецепты ходьбы и ударов пишутся от висящей руки, так у любого рига мах начинается из одной и той же позы. */
+export function suggestAlign(rig: Rig, project: Project, abduct = 8): { align: NonNullable<Project["align"]>; angles: Record<string, number> } {
+  const f = bodyFrame(project), align: NonNullable<Project["align"]> = {}, angles: Record<string, number> = {};
+  for (const name of ["arm_l", "arm_r"]) {
+    const chain = project.chains[name];
+    if (!chain?.length || chain.some((b) => !rig.index.has(b))) continue;
+    const along = chainAxes(rig, project, chain).roll;
+    const deg = Math.acos(Math.max(-1, Math.min(1, -vdot(along, f.up)))) / DEG;
+    angles[name] = +deg.toFixed(1);
+    if (deg > 30) align[name] = { to: "down", abduct };
+  }
+  return { align, angles };
 }
 
 /** Мировая ось → поворот в локальном пространстве кости (чтобы рецепт не зависел от осей конкретного рига). */
@@ -75,6 +99,8 @@ export interface PoseParts {
   scl: Map<string, Vec3>;
 }
 
+const vdiv = (a: Vec3, b: Vec3): Vec3 => [a[0] / b[0], a[1] / b[1], a[2] / b[2]];
+
 /** Накопитель слоёв в мировых терминах; в локальные трансформы переводится в конце. */
 class Acc {
   rot = new Map<string, Quat>(); // дельта в локальном пространстве кости
@@ -85,9 +111,10 @@ class Acc {
   add(bone: string, ch: Channel, v: number, axes: () => Record<SemanticAxis, Vec3>) {
     const i = this.rig.index.get(bone);
     if (i == null || v === (ch.startsWith("scale_") ? 1 : 0)) return;
-    if (ch === "lateral" || ch === "vertical" || ch === "roll") {
-      const cur = this.rot.get(bone) ?? QI;
-      this.rot.set(bone, qnorm(qmul(cur, localDelta(this.rig, i, axes()[ch], v * DEG))));
+    if (ch === "lateral" || ch === "vertical" || ch === "roll" || ch === "pitch" || ch === "yaw" || ch === "bank") {
+      const f = bodyFrame(this.project);
+      const axis = ch === "pitch" ? f.side : ch === "yaw" ? f.up : ch === "bank" ? f.forward : axes()[ch];
+      this.turn(bone, localDelta(this.rig, i, axis, v * DEG));
     } else if (ch.startsWith("move_")) {
       const f = bodyFrame(this.project);
       const dir = ch === "move_up" ? f.up : ch === "move_forward" ? f.forward : f.side;
@@ -98,6 +125,12 @@ class Acc {
       s[k] *= v;
       this.scale.set(bone, s);
     }
+  }
+
+  /** Добавить поворот (дельту в локальных осях rest) ПОСЛЕ уже накопленных: следующий слой действует на результат
+   * предыдущих — так выравнивание позы и мах руки идут в правильном порядке. */
+  turn(bone: string, d: Quat) {
+    this.rot.set(bone, qnorm(qmul(d, this.rot.get(bone) ?? QI)));
   }
 
   /** Задать итоговый локальный поворот кости (в дельту относительно rest). */
@@ -113,7 +146,8 @@ class Acc {
     for (const [bone, m] of this.move) {
       const i = rig.index.get(bone)!;
       const p = rig.parent[i];
-      const local = p < 0 ? m : qrot(qinv(rig.worldR[p]), m); // сдвиг в осях родителя (по его rest-повороту)
+      // сдвиг в осях родителя (по его rest-повороту и масштабу: у корня FBX в 0.01 метр — это 100 локальных единиц)
+      const local = p < 0 ? m : vdiv(qrot(qinv(rig.worldR[p]), m), rig.worldS[p]);
       out.pos.set(bone, vadd(rig.skel.nodes[i].restT, local));
     }
     const f = bodyFrame(this.project);
@@ -175,6 +209,7 @@ function primary(project: Project, rig: Rig, clip: Clip, t: number): Acc {
   const acc = new Acc(rig, project);
   let heights = heightCache.get(rig);
   if (!heights) heightCache.set(rig, (heights = restHeights(rig, project)));
+  if (project.align) alignRest(acc, rig, project);
   for (const layer of clip.layers) {
     if (isSecondary(layer)) continue;
     if (layer.type === "recipe") {
@@ -255,6 +290,26 @@ function footIK(acc: Acc, rig: Rig, project: Project, foot: string) {
   const Rp = pt >= 0 ? w.R[pt] : QI;
   acc.setLocal(rig.skel.nodes[ti].name, qnorm(qmul(qinv(Rp), qmul(q2, w.R[ti]))));
   acc.setLocal(rig.skel.nodes[si].name, qnorm(qmul(qinv(w.R[ti]), qmul(q1, w.R[si]))));
+}
+
+/** Выравнивание позы покоя: первая кость цепочки разворачивается так, чтобы цепочка смотрела вниз (с отведением abduct). */
+function alignRest(acc: Acc, rig: Rig, project: Project) {
+  const f = bodyFrame(project);
+  for (const [chainName, a] of Object.entries(project.align ?? {})) {
+    const chain = project.chains[chainName];
+    if (!chain?.length) continue;
+    const i0 = rig.index.get(chain[0]);
+    if (i0 == null) continue;
+    const axes = chainAxes(rig, project, chain);
+    const along = axes.roll;
+    // сторона цепочки: куда она отходит от тела по боку (у левой руки — +side)
+    const s = Math.sign(vdot(along, f.side)) || 1;
+    const ab = (a.abduct ?? 0) * DEG;
+    const target = vnorm(vadd(vscale(f.up, -Math.cos(ab)), vscale(f.side, s * Math.sin(ab))));
+    const q = qbetween(along, target);
+    const w = rig.worldR[i0];
+    acc.turn(chain[0], qmul(qmul(qinv(w), q), w));
+  }
 }
 
 function ground(acc: Acc, rig: Rig, project: Project, g: NonNullable<Clip["ground"]>) {

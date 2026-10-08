@@ -23,6 +23,7 @@ func _init() -> void:
 	var checked_pos := 0
 	var where := ""
 	var where_pos := ""
+	var missing := {}
 	for clip in samples:
 		if not player.has_animation(clip.clip):
 			_fail("нет анимации %s, есть %s" % [clip.clip, player.get_animation_list()])
@@ -38,28 +39,45 @@ func _init() -> void:
 			for bone in c.rotations:
 				var q: Array = c.rotations[bone]
 				var want := Quaternion(q[0], q[1], q[2], q[3])
-				var got := skel.get_bone_pose_rotation(skel.find_bone(bone))
+				var bi := _bone(skel, bone, missing)
+				if bi < 0: continue
+				var got := skel.get_bone_pose_rotation(bi)
 				var d := minf((got - want).length(), (got + want).length())
 				if d > worst: where = "%s t=%.3f поворот" % [bone, c.t]
 				worst = maxf(worst, d)
 				checked += 1
 			for bone in c.get("positions", {}):
 				var v: Array = c.positions[bone]
-				var dp := (skel.get_bone_pose_position(skel.find_bone(bone)) - Vector3(v[0], v[1], v[2])).length()
-				if dp > worst_pos: where_pos = "%s t=%.3f сдвиг godot %s, ядро %s" % [bone, c.t, skel.get_bone_pose_position(skel.find_bone(bone)), v]
+				var bi := _bone(skel, bone, missing)
+				if bi < 0: continue
+				var dp := (skel.get_bone_pose_position(bi) - Vector3(v[0], v[1], v[2])).length()
+				if dp > worst_pos: where_pos = "%s t=%.3f сдвиг godot %s, ядро %s" % [bone, c.t, skel.get_bone_pose_position(bi), v]
 				worst_pos = maxf(worst_pos, dp)
 				checked_pos += 1
 			for bone in c.get("scales", {}):
 				var v: Array = c.scales[bone]
-				var ds := (skel.get_bone_pose_scale(skel.find_bone(bone)) - Vector3(v[0], v[1], v[2])).length()
-				if ds > worst_pos: where_pos = "%s t=%.3f масштаб godot %s, ядро %s" % [bone, c.t, skel.get_bone_pose_scale(skel.find_bone(bone)), v]
+				var bi := _bone(skel, bone, missing)
+				if bi < 0: continue
+				var ds := (skel.get_bone_pose_scale(bi) - Vector3(v[0], v[1], v[2])).length()
+				if ds > worst_pos: where_pos = "%s t=%.3f масштаб godot %s, ядро %s" % [bone, c.t, skel.get_bone_pose_scale(bi), v]
 				worst_pos = maxf(worst_pos, ds)
 				checked_pos += 1
 	print("VERIFY проверено поворотов: %d, худшее расхождение: %.4f (допуск %.3f) %s" % [checked, worst, TOL, where])
 	print("VERIFY проверено сдвигов и масштабов: %d, худшее расхождение: %.4f (допуск %.4f) %s" % [checked_pos, worst_pos, TOL_POS, where_pos])
-	var ok := worst <= TOL and worst_pos <= TOL_POS
+	if missing:
+		print("VERIFY нет костей в Skeleton3D: %s" % [missing.keys()])
+	var ok := worst <= TOL and worst_pos <= TOL_POS and not missing
 	print("VERIFY_OK" if ok else "VERIFY_FAIL")
 	quit(0 if ok else 1)
+
+# Godot при импорте заменяет в именах костей «:» и «/» на «_» (mixamorig:Hips → mixamorig_Hips)
+func _bone(skel: Skeleton3D, name: String, missing: Dictionary) -> int:
+	var i := skel.find_bone(name)
+	if i < 0:
+		i = skel.find_bone(name.replace(":", "_").replace("/", "_"))
+	if i < 0:
+		missing[name] = true
+	return i
 
 func _fail(msg: String) -> void:
 	print("VERIFY_FAIL ", msg)

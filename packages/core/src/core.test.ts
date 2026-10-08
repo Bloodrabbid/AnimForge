@@ -158,7 +158,7 @@ test("шаг циркулем: цикл замкнут, ноги в против
   assert.ok(max > 90, `перелёт ${max}`);
 });
 
-import { posePartsAt, worldPose } from "./evaluate.ts";
+import { posePartsAt, suggestAlign, worldPose } from "./evaluate.ts";
 
 // Нога: таз → бедро → голень → ступня, вертикально вниз; у бедра локальные оси повёрнуты на 90° вокруг X.
 const legSkel: Skeleton = {
@@ -267,8 +267,8 @@ test("ходьба вразвалку: углы груди и головы — �
   const at = (role: string, t: number) => c.evaluate(withDefaults(c, { role }), 0, 1, t, { height: 0.5 });
   const t = 0.479 / 4; // sin = 1
   // мировое рыскание головы = таз + грудь + голова = headYaw·sin(ωt + π) = −6
-  close(at("pelvis", t).roll! + at("chest", t).roll! + at("head", t).roll!, -6, 1e-9);
-  close(at("pelvis", t).roll! + at("chest", t).roll!, -0.49 * 32, 1e-9, "плечи в мире");
+  close(at("pelvis", t).yaw! + at("chest", t).yaw! + at("head", t).yaw!, -6, 1e-9);
+  close(at("pelvis", t).yaw! + at("chest", t).yaw!, -0.49 * 32, 1e-9, "плечи в мире");
 });
 
 test("IK ступни: при опускании тела колено сгибается вперёд, ступня ровно на полу под тазом", () => {
@@ -348,7 +348,7 @@ test("удар: контакт через hitLag после пика скоро�
   assert.deepEqual(pl.hits.map((x) => +x.toFixed(9)), [0.3, 0.5, 0.7]);
   // скорость руки максимальна за hitLag/tempo до каждого контакта
   // пик скорости руки — до каждого контакта, в пределах hitLag + 0.06
-  const arm = (t: number) => c.evaluate(p, 0, 2, t).vertical!;
+  const arm = (t: number) => -c.evaluate(p, 0, 2, t).pitch!; // −pitch: рука вперёд-вверх
   const sp = (t: number) => Math.abs(arm(t + 1e-5) - arm(t - 1e-5));
   for (const hit of pl.hits) {
     let best = hit - 0.1;
@@ -358,11 +358,12 @@ test("удар: контакт через hitLag после пика скоро�
   // взмахи чередуются: в концах взмахов рука в замахе и в доводке
   close(strikePos(p, pl.s0).pos, 1, 1e-9); close(strikePos(p, pl.s0 + pl.swing).pos, -1, 1e-9); close(strikePos(p, pl.s0 + 2 * pl.swing).pos, 1, 1e-9);
   // в контакте локоть прямее, чем в замахе
-  assert.ok(Math.abs(c.evaluate(p, 1, 2, pl.hits[0] - 0.025).vertical!) < Math.abs(c.evaluate(p, 1, 2, pl.s0).vertical!));
+  assert.ok(Math.abs(c.evaluate(p, 1, 2, pl.hits[0] - 0.025).pitch!) < Math.abs(c.evaluate(p, 1, 2, pl.s0).pitch!));
+  assert.ok(c.evaluate(p, 1, 2, pl.s0).pitch! < 0, "локоть сгибается вперёд (−pitch), а не назад");
   // одиночный удар: в конце взмаха рука в доводке, на полпути возврата — половина, после — покой
   const one = withDefaults(c, { hits: 1, followAngle: 30, recover: 0.4 });
   const p1 = strikePlan(one);
-  const a1 = (t: number) => c.evaluate(one, 0, 2, t).vertical!;
+  const a1 = (t: number) => -c.evaluate(one, 0, 2, t).pitch!;
   close(a1(p1.end), 30, 1e-9); close(a1(p1.end + 0.2), 15, 1e-9); close(a1(p1.end + 0.4), 0, 1e-9);
   const ev = c.events!(p);
   assert.deepEqual(ev.filter((e) => e.name === "hit").map((e) => e.t), [0.3, 0.5, 0.7]);
@@ -373,13 +374,13 @@ test("удар: контакт через hitLag после пика скоро�
 test("заряд: в удержании рука в замахе и таз пружинит, удары в hit1/hit2 после удержания", () => {
   const c = RECIPES["charge-release"];
   const p = withDefaults(c, {});
-  close(c.evaluate(p, 0, 2, 2.0).vertical!, 140, 1e-9, "держит замах");
+  close(-c.evaluate(p, 0, 2, 2.0).pitch!, 140, 1e-9, "держит замах");
   const pel = (t: number) => c.evaluate({ ...p, role: "pelvis" }, 0, 1, t, { height: 1 }).move_up!;
   close(pel(1.7), -0.15, 1e-9, "присед в начале удержания");
   close(pel(1.7 + 0.4), -0.15 - 0.058, 1e-9, "середина пружинки");
   assert.deepEqual(c.events!(p).filter((e) => e.name === "hit").map((e) => e.t), [2.9, 3.55]);
   // пик угловой скорости руки — незадолго до первого удара (контакт после пика)
-  const sp = (t: number) => Math.abs(c.evaluate(p, 0, 2, t + 1e-5).vertical! - c.evaluate(p, 0, 2, t - 1e-5).vertical!);
+  const sp = (t: number) => Math.abs(c.evaluate(p, 0, 2, t + 1e-5).pitch! - c.evaluate(p, 0, 2, t - 1e-5).pitch!);
   let best = 0;
   for (let t = 2.5; t < 3.2; t += 0.001) if (sp(t) > sp(best)) best = t;
   close(best, 2.9 - 0.053, 0.002, "пик скорости руки ровно за hitLag до удара");
@@ -390,4 +391,120 @@ test("события клипа: повторы от ролей одного у�
   const ev = clipEvents({ name: "c", duration: 2, fps: 30, loop: false, layers: [layer("a", "arm"), layer("b", "core")] });
   assert.equal(ev.filter((e) => e.name === "hit").length, 1);
   assert.equal(ev.some((e) => e.name === "window_close"), false, "окно закрывается за пределами клипа");
+});
+
+import { detectForward, detectRig } from "./rig.ts";
+import { vsub, type Vec3 } from "./math.ts";
+
+// Гуманоид 1.8 м, лицом к +Z, левая сторона — +X. Имена — по соглашению, геометрия одна.
+const HUMAN: [string, string | null, Vec3][] = [
+  ["hips", null, [0, 1.0, 0]], ["spine", "hips", [0, 1.15, 0]], ["spine1", "spine", [0, 1.3, 0]], ["chest", "spine1", [0, 1.42, 0]],
+  ["neck", "chest", [0, 1.55, 0]], ["head", "neck", [0, 1.65, 0]], ["headtop", "head", [0, 1.85, 0]],
+  ["eye_l", "head", [0.03, 1.72, 0.08]], ["eye_r", "head", [-0.03, 1.72, 0.08]],
+  ["clav_l", "chest", [0.05, 1.5, 0]], ["uarm_l", "clav_l", [0.18, 1.5, 0]], ["farm_l", "uarm_l", [0.45, 1.5, 0]], ["hand_l", "farm_l", [0.7, 1.5, 0]], ["finger_l", "hand_l", [0.8, 1.5, 0]],
+  ["clav_r", "chest", [-0.05, 1.5, 0]], ["uarm_r", "clav_r", [-0.18, 1.5, 0]], ["farm_r", "uarm_r", [-0.45, 1.5, 0]], ["hand_r", "farm_r", [-0.7, 1.5, 0]], ["finger_r", "hand_r", [-0.8, 1.5, 0]],
+  ["thigh_l", "hips", [0.1, 0.95, 0]], ["shin_l", "thigh_l", [0.1, 0.5, 0]], ["foot_l", "shin_l", [0.1, 0.08, 0]], ["toe_l", "foot_l", [0.1, 0.0, 0.15]],
+  ["thigh_r", "hips", [-0.1, 0.95, 0]], ["shin_r", "thigh_r", [-0.1, 0.5, 0]], ["foot_r", "shin_r", [-0.1, 0.08, 0]], ["toe_r", "foot_r", [-0.1, 0.0, 0.15]],
+];
+const CONV: Record<string, Record<string, string>> = {
+  mixamo: { hips: "mixamorig:Hips", spine: "mixamorig:Spine", spine1: "mixamorig:Spine1", chest: "mixamorig:Spine2", neck: "mixamorig:Neck", head: "mixamorig:Head", headtop: "mixamorig:HeadTop_End",
+    eye_l: "mixamorig:LeftEye", eye_r: "mixamorig:RightEye", clav_l: "mixamorig:LeftShoulder", uarm_l: "mixamorig:LeftArm", farm_l: "mixamorig:LeftForeArm", hand_l: "mixamorig:LeftHand", finger_l: "mixamorig:LeftHandIndex1",
+    clav_r: "mixamorig:RightShoulder", uarm_r: "mixamorig:RightArm", farm_r: "mixamorig:RightForeArm", hand_r: "mixamorig:RightHand", finger_r: "mixamorig:RightHandIndex1",
+    thigh_l: "mixamorig:LeftUpLeg", shin_l: "mixamorig:LeftLeg", foot_l: "mixamorig:LeftFoot", toe_l: "mixamorig:LeftToeBase", thigh_r: "mixamorig:RightUpLeg", shin_r: "mixamorig:RightLeg", foot_r: "mixamorig:RightFoot", toe_r: "mixamorig:RightToeBase" },
+  unreal: { hips: "pelvis", spine: "spine_01", spine1: "spine_02", chest: "spine_03", neck: "neck_01", head: "head", headtop: "head_end", eye_l: "FACIAL_L_Eye", eye_r: "FACIAL_R_Eye",
+    clav_l: "clavicle_l", uarm_l: "upperarm_l", farm_l: "lowerarm_l", hand_l: "hand_l", finger_l: "index_01_l", clav_r: "clavicle_r", uarm_r: "upperarm_r", farm_r: "lowerarm_r", hand_r: "hand_r", finger_r: "index_01_r",
+    thigh_l: "thigh_l", shin_l: "calf_l", foot_l: "foot_l", toe_l: "ball_l", thigh_r: "thigh_r", shin_r: "calf_r", foot_r: "foot_r", toe_r: "ball_r" },
+  max: { hips: "Bip01 Pelvis", spine: "Bip01 Spine", spine1: "Bip01 Spine1", chest: "Bip01 Spine2", neck: "Bip01 Neck", head: "Bip01 Head", headtop: "Bip01 HeadNub", eye_l: "Bip01 L Eye", eye_r: "Bip01 R Eye",
+    clav_l: "Bip01 L Clavicle", uarm_l: "Bip01 L UpperArm", farm_l: "Bip01 L Forearm", hand_l: "Bip01 L Hand", finger_l: "Bip01 L Finger0", clav_r: "Bip01 R Clavicle", uarm_r: "Bip01 R UpperArm", farm_r: "Bip01 R Forearm", hand_r: "Bip01 R Hand", finger_r: "Bip01 R Finger0",
+    thigh_l: "Bip01 L Thigh", shin_l: "Bip01 L Calf", foot_l: "Bip01 L Foot", toe_l: "Bip01 L Toe0", thigh_r: "Bip01 R Thigh", shin_r: "Bip01 R Calf", foot_r: "Bip01 R Foot", toe_r: "Bip01 R Toe0" },
+  rigify: { hips: "DEF-pelvis", spine: "DEF-spine", spine1: "DEF-spine.001", chest: "DEF-spine.003", neck: "DEF-neck", head: "DEF-head", headtop: "DEF-head.end", eye_l: "DEF-eye.L", eye_r: "DEF-eye.R",
+    clav_l: "DEF-shoulder.L", uarm_l: "DEF-upper_arm.L", farm_l: "DEF-forearm.L", hand_l: "DEF-hand.L", finger_l: "DEF-f_index.01.L", clav_r: "DEF-shoulder.R", uarm_r: "DEF-upper_arm.R", farm_r: "DEF-forearm.R", hand_r: "DEF-hand.R", finger_r: "DEF-f_index.01.R",
+    thigh_l: "DEF-thigh.L", shin_l: "DEF-shin.L", foot_l: "DEF-foot.L", toe_l: "DEF-toe.L", thigh_r: "DEF-thigh.R", shin_r: "DEF-shin.R", foot_r: "DEF-foot.R", toe_r: "DEF-toe.R" },
+};
+function humanSkel(names: Record<string, string> | null): Skeleton {
+  const pos = new Map(HUMAN.map(([n, , p]) => [n, p]));
+  const nm = (n: string) => (names ? names[n] : `bone${HUMAN.findIndex((h) => h[0] === n)}`);
+  return { nodes: [{ name: "Armature", parent: null, restT: [0, 0, 0], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: false },
+    ...HUMAN.map(([n, par, p]) => ({ name: nm(n), parent: par ? nm(par) : "Armature", restT: (par ? vsub(p, pos.get(par)!) : p) as Vec3, restR: [0, 0, 0, 1] as Quat, restS: [1, 1, 1] as Vec3, isJoint: true }))] };
+}
+
+test("распознавание скелета: Mixamo, Unreal, 3ds Max Biped, Rigify и скелет без имён дают одни и те же части тела", () => {
+  const want = { pelvis: ["hips"], chest: ["chest"], head: ["head"], arm_l: ["uarm_l", "farm_l"], arm_r: ["uarm_r", "farm_r"], leg_l: ["thigh_l", "shin_l"], leg_r: ["thigh_r", "shin_r"] };
+  for (const [conv, names] of [...Object.entries(CONV), ["без имён", null] as const]) {
+    const sk = humanSkel(names as any);
+    const det = detectRig(sk, { up: [0, 1, 0] });
+    const nm = (n: string) => (names ? (names as any)[n] : `bone${HUMAN.findIndex((h) => h[0] === n)}`);
+    for (const [chain, bones] of Object.entries(want)) assert.deepEqual((det.chains as any)[chain], bones.map(nm), `${conv}: ${chain} (${det.method[chain as "head"]})`);
+    assert.deepEqual([det.feet.l, det.feet.r], [nm("foot_l"), nm("foot_r")], `${conv}: ступни`);
+    assert.deepEqual(det.notes, [], conv);
+    const methods = new Set(Object.keys(want).map((c) => det.method[c as "head"]));
+    assert.deepEqual([...methods], [names ? "names" : "geometry"], `${conv}: способ`);
+  }
+});
+
+test("куда смотрит персонаж: по меткам сторон и по носкам, в том числе у развёрнутой модели", () => {
+  const turn = (sk: Skeleton): Skeleton => ({ nodes: sk.nodes.map((n) => (n.parent === null ? { ...n, restR: [0, 1, 0, 0] as Quat } : n)) }); // 180° вокруг Y
+  for (const names of [CONV.mixamo, null]) {
+    const sk = humanSkel(names);
+    const f = detectForward(sk);
+    assert.deepEqual(f.forward.map((x) => +x.toFixed(6) + 0), [0, 0, 1], `${f.by}`);
+    assert.equal(f.by, names ? "names" : "toes");
+    // сдвинутая вбок модель: стороны считаются от центра скелета
+    const shifted: Skeleton = { nodes: sk.nodes.map((n) => (n.parent === null ? { ...n, restT: [5, 0, 0] as Vec3 } : n)) };
+    assert.deepEqual(detectRig(shifted, { up: [0, 1, 0] }).notes, [], "сдвиг на 5 м по X");
+    const back = detectForward(turn(sk)).forward.map((x) => +x.toFixed(6) + 0);
+    assert.deepEqual(back, [0, 0, -1], "развёрнутая на 180°");
+    // распознавание с найденным forward у развёрнутой модели всё ещё видит левую ногу слева
+    const det = detectRig(turn(sk), { up: [0, 1, 0], forward: [0, 0, -1] });
+    const nm = (n: string) => (names ? (names as any)[n] : `bone${HUMAN.findIndex((h) => h[0] === n)}`);
+    assert.deepEqual(det.chains.leg_l, [nm("thigh_l"), nm("shin_l")]);
+    assert.deepEqual(det.notes, []);
+  }
+});
+
+test("оси тела и выравнивание позы: рука из T-позы опускается, потом мах вперёд работает у любого рига", () => {
+  // левая рука в T-позе вдоль +X (локальная +Y → +X) и нарочно закручена вокруг себя на 37°
+  const tw = 37 * DEG / 2, tpose = qmul([0, 0, -Math.SQRT1_2, Math.SQRT1_2], [0, Math.sin(tw), 0, Math.cos(tw)]);
+  const sk: Skeleton = { nodes: [
+    { name: "chest", parent: null, restT: [0, 1.4, 0], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: true },
+    { name: "ua", parent: "chest", restT: [0.2, 0, 0], restR: tpose, restS: [1, 1, 1], isJoint: true },
+    { name: "fa", parent: "ua", restT: [0, 0.3, 0], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: true },
+    { name: "hand", parent: "fa", restT: [0, 0.25, 0], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: true },
+  ] };
+  const rig = buildRig(sk);
+  close(rig.worldT[3][0], 0.2 + 0.55, 1e-9, "T-поза: кисть вбок");
+  const pr = (layers: any[], align?: any): Project => ({ version: 1, name: "t", model: "", up: [0, 1, 0], chains: { arm_l: ["ua", "fa"] }, ...(align ? { align } : {}),
+    clips: [{ name: "c", duration: 1, fps: 10, loop: true, layers }] });
+  const hand = (p: Project) => worldPose(rig, posePartsAt(p, rig, p.clips[0], 0)).T[3];
+  const down = hand(pr([], { arm_l: { to: "down" } }));
+  close(down[0], 0.2, 1e-9); close(down[1], 1.4 - 0.55, 1e-9, "опущена вниз");
+  const ab = hand(pr([], { arm_l: { to: "down", abduct: 30 } }));
+  close(ab[0], 0.2 + 0.55 * Math.sin(30 * DEG), 1e-9, "A-поза: отведена наружу");
+  // мах −pitch 40° после выравнивания: кисть уходит вперёд (+Z) и вверх
+  const sw = hand(pr([{ id: "k", type: "keys", tracks: [{ bone: "ua", axis: "pitch", keys: [{ t: 0, v: -40 }] }] }], { arm_l: { to: "down" } }));
+  close(sw[2], 0.55 * Math.sin(40 * DEG), 1e-9, "вперёд"); close(sw[0], 0.2, 1e-9, "в своей плоскости");
+  // +bank отводит руку наружу (влево у левой), как и задумано для бокового маха
+  const bk = hand(pr([{ id: "k", type: "keys", tracks: [{ bone: "ua", axis: "bank", keys: [{ t: 0, v: 30 }] }] }], { arm_l: { to: "down" } }));
+  close(Math.abs(bk[0] - 0.2), 0.55 * Math.sin(30 * DEG), 1e-9, "боковой мах"); close(bk[2], 0, 1e-9);
+  // rig.detect: T-позу (90° от «вниз») опускает, а висящую руку не трогает
+  const sg = suggestAlign(rig, pr([]));
+  close(sg.angles.arm_l, 90, 0.1); assert.deepEqual(sg.align, { arm_l: { to: "down", abduct: 8 } });
+  const hung = buildRig({ nodes: sk.nodes.map((n) => n.name === "ua" ? { ...n, restR: [0, 0, 1, 0] as Quat } : n) });
+  close(suggestAlign(hung, pr([])).angles.arm_l, 0, 0.1); assert.deepEqual(suggestAlign(hung, pr([])).align, {});
+});
+
+test("масштаб корня (FBX в сантиметрах) входит в rest-мир: IK и пол работают в тех же метрах, что и экспорт", () => {
+  const sk: Skeleton = { nodes: [
+    { name: "Armature", parent: null, restT: [0, 0, 0], restR: [0, 0, 0, 1], restS: [0.01, 0.01, 0.01], isJoint: false },
+    { name: "hips", parent: "Armature", restT: [0, 100, 0], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: true },
+    { name: "knee", parent: "hips", restT: [0, -50, 0], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: true },
+  ] };
+  const rig = buildRig(sk);
+  close(rig.worldT[1][1], 1, 1e-9, "таз на метре"); close(rig.worldT[2][1], 0.5, 1e-9, "колено");
+  const w = worldPose(rig, posePartsAt({ version: 1, name: "t", model: "", up: [0, 1, 0], chains: {}, clips: [] }, rig, { name: "c", duration: 1, fps: 10, loop: true, layers: [] }, 0));
+  close(w.T[2][1], rig.worldT[2][1], 1e-9, "rest и FK согласны");
+  // сдвиг таза на 0.1 м в мире = 10 локальных сантиметров
+  const mv = worldPose(rig, posePartsAt({ version: 1, name: "t", model: "", up: [0, 1, 0], chains: {}, clips: [] }, rig, { name: "c", duration: 1, fps: 10, loop: true,
+    layers: [{ id: "k", type: "keys", tracks: [{ bone: "hips", axis: "move_up", keys: [{ t: 0, v: 0.1 }] }] }] } as any, 0));
+  close(mv.T[1][1], 1.1, 1e-9, "move_up в метрах");
 });

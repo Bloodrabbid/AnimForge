@@ -5,7 +5,8 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { COMMANDS, Ctx, Project, RECIPES, TweenPreset, buildRig, clipEvents, emptyProject, frameTimes, posePartsAt, readSkeleton, runCommand, samplePreset, writeClips } from "../../core/src/index.ts";
+import { COMMANDS, Clip, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectForward, detectRig, emptyProject, frameTimes, posePartsAt, readSkeleton, runCommand, samplePreset, suggestAlign, writeClips } from "../../core/src/index.ts";
+import { loadSkinScene, skinFrame, skinTopology } from "./skin.ts";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 export const GODOT = process.env.GODOT ?? "/Applications/Godot.app/Contents/MacOS/Godot";
@@ -70,23 +71,36 @@ export async function exportGlb(ctx: Ctx & { dir: string }, out: string) {
   return { out, clips: report, ...(empty.length ? { warning: `пустые клипы не записаны (нет слоёв, двигающих кости): ${empty.join(", ")}` } : {}) };
 }
 
-/** «Глаза»: рендер клипа в Blender → лист кадров PNG. */
-function renderFrames(glb: string, clip: string, dir: string, frames: number, view: string, dist = 3.4, size: [number, number] = [480, 300]) {
-  const log = execFileSync(BLENDER, ["-b", "--python", join(ROOT, "bridge/blender/render_sheet.py"), "--", glb, clip, dir, String(frames), view, String(dist), String(size[0]), String(size[1])], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 });
+/** «Глаза»: кадры клипа. Позу считает ядро, кожу — skin.ts по спецификации glTF, Blender только рисует треугольники.
+ * Кадр k из count — момент duration·k/count. */
+async function renderFrames(ctx: Ctx & { dir: string }, clip: Clip, dir: string, count: number, view: string, dist = 1, size: [number, number] = [480, 300]) {
+  const sc = loadSkinScene(await io.read(join(ctx.dir, ctx.project.model)));
+  if (!sc.parts.length) throw new Error("в модели нет мешей — рисовать нечего");
+  const rig = buildRig(ctx.skeleton);
+  const fw = bodyFrame(ctx.project).forward;
+  const yaw = Math.abs(ctx.project.up[1]) > 0.99 ? -Math.atan2(fw[0], fw[2]) : 0; // лицом на +Z, только для Y-up
+  const frames = Array.from({ length: count }, (_, k) => skinFrame(sc, posePartsAt(ctx.project, rig, clip, (clip.duration * k) / count), yaw));
+  const topo = join(dir, "topo.json"), bin = join(dir, "frames.bin");
+  writeFileSync(topo, JSON.stringify(skinTopology(sc)));
+  writeFileSync(bin, Buffer.concat(frames.map((f) => Buffer.from(f.buffer, f.byteOffset, f.byteLength))));
+  const log = execFileSync(BLENDER, ["-b", "--python", join(ROOT, "bridge/blender/render_mesh.py"), "--", topo, bin, dir, String(count), view, String(dist), String(size[0]), String(size[1])], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 });
   if (!log.includes("SHEET_OK")) throw new Error("Blender не отрендерил кадры:\n" + log.split("\n").filter((l) => /SHEET|Error|Traceback/.test(l)).join("\n"));
   return readdirSync(dir).filter((f) => f.endsWith(".png")).sort().map((f) => join(dir, f));
 }
 
+const findClip = (ctx: Ctx, name: string) => {
+  const clip = ctx.project.clips.find((c) => c.name === name);
+  if (!clip) throw new Error(`нет клипа «${name}»`);
+  return clip;
+};
+
 /** Видео клипа: один проход рендерится в Blender, ffmpeg повторяет его loops раз. */
 export async function renderVideo(ctx: Ctx & { dir: string }, clipName: string, view: string, loops: number, dist: number, out: string) {
-  const clip = ctx.project.clips.find((c) => c.name === clipName);
-  if (!clip) throw new Error(`нет клипа «${clipName}»`);
+  const clip = findClip(ctx, clipName);
   const tmp = mkdtempSync(join(tmpdir(), "af-video-"));
   try {
-    const glb = join(tmp, "clip.glb");
-    await exportGlb(ctx, glb);
     const n = Math.max(2, Math.round(clip.duration * clip.fps));
-    renderFrames(glb, clipName, tmp, n, view, dist, [720, 720]);
+    await renderFrames(ctx, clip, tmp, n, view, dist, [720, 720]);
     mkdirSync(dirname(out), { recursive: true });
     execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-stream_loop", String(Math.max(0, loops - 1)), "-framerate", String(n / clip.duration), "-i", join(tmp, "f_%03d.png"), "-pix_fmt", "yuv420p", "-vf", "scale=720:720", out]);
     return { out, frames: n, loops, seconds: +(clip.duration * loops).toFixed(2) };
@@ -95,12 +109,10 @@ export async function renderVideo(ctx: Ctx & { dir: string }, clipName: string, 
   }
 }
 
-export async function renderSheet(ctx: Ctx & { dir: string }, clip: string, frames: number, view: string, out: string, dist = 3.4) {
+export async function renderSheet(ctx: Ctx & { dir: string }, clip: string, frames: number, view: string, out: string, dist = 1) {
   const tmp = mkdtempSync(join(tmpdir(), "af-sheet-"));
   try {
-    const glb = join(tmp, "clip.glb");
-    await exportGlb(ctx, glb);
-    const pngs = renderFrames(glb, clip, tmp, frames, view, dist);
+    const pngs = await renderFrames(ctx, findClip(ctx, clip), tmp, frames, view, dist);
     mkdirSync(dirname(out), { recursive: true });
     const cols = Math.min(4, pngs.length);
     // ряды по cols кадров: ( a b c d +append ) ( e f g h +append ) -append — без шрифтов, в отличие от montage
@@ -250,6 +262,65 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
       return { ok: lines.some((l) => l.includes("VERIFY_OK")), godot: lines };
     },
   },
+  "model.import": {
+    help: "Импорт чужой модели (FBX, OBJ, glTF, DAE) через Blender → glb со скином, без исходных анимаций.",
+    args: { file: { type: "string", required: true, help: "исходный файл" }, out: { type: "string", help: "куда (по умолчанию assets/<имя>.glb)" } },
+    async run(dir, a) {
+      // путь к исходнику — от папки, где запустили команду (pnpm --dir меняет cwd; исходную он кладёт в INIT_CWD)
+      const src = resolve(process.env.INIT_CWD ?? process.cwd(), a.file);
+      const out = resolve(dir, a.out ?? `assets/${src.replace(/^.*\//, "").replace(/\.[^.]+$/, "")}.glb`);
+      mkdirSync(dirname(out), { recursive: true });
+      const log = execFileSync(BLENDER, ["-b", "--python", join(ROOT, "bridge/blender/import_model.py"), "--", src, out], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 });
+      const ok = log.split("\n").find((l) => l.startsWith("IMPORT_OK"));
+      if (!ok) throw new Error("Blender не импортировал модель:\n" + log.split("\n").filter((l) => /IMPORT|Error|Traceback/.test(l)).join("\n"));
+      return { out, log: ok };
+    },
+  },
+  "rig.detect": {
+    help: "Распознать скелет модели (по именам Mixamo/Unreal/Unity/Rigify/3ds Max или по геометрии) и записать стандартные цепочки: pelvis, spine, chest, neck, head, arm_l/r, leg_l/r, tail, eye_l/r.",
+    args: { write: { type: "boolean", help: "записать цепочки в проект (по умолчанию да)" } },
+    async run(dir, a) {
+      const ctx = await loadCtx(dir);
+      // сначала — куда смотрит персонаж (от этого зависят «лево/право» и плоскости маха)
+      const fw = detectForward(ctx.skeleton, ctx.project.up);
+      ctx.project.forward = fw.forward.map((x) => +x.toFixed(4)) as [number, number, number];
+      const det = { ...detectRig(ctx.skeleton, ctx.project), forward: ctx.project.forward, forwardBy: fw.by };
+      for (const [k, v] of Object.entries(det.chains)) if (v) ctx.project.chains[k] = v;
+      // руки в T/A-позе сначала опускаются вниз — от этой позы считаются все махи рецептов
+      const al = suggestAlign(buildRig(ctx.skeleton), ctx.project);
+      if (Object.keys(al.align).length) ctx.project.align = { ...ctx.project.align, ...al.align };
+      if (a.write !== false) saveProject(dir, ctx.project);
+      return { ...det, armAngles: al.angles, align: ctx.project.align ?? {} };
+    },
+  },
+  "recipe.rig": {
+    help: "Поставить рецепт сразу на всё тело: по слою на каждую роль рецепта (ходьба — таз, грудь, голова, руки, ноги; удар — рука, корпус, таз), на стандартные цепочки из rig.detect.",
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      recipe: { type: "string", required: true, help: "рецепт с ролями: waddle-walk, melee-strike, charge-release, compass-step, blink" },
+      preset: { type: "string", help: "пресет библиотеки" },
+      params: { type: "json", help: "поверх пресета" },
+      side: { type: "string", help: "рука для ударов: r (по умолчанию) | l" },
+    },
+    async run(dir, a) {
+      const ctx = await loadCtx(dir);
+      const def = RECIPES[a.recipe];
+      if (!def?.roles) throw new Error(`у рецепта «${a.recipe}» нет ролей. С ролями: ${Object.entries(RECIPES).filter(([, d]) => d.roles).map(([n]) => n).join(", ")}`);
+      const base = a.preset ? findPreset(a.preset).preset.params : {};
+      const added: string[] = [], skipped: string[] = [];
+      for (const [role, r] of Object.entries(def.roles)) {
+        const chain = typeof r.chain === "function" ? r.chain(a.side === "l" ? "l" : "r") : r.chain;
+        if (!ctx.project.chains[chain]) { skipped.push(`${role} (нет цепочки ${chain})`); continue; }
+        const id = `${chain}_${a.recipe}`;
+        const clip = ctx.project.clips.find((c) => c.name === a.clip);
+        if (clip) clip.layers = clip.layers.filter((l) => l.id !== id); // повторный вызов заменяет слой
+        runCommand(ctx, "recipe.add", { clip: a.clip, recipe: a.recipe, chain, id, preset: a.preset, params: { ...base, ...(def.params.role ? { role } : {}), ...(r.params ?? {}), ...(a.params ?? {}) } });
+        added.push(id);
+      }
+      saveProject(dir, ctx.project);
+      return { added, skipped };
+    },
+  },
   "clip.events": {
     help: "События клипа от рецептов (hit, whoosh, trail_on/off, window_open/close…) с временем в секундах.",
     args: { clip: { type: "string", required: true, help: "клип" } },
@@ -307,9 +378,9 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
       out: { type: "string", required: true, help: "png" },
       frames: { type: "number", help: "сколько кадров, по умолчанию 8" },
       view: { type: "string", help: "side | top | three_quarter (по умолчанию) — тела вдоль X; front | profile | profile_r | front_3q | front_3q_r — персонажи" },
-      dist: { type: "number", help: "отдаление камеры в радиусах модели, по умолчанию 3.4" },
+      dist: { type: "number", help: "отдаление камеры: 1 — персонаж во всех позах клипа целиком (по умолчанию), 0.6 — крупнее, 1.5 — дальше" },
     },
-    run: async (dir, a) => renderSheet(await loadCtx(dir), a.clip, a.frames ?? 8, a.view ?? "three_quarter", resolve(dir, a.out), a.dist ?? 3.4),
+    run: async (dir, a) => renderSheet(await loadCtx(dir), a.clip, a.frames ?? 8, a.view ?? "three_quarter", resolve(dir, a.out), a.dist ?? 1),
   },
   video: {
     help: "Видео клипа (mp4, 720×720) через Blender + ffmpeg: один проход, повторённый loops раз.",
@@ -318,9 +389,9 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
       out: { type: "string", required: true, help: "mp4" },
       view: { type: "string", help: "как у sheet, по умолчанию three_quarter" },
       loops: { type: "number", help: "сколько раз повторить, по умолчанию 4" },
-      dist: { type: "number", help: "отдаление камеры, по умолчанию 2.6" },
+      dist: { type: "number", help: "отдаление камеры: 1 — персонаж во всех позах клипа целиком (по умолчанию)" },
     },
-    run: async (dir, a) => renderVideo(await loadCtx(dir), a.clip, a.view ?? "three_quarter", a.loops ?? 4, a.dist ?? 2.6, resolve(dir, a.out)),
+    run: async (dir, a) => renderVideo(await loadCtx(dir), a.clip, a.view ?? "three_quarter", a.loops ?? 4, a.dist ?? 1, resolve(dir, a.out)),
   },
 };
 

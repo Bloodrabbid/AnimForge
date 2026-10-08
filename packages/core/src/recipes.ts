@@ -30,6 +30,9 @@ export interface RecipeDef {
   evaluate(p: Record<string, any>, i: number, n: number, t: number, info?: BoneInfo): Partial<Record<Channel, number>>;
   /** Вторичная динамика: считается не формулой, а симуляцией по движению остальных слоёв (evaluate.ts). */
   secondary?: boolean;
+  /** Какую стандартную цепочку (rig.ts) берёт каждая роль — для `recipe.rig`: один вызов ставит слои на всё тело.
+   * Значение — имя цепочки или функция от стороны («r»/«l», для ударов). Плюс параметры, которые роль требует. */
+  roles?: Record<string, { chain: string | ((side: "l" | "r") => string); params?: Record<string, string | number> }>;
   /** События рецепта (удар, звук, шлейф, окно ввода) в секундах клипа — уходят в экспорт и в Godot. */
   events?(p: Record<string, any>): ClipEvent[];
 }
@@ -114,6 +117,7 @@ function springCycle(key: string, period: number, hz: number, zeta: number, targ
 
 const compassStep: RecipeDef = {
   name: "compass-step",
+  roles: { leg_left: { chain: "leg_l" }, leg_right: { chain: "leg_r" }, core: { chain: "pelvis", params: { plane: "lateral" } } },
   help:
     "Шаг циркулем (Biped): шагающая нога раскрывается на reach за openTime, опорная отклоняется на −support, " +
     "корпус кренится на coreRoll над опорной ногой. Ноги в противофазе. Резкие смены позы сглаживает пружина " +
@@ -165,10 +169,11 @@ function bobAt(s: number): number {
 
 const waddleWalk: RecipeDef = {
   name: "waddle-walk",
+  roles: Object.fromEntries(["pelvis", "chest", "head", "arm_l", "arm_r", "leg_l", "leg_r"].map((r) => [r, { chain: r }])),
   help:
     "Мультяшная ходьба вразвалку (Tools Up!): таз рыщет и подпрыгивает, плечи в противофазе, голова стабилизирована, " +
-    "руки маятником, ноги — простой мах с подгибом колена. Один слой на роль. У вертикальной цепочки (спина, ноги, руки) " +
-    "каналы такие: roll — поворот вокруг вертикали (рыскание), lateral — крен вбок, vertical — мах вперёд-назад.",
+    "руки маятником, ноги — простой мах с подгибом колена. Один слой на роль. Повороты — в осях тела (yaw, bank, pitch), " +
+    "поэтому рецепт одинаков для любого рига; руки в T-позе сначала опусти project.align (rig.detect делает это сам).",
   params: {
     role: { type: "enum", default: "pelvis", options: ["pelvis", "chest", "head", "arm_l", "arm_r", "leg_l", "leg_r"], help: "какую часть тела крутит слой (первая кость цепочки; у ног и рук — две кости)" },
     period: { type: "number", default: 0.479, min: 0.3, max: 2, unit: "с", help: "цикл из двух шагов (Tools Up!: 0.479, с ношей 0.5–0.6; TLJ: ходьба 1.3–1.37, бег 0.73)" },
@@ -193,11 +198,11 @@ const waddleWalk: RecipeDef = {
     // Углы Tools Up! замерены в осях персонажа (мировые для каждой кости). Кости вложены: грудь в тазу, голова в груди,
     // поэтому слой отдаёт разницу «своё − родителя»: тогда в мире грудь крутится на −16°, а голова почти неподвижна.
     const world = {
-      pelvis: { roll: p.pelvisYaw * sw, lateral: p.pelvisRoll * Math.sin(w + p.rollPhase * rad) },
-      chest: { roll: p.chestCounter * p.pelvisYaw * Math.sin(w + p.chestPhase * rad), lateral: p.chestRoll * Math.sin(w + (p.rollPhase - 2) * rad) },
-      head: { roll: p.headYaw * Math.sin(w + Math.PI), lateral: p.headRoll * Math.sin(w + (p.rollPhase + p.headLag) * rad) },
+      pelvis: { yaw: p.pelvisYaw * sw, bank: p.pelvisRoll * Math.sin(w + p.rollPhase * rad) },
+      chest: { yaw: p.chestCounter * p.pelvisYaw * Math.sin(w + p.chestPhase * rad), bank: p.chestRoll * Math.sin(w + (p.rollPhase - 2) * rad) },
+      head: { yaw: p.headYaw * Math.sin(w + Math.PI), bank: p.headRoll * Math.sin(w + (p.rollPhase + p.headLag) * rad) },
     };
-    const rel = (a: { roll: number; lateral: number }, b: { roll: number; lateral: number }) => ({ roll: a.roll - b.roll, lateral: a.lateral - b.lateral });
+    const rel = (a: { yaw: number; bank: number }, b: { yaw: number; bank: number }) => ({ yaw: a.yaw - b.yaw, bank: a.bank - b.bank });
     switch (p.role) {
       case "pelvis":
         if (i > 0) return {};
@@ -212,13 +217,13 @@ const waddleWalk: RecipeDef = {
       case "arm_r": {
         if (i > 0) return {};
         const s = p.role === "arm_l" ? 1 : -1;
-        return { vertical: s * p.armSwing * sw };
+        return { pitch: -s * p.armSwing * sw }; // − : свисающая рука вперёд
       }
       default: {
         // нога: бедро — маятник в противофазе своей руке; колено гнётся, пока нога идёт вперёд (перенос)
         const s = p.role === "leg_l" ? -1 : 1;
-        if (i === 0) return { vertical: s * p.legSwing * sw };
-        if (i === 1) return { vertical: -p.knee * Math.max(0, s * Math.cos(w)) };
+        if (i === 0) return { pitch: -s * p.legSwing * sw };
+        if (i === 1) return { pitch: p.knee * Math.max(0, s * Math.cos(w)) }; // + : голень назад — колено сгибается
         return {};
       }
     }
@@ -227,6 +232,7 @@ const waddleWalk: RecipeDef = {
 
 const blink: RecipeDef = {
   name: "blink",
+  roles: { eye_l: { chain: "eye_l" }, eye_r: { chain: "eye_r" } },
   help:
     "Моргание масштабом кости глаза (Tools Up!): сплющить по вертикали и чуть расширить, подержать, открыть с перелётом. " +
     "Цикл = interval; моргание в начале цикла.",
@@ -314,8 +320,12 @@ function strikePos(p: Record<string, any>, t: number): { pos: number; phase: "re
   return { pos: 0, phase: "rest", i: p.hits - 1 };
 }
 
+const strikeRoles: RecipeDef["roles"] = { arm: { chain: (s) => `arm_${s}` }, core: { chain: "chest" }, pelvis: { chain: "pelvis" } };
+// у charge-release нет параметра side — recipe.rig передаёт его только тем, у кого он есть
+
 const meleeStrike: RecipeDef = {
   name: "melee-strike",
+  roles: strikeRoles,
   help:
     "Удар или серия ударов (Witcher + Tools Up!): замах → взмах с пиком скорости в контакте → доводка → возврат → окно на " +
     "следующий ввод. Один слой на роль: arm — цепочка плечо→локоть (мах vertical, локоть сгибается в крайних точках), " +
@@ -337,6 +347,7 @@ const meleeStrike: RecipeDef = {
     followAngle: { type: "number", default: 20, min: -120, max: 120, unit: "°", help: "где рука заканчивает взмах: 20 — рубящий удар закончен впереди-внизу, −60 — рука уходит за спину (на глаз)" },
     elbow: { type: "number", default: 60, min: 0, max: 140, unit: "°", help: "сгиб локтя в замахе; к доводке рука выпрямляется (на глаз)" },
     plane: { type: "enum", default: "vertical", options: ["vertical", "lateral"], help: "плоскость маха руки: vertical — рубящий сверху (вперёд-вверх), lateral — вбок" },
+    side: { type: "enum", default: "r", options: ["l", "r"], help: "какой рукой (для бокового маха — в какую сторону)" },
     coreTwist: { type: "number", default: 25, min: 0, max: 60, unit: "°", help: "кручение корпуса за рукой (на глаз)" },
     coreLean: { type: "number", default: 10, min: 0, max: 40, unit: "°", help: "наклон корпуса за рукой (на глаз)" },
     crouch: { type: "number", default: 0.1, min: 0, max: 0.4, help: "присед на замахе — доля высоты таза (на глаз)" },
@@ -352,11 +363,14 @@ const meleeStrike: RecipeDef = {
     const { pos, phase } = strikePos(p, tt);
     switch (p.role) {
       case "arm": {
+        // pitch < 0 — свисающая рука вперёд-вверх; локоть сгибается тоже «вперёд» (−pitch вокруг той же оси)
         const a = armPath(pos, phase, p.windupAngle, p.followAngle);
-        return i === 0 ? { [p.plane]: a.angle } : { [p.plane]: -p.elbow * a.w };
+        const ch = p.plane === "lateral" ? "bank" : "pitch";
+        const sgn = p.plane === "lateral" ? (p.side === "l" ? -1 : 1) : -1;
+        return i === 0 ? { [ch]: sgn * a.angle } : { pitch: -p.elbow * a.w };
       }
       case "core":
-        return { roll: pos * p.coreTwist, vertical: -pos * p.coreLean };
+        return { yaw: pos * p.coreTwist * (p.side === "l" ? -1 : 1), pitch: -pos * p.coreLean };
       default: {
         const h = info?.height ?? 0;
         const pl = strikePlan(p);
@@ -384,6 +398,7 @@ const meleeStrike: RecipeDef = {
 
 const chargeRelease: RecipeDef = {
   name: "charge-release",
+  roles: strikeRoles,
   help:
     "Силовая атака (Witcher): долгий замах → удержание с пружинящим корнем (петля) → выпуск двумя ударами → возврат. " +
     "Роли как у melee-strike. События: charge_start, charge_full, hit ×2, window_open.",
@@ -417,9 +432,9 @@ const chargeRelease: RecipeDef = {
     if (p.role === "arm") {
       // в возврате рука идёт из точки второго взмаха (0.6 пути к замаху) в покой
       const a = phase === "recover" ? { angle: (p.followAngle + (p.windupAngle - p.followAngle) * 0.8) * (pos / 0.6), w: 0.8 * (pos / 0.6) } : armPath(pos, phase, p.windupAngle, p.followAngle);
-      return i === 0 ? { vertical: a.angle } : { vertical: -p.elbow * a.w };
+      return i === 0 ? { pitch: -a.angle } : { pitch: -p.elbow * a.w };
     }
-    if (p.role === "core") return { roll: pos * p.coreTwist };
+    if (p.role === "core") return { yaw: pos * p.coreTwist };
     const hgt = info?.height ?? 0;
     const charge = t < A ? smooth(t / A) : t < B ? 1 : 1 - smooth((t - B) / Math.max(1e-6, p.hit1));
     const bob = t >= A && t < B ? p.holdBob * hgt * 0.5 * (1 - Math.cos((2 * Math.PI * (t - A)) / p.holdPeriod)) : 0;

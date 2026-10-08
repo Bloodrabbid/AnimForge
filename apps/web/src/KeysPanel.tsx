@@ -5,6 +5,7 @@ import { evalKeys, type Clip, type Interp, type KeyLayer, type KeyTrack, type Ch
 const AXES: Channel[] = CHANNELS;
 const AXIS_RU: Record<Channel, string> = {
   lateral: "вбок", vertical: "вверх-вниз", roll: "крен",
+  pitch: "наклон тела (+ вперёд)", yaw: "поворот тела (+ влево)", bank: "крен тела (+ вправо)",
   move_up: "сдвиг вверх, м", move_forward: "сдвиг вперёд, м", move_side: "сдвиг вбок, м",
   scale_up: "масштаб по вертикали, +доля", scale_forward: "масштаб вперёд, +доля", scale_side: "масштаб вбок, +доля",
 };

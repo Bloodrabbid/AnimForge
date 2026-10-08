@@ -23,9 +23,13 @@ export type MoveAxis = "move_up" | "move_forward" | "move_side";
 /** Масштаб кости (множитель) вдоль направлений тела; ось кости выбирается та, что ближе к направлению. */
 export type ScaleAxis = "scale_up" | "scale_forward" | "scale_side";
 
+/** Повороты вокруг осей всего тела (одинаковы для любого рига): pitch — вокруг бока (+ — верх уходит вперёд,
+ * свисающая рука — назад), yaw — вокруг вертикали (+ — влево), bank — вокруг «вперёд» (+ — верх уходит вправо). */
+export type BodyAxis = "pitch" | "yaw" | "bank";
+
 /** Любой канал, который выдают рецепты и ручные ключи. Повороты — в градусах. */
-export type Channel = SemanticAxis | MoveAxis | ScaleAxis;
-export const CHANNELS: Channel[] = ["lateral", "vertical", "roll", "move_up", "move_forward", "move_side", "scale_up", "scale_forward", "scale_side"];
+export type Channel = SemanticAxis | BodyAxis | MoveAxis | ScaleAxis;
+export const CHANNELS: Channel[] = ["lateral", "vertical", "roll", "pitch", "yaw", "bank", "move_up", "move_forward", "move_side", "scale_up", "scale_forward", "scale_side"];
 
 export type Interp = "smooth" | "linear" | "step";
 
@@ -76,6 +80,9 @@ export interface Project {
   model: string; // путь к glb относительно файла проекта
   up: Vec3; // «верх» мира модели; glTF — +Y
   forward?: Vec3; // куда смотрит персонаж; по умолчанию +Z (так экспортирует Blender: его −Y → glTF +Z)
+  /** Выравнивание позы покоя перед всеми слоями: цепочка разворачивается к направлению тела (руки из T-позы — вниз).
+   * to — куда смотрит цепочка: down; abduct — отвести от тела вбок на столько градусов (A-поза). */
+  align?: Record<string, { to: "down"; abduct?: number }>;
   chains: Record<string, string[]>; // имя цепочки → кости от основания к кончику
   clips: Clip[];
 }
