@@ -65,6 +65,15 @@ lo, hi = Vector(lo), Vector(hi)
 c = (lo + hi) / 2
 r = (hi - lo).length / 2
 set_frame(0)
+# пол — непрозрачный диск на z = 0: видно, как стоят ноги, и что ушло под землю или под воду
+fl = bpy.data.meshes.new("floor")
+R = max(r * 4, 1e-3)
+ring = [(c.x + R * math.cos(2 * math.pi * k / 48), c.y + R * math.sin(2 * math.pi * k / 48), 0.0) for k in range(48)]
+fl.from_pydata(ring, [], [list(range(48))])
+fm = bpy.data.materials.new("floor")
+fm.diffuse_color = (0.78, 0.8, 0.83, 1)
+fl.materials.append(fm)
+sc.collection.objects.link(bpy.data.objects.new("floor", fl))
 # side/top/three_quarter — для тел вдоль X (рыба, змея); front/profile — для персонажей, смотрящих на −Y Blender
 el, az = {"side": (5, -90), "top": (89, -90), "three_quarter": (35, -60), "front": (8, -90), "profile": (8, 0), "profile_r": (8, 180), "front_3q": (20, -55), "front_3q_r": (20, -125)}[view]
 el, az = math.radians(el), math.radians(az)
