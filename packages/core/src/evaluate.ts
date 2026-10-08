@@ -294,7 +294,7 @@ function solveConstraint(acc: Acc, rig: Rig, project: Project, clip: Clip, c: Co
   if (!P) return;
   const w = Math.max(0, Math.min(1, c.weight ?? 1));
   if (w === 0) return;
-  if (c.type === "ik") twoBoneIK(acc, rig, project, c.tip, P, c.pole, w);
+  if (c.type === "ik") twoBoneIK(acc, rig, project, c.tip, P, c.pole, w, !!c.end);
   else aim(acc, rig, project, c.bones, P, w);
 }
 
@@ -320,14 +320,16 @@ function aim(acc: Acc, rig: Rig, project: Project, bones: string[], P: Vec3, wei
 
 /** Двухзвенная IK: кончик tip — в точку P (если дотягивается; иначе рука вытягивается к ней). Сгибаются родитель
  * и дед кончика. pole — куда смотрит сгиб; без неё — текущая плоскость сгиба (у прямой — колено вперёд). */
-function twoBoneIK(acc: Acc, rig: Rig, project: Project, tip: string, P: Vec3, pole: Vec3 | undefined, weight: number) {
+function twoBoneIK(acc: Acc, rig: Rig, project: Project, tip: string, P: Vec3, pole: Vec3 | undefined, weight: number, end = false) {
   const fi = rig.index.get(tip);
   if (fi == null) return;
-  const si = rig.parent[fi], ti = si >= 0 ? rig.parent[si] : -1;
+  // end: кончик — конец самой tip (продолжение на длину родителя), сгибаются tip и родитель
+  const si = end ? fi : rig.parent[fi], ti = si >= 0 ? rig.parent[si] : -1;
   if (si < 0 || ti < 0) return;
   const { forward } = bodyFrame(project);
   const w = worldPose(rig, acc.parts());
-  const H = w.T[ti], K = w.T[si], F = w.T[fi];
+  const H = w.T[ti], K = w.T[si];
+  const F = end ? vadd(K, qrot(qmul(w.R[si], qinv(rig.worldR[si])), vsub(rig.worldT[si], rig.worldT[ti]))) : w.T[fi];
   const a = Math.hypot(...vsub(K, H)), b = Math.hypot(...vsub(F, K));
   if (a < 1e-9 || b < 1e-9) return;
   const d = Math.min(a + b - 1e-6, Math.max(Math.abs(a - b) + 1e-6, Math.hypot(...vsub(P, H))));

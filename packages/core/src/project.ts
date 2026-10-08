@@ -90,6 +90,9 @@ export interface IKConstraint {
   id: string;
   type: "ik";
   tip: string;
+  /** у кости-кончика нет дочерней (рука-варежка): тянется конец самой tip, длиной как её родитель;
+   * сгибаются tip и её родитель */
+  end?: boolean;
   target: ConstraintTarget;
   pole?: Vec3;
   weight?: number;

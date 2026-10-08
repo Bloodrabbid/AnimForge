@@ -95,6 +95,31 @@ try {
     await send("Runtime.evaluate", { expression: process.env.AF_EVAL, awaitPromise: true }, sessionId).catch(() => {});
     await new Promise((r) => setTimeout(r, Number(process.env.AF_WAIT_MS ?? 3000)));
   }
+  if (process.env.AF_DRAG) {
+    // перетащить ручку активной цели настоящей мышью: AF_DRAG="dx,dy" — сдвиг в пикселях от её центра
+    const [dx, dy] = process.env.AF_DRAG.split(",").map(Number);
+    await new Promise((r) => setTimeout(r, 800));
+    const h = await send("Runtime.evaluate", { expression: "window.__afHandle ? window.__afHandle() : null", returnByValue: true }, sessionId);
+    if (!h.result.value) throw new Error("нет активной цели для перетаскивания");
+    const [x, y] = h.result.value as [number, number];
+    const mouse = (type: string, px: number, py: number, buttons = 1) =>
+      send("Input.dispatchMouseEvent", { type, x: px, y: py, button: "left", buttons, clickCount: 1 }, sessionId);
+    const before = await send("Runtime.evaluate", { expression: "document.querySelector('.status')?.textContent ?? ''", returnByValue: true }, sessionId);
+    await mouse("mouseMoved", x, y, 0);
+    await mouse("mousePressed", x, y);
+    for (let k = 1; k <= 10; k++) await mouse("mouseMoved", x + (dx * k) / 10, y + (dy * k) / 10);
+    await mouse("mouseReleased", x + dx, y + dy, 0);
+    for (const until = Date.now() + 10000; ; ) {
+      const s = await send("Runtime.evaluate", { expression: "document.querySelector('.status')?.textContent ?? ''", returnByValue: true }, sessionId);
+      if (s.result.value !== before.result.value) {
+        console.log(`статус: ${s.result.value}`);
+        break;
+      }
+      if (Date.now() > until) throw new Error("перетаскивание не дошло до команды");
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    await new Promise((r) => setTimeout(r, 1500));
+  }
   if (process.env.AF_CLICK) {
     // нажать кнопку по началу её текста (например «Ключ в t») и дождаться ответа команды в строке статуса
     const before = await send("Runtime.evaluate", { expression: "document.querySelector('.status')?.textContent ?? ''", returnByValue: true }, sessionId);

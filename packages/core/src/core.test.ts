@@ -997,6 +997,7 @@ const W = (pr: Project, t = 0) => {
   return { at: (b: string) => w.T[rig.index.get(b)!], R: (b: string) => w.R[rig.index.get(b)!], rig, parts: posePartsAt(pr, rig, pr.clips[0], t) };
 };
 const dist = (a: Vec3, b: Vec3) => Math.hypot(...vsub(a, b));
+const vadd3 = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 
 test("IK: кисть встаёт в достижимую цель, к недостижимой рука вытягивается; вес — часть пути; pole задаёт сторону локтя", () => {
   const target: Vec3 = [0.4, 1.2, 0.25];
@@ -1021,6 +1022,11 @@ test("IK: кисть встаёт в достижимую цель, к недо�
     assert.ok(Math.sign(p.at("farm_l")[1] - 1.5) === Math.sign(py), `локоть к полюсу ${py}: ${p.at("farm_l")}`);
   }
   // выключенный — ничего не делает
+  // рука без кисти (end): тянется конец предплечья — продолжение на длину плеча
+  const e = W(conProject([{ id: "ik", type: "ik", tip: "farm_l", end: true, target: { pos: [0.5, 1.2, 0.3] } }]));
+  const endPt = vadd3(e.at("farm_l"), qrot(qmul(e.R("farm_l"), qinv(e.rig.worldR[e.rig.index.get("farm_l")!])), [0.27, 0, 0]));
+  close(dist(endPt, [0.5, 1.2, 0.3]), 0, 1e-6, "конец предплечья в цели");
+  close(dist(e.at("uarm_l"), [0.18, 1.5, 0]), 0, 1e-9, "плечо не сдвинулось");
   const m = W(conProject([{ id: "ik", type: "ik", tip: "hand_l", target: { pos: target }, muted: true }, { id: "aim", type: "aim", bones: ["head"], target: { pos: [0, 2, 1] } }]));
   close(dist(m.at("hand_l"), [0.7, 1.5, 0]), 0, 1e-9);
 });
@@ -1071,6 +1077,11 @@ test("команды констрейнов: ik.add по цепочке нахо
   runCommand(ctx, "constraint.set", { clip: "c", id: "ik_arm_l", weight: 0.3, muted: true });
   assert.equal(ctx.project.clips[0].constraints![0].weight, 0.3);
   assert.throws(() => runCommand(ctx, "ik.add", { clip: "c", tip: "spine", target: "0,0,0" }), /родителя и деда/);
+  ctx.project.chains.arm_r = ["uarm_r", "farm_r"];
+  const mit = { project: ctx.project, skeleton: { nodes: ctx.skeleton.nodes.filter((n) => !["hand_r", "finger_r"].includes(n.name)) } };
+  const mc = runCommand(mit, "ik.add", { clip: "c", chain: "arm_r", target: "0,1,0" }) as any;
+  assert.deepEqual([mc.tip, mc.end], ["farm_r", true], "варежка: тянется конец предплечья");
+  runCommand(ctx, "constraint.remove", { clip: "c", id: "ik_arm_r" });
   const a = runCommand(ctx, "aim.add", { clip: "c", targetBone: "hand_r" }) as any;
   assert.deepEqual(a.bones, ["neck", "head"]);
   runCommand(ctx, "constraint.remove", { clip: "c", id: "ik_arm_l" });

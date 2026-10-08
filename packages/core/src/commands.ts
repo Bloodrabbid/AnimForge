@@ -442,23 +442,26 @@ const defs: CommandDef[] = [
     run(ctx, a) {
       const clip = clipOf(ctx, a.clip);
       let tip = a.tip as string | undefined;
+      let end = false;
+      const nodes = ctx.skeleton.nodes;
       if (!tip) {
         need(a.chain, "нужна цепочка (chain) или кончик (tip)");
         const c = ctx.project.chains[a.chain];
         need(c, `нет цепочки «${a.chain}»`);
         const last = c![c!.length - 1];
-        tip = c!.length >= 3 ? last : ctx.skeleton.nodes.find((n) => n.parent === last && n.isJoint)?.name;
-        need(tip, `у «${last}» нет дочерней кости — укажи tip`);
+        tip = c!.length >= 3 ? last : nodes.find((n) => n.parent === last && n.isJoint)?.name;
+        // рука-варежка без кисти: тянется конец последней кости цепочки
+        if (!tip) (tip = last), (end = true);
       }
-      const nodes = ctx.skeleton.nodes;
       const node = nodes.find((n) => n.name === tip);
       need(node, `нет кости «${tip}»`);
-      const mid = nodes.find((n) => n.name === node!.parent);
+      const mid = end ? node : nodes.find((n) => n.name === node!.parent);
       need(mid?.isJoint && nodes.some((n) => n.name === mid.parent && n.isJoint), `у «${tip}» нет родителя и деда — IK нужны две кости над кончиком`);
       const c: Constraint = {
         id: a.id ?? `ik_${a.chain ?? tip}`,
         type: "ik",
         tip: tip!,
+        ...(end ? { end: true } : {}),
         target: targetOf(ctx, a),
         ...(a.pole != null ? { pole: vec(a.pole, "pole") } : {}),
         ...(a.weight != null && +a.weight !== 1 ? { weight: +a.weight } : {}),

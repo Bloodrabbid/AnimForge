@@ -21,6 +21,7 @@ import {
 } from "./api.ts";
 import { WeightsPanel } from "./WeightsPanel.tsx";
 import { LimitsPanel } from "./LimitsPanel.tsx";
+import { ConstraintsPanel } from "./ConstraintsPanel.tsx";
 import type { Brush, WeightPainter } from "./weightPaint.ts";
 import { BoneTree } from "./BoneTree.tsx";
 import { Icon } from "./Icon.tsx";
@@ -65,7 +66,8 @@ export function App() {
   const [showFloor, setShowFloor] = useState(true);
   const [view, setView] = useState<ViewCmd>({ kind: "fit", n: 0 });
   const [leftTab, setLeftTab] = useState<"library" | "bones">((query.get("left") as "bones") ?? "library");
-  const [rightTab, setRightTab] = useState<"layers" | "keys" | "weights" | "limits">((query.get("right") as "weights") ?? "layers");
+  const [rightTab, setRightTab] = useState<"layers" | "keys" | "weights" | "limits" | "targets">((query.get("right") as "weights") ?? "layers");
+  const [activeTarget, setActiveTarget] = useState<string | null>(query.get("target"));
   const [brush, setBrush] = useState<Brush>({ mode: "add", radius: 0.06, strength: 0.25 });
   const [strokes, setStrokes] = useState(0);
   const [modelVer, setModelVer] = useState(0);
@@ -424,6 +426,18 @@ export function App() {
             }}
             onStroke={setStrokes}
             onPickBone={setSelectedBone}
+            showTargets={!!clip?.constraints?.length}
+            activeTarget={rightTab === "targets" && !trial ? activeTarget : null}
+            onMoveTarget={(id, pos) => {
+              const c = clip?.constraints?.find((x) => x.id === id);
+              if (!c || !clip) return;
+              const target = pos.join(",");
+              // у цели с ключами — ключ в текущем кадре, у неподвижной — новая точка
+              runMany(
+                [c.target.keys?.length ? { name: "constraint.key", args: { clip: clip.name, id, t: +t.toFixed(3), target } } : { name: "constraint.set", args: { clip: clip.name, id, target } }],
+                c.target.keys?.length ? `ключ цели в ${t.toFixed(2)} с` : "цель",
+              );
+            }}
             onStatus={say}
           />
           <div className="overlay tl">
@@ -518,6 +532,9 @@ export function App() {
           <button className={rightTab === "limits" ? "on" : ""} onClick={() => setRightTab("limits")} title="ограничения: диапазон движения костей">
             Пределы {shown.limits && <span className="n">{Object.keys(shown.limits).length}</span>}
           </button>
+          <button className={rightTab === "targets" ? "on" : ""} onClick={() => setRightTab("targets")} title="цели: IK рук и ног, взгляд">
+            Цели {!!clip?.constraints?.length && <span className="n">{clip.constraints.length}</span>}
+          </button>
           <button className={rightTab === "weights" ? "on" : ""} onClick={() => setRightTab("weights")} title="веса кожи: кисть по модели">
             Веса {strokes > 0 && <span className="n dirty-dot">●</span>}
           </button>
@@ -547,6 +564,18 @@ export function App() {
               bone={selectedBone}
               readOnly={!!trial}
               onSelectBone={setSelectedBone}
+              runMany={runMany}
+            />
+          ) : rightTab === "targets" && clip ? (
+            <ConstraintsPanel
+              project={shown}
+              skeleton={data.skeleton}
+              rig={rig}
+              clip={clip}
+              t={t}
+              active={activeTarget}
+              readOnly={!!trial}
+              onActive={setActiveTarget}
               runMany={runMany}
             />
           ) : rightTab === "weights" ? (

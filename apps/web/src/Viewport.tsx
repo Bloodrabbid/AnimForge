@@ -5,7 +5,8 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { ViewHelper } from "three/examples/jsm/helpers/ViewHelper.js";
-import { posePartsAt, type Clip, type Project, type Rig } from "../../../packages/core/src/index.ts";
+import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
+import { posePartsAt, targetAt, type Clip, type Project, type Rig } from "../../../packages/core/src/index.ts";
 import { WeightPainter, type Brush, type SkinPart } from "./weightPaint.ts";
 
 export type ViewCmd = { kind: "fit" | "front" | "side" | "top"; n: number };
@@ -27,6 +28,10 @@ interface Props {
   onPainter?(p: WeightPainter | null): void;
   onStroke?(strokes: number): void;
   onPickBone?(bone: string): void;
+  /** цели констрейнов: шарики во вьюпорте; активную тащат стрелками */
+  showTargets?: boolean;
+  activeTarget?: string | null;
+  onMoveTarget?(id: string, pos: [number, number, number]): void;
   onStatus(msg: string, error?: boolean): void;
 }
 
@@ -178,6 +183,37 @@ export function Viewport(props: Props) {
     const limMat = new THREE.MeshBasicMaterial({ color: 0xff4d4d, depthTest: false, transparent: true, opacity: 0.9 });
     const limPool: THREE.Mesh[] = [];
 
+    // цели констрейнов: шарик (IK — бирюзовый, взгляд — сиреневый) и линия от кончика или головы к цели
+    const tgtGeo = new THREE.OctahedronGeometry(1, 1);
+    const tgtPool: { mesh: THREE.Mesh; line: THREE.Line }[] = [];
+    const tgtColor = { ik: 0x3fd0c9, aim: 0xb48cff };
+    const handle = new THREE.Object3D(); // за него держит TransformControls
+    scene.add(handle);
+    const tc = new TransformControls(camera, renderer.domElement);
+    tc.setSpace("world");
+    tc.setSize(0.8);
+    const tcHelper = tc.getHelper();
+    scene.add(tcHelper);
+    let drag: { id: string; pos: [number, number, number] } | null = null;
+    tc.addEventListener("dragging-changed", (e) => {
+      controls.enabled = !e.value;
+      const p = live.current;
+      if (e.value && p.activeTarget) drag = { id: p.activeTarget, pos: [handle.position.x, handle.position.y, handle.position.z] };
+      else if (!e.value && drag) {
+        const d = drag;
+        drag = null;
+        p.onMoveTarget?.(d.id, [handle.position.x, handle.position.y, handle.position.z].map((x) => +x.toFixed(4)) as [number, number, number]);
+        dropUntil = performance.now() + 1500; // пока проект не перечитан — держим цель там, куда отпустили
+        dropped = { id: d.id, pos: [handle.position.x, handle.position.y, handle.position.z] };
+      }
+    });
+    tc.addEventListener("objectChange", () => {
+      if (drag) drag.pos = [handle.position.x, handle.position.y, handle.position.z];
+    });
+    let dropUntil = 0;
+    let dropped: { id: string; pos: [number, number, number] } | null = null;
+    let lastProject: Project | null = null;
+
     const resize = () => {
       const w = el.clientWidth, h = el.clientHeight;
       renderer.setSize(w, h);
@@ -198,7 +234,17 @@ export function Viewport(props: Props) {
       const m = loaded.current;
       if (m) {
         // поза из ядра; кости, которых нет в позе, возвращаем в rest
-        const pose: ReturnType<typeof posePartsAt> = p.clip ? posePartsAt(p.project, p.rig, p.clip, p.t) : { rot: new Map(), pos: new Map(), scl: new Map() };
+        if (p.project !== lastProject) {
+          lastProject = p.project;
+          dropUntil = 0;
+        }
+        // цель тащат прямо сейчас (или только что отпустили) — поза считается с ней, без ожидания сервера
+        const over = drag ?? (performance.now() < dropUntil ? dropped : null);
+        let clipNow = p.clip;
+        if (over && clipNow?.constraints) {
+          clipNow = { ...clipNow, constraints: clipNow.constraints.map((c) => (c.id === over.id ? { ...c, target: { pos: over.pos } } : c)) };
+        }
+        const pose: ReturnType<typeof posePartsAt> = clipNow ? posePartsAt(p.project, p.rig, clipNow, p.t) : { rot: new Map(), pos: new Map(), scl: new Map() };
         for (const [name, { obj, rest, restPos, restScale }] of m.bones) {
           const q = pose.rot.get(name), v = pose.pos.get(name), s = pose.scl.get(name);
           if (q) obj.quaternion.set(q[0], q[1], q[2], q[3]);
@@ -231,6 +277,55 @@ export function Viewport(props: Props) {
             s.scale.setScalar(m.size * 0.011);
           }
         });
+        // цели
+        const cons = p.showTargets && clipNow?.constraints ? clipNow.constraints : [];
+        while (tgtPool.length < cons.length) {
+          const mesh = new THREE.Mesh(tgtGeo, new THREE.MeshBasicMaterial({ depthTest: false, transparent: true, opacity: 0.95 }));
+          mesh.renderOrder = 12;
+          const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineDashedMaterial({ depthTest: false, dashSize: 0.02, gapSize: 0.015, transparent: true, opacity: 0.8 }));
+          line.renderOrder = 12;
+          scene.add(mesh, line);
+          tgtPool.push({ mesh, line });
+        }
+        let activeAt: THREE.Vector3 | null = null;
+        let activeMovable = false;
+        tgtPool.forEach(({ mesh, line }, k) => {
+          const c = cons[k];
+          const tp = c ? targetAt(p.rig, pose, clipNow!, c.target, p.t) : null;
+          mesh.visible = line.visible = !!tp;
+          if (!c || !tp) return;
+          const isActive = c.id === p.activeTarget;
+          mesh.position.set(tp[0], tp[1], tp[2]);
+          mesh.scale.setScalar(m.size * (isActive ? 0.016 : 0.011));
+          const col = c.muted ? 0x777777 : tgtColor[c.type];
+          (mesh.material as THREE.MeshBasicMaterial).color.set(col);
+          (line.material as THREE.LineDashedMaterial).color.set(col);
+          const from = m.bones.get(c.type === "ik" ? c.tip : c.bones[c.bones.length - 1])?.obj;
+          if (from) from.getWorldPosition(b);
+          else b.copy(mesh.position);
+          const g = line.geometry;
+          g.attributes.position.setXYZ(0, b.x, b.y, b.z);
+          g.attributes.position.setXYZ(1, tp[0], tp[1], tp[2]);
+          g.attributes.position.needsUpdate = true;
+          line.computeLineDistances();
+          (line.material as THREE.LineDashedMaterial).dashSize = m.size * 0.012;
+          (line.material as THREE.LineDashedMaterial).gapSize = m.size * 0.008;
+          if (isActive) {
+            activeAt = mesh.position;
+            activeMovable = !c.target.bone;
+          }
+        });
+        if (activeAt && activeMovable) {
+          if (!drag) handle.position.copy(activeAt);
+          if (tc.object !== handle) tc.attach(handle);
+        } else if (tc.object) tc.detach();
+        // для проверок (screenshot.ts AF_DRAG): где на экране центр ручки активной цели
+        (window as any).__afHandle = tc.object
+          ? () => {
+              const v = handle.position.clone().project(camera), r = renderer.domElement.getBoundingClientRect();
+              return [r.left + ((v.x + 1) / 2) * r.width, r.top + ((1 - v.y) / 2) * r.height];
+            }
+          : null;
         const sel = p.selectedBone ? m.bones.get(p.selectedBone) : undefined;
         marker.visible = segment.visible = !!sel;
         if (sel) {
@@ -263,6 +358,7 @@ export function Viewport(props: Props) {
       renderer.domElement.removeEventListener("pointermove", move);
       renderer.domElement.removeEventListener("pointerup", up);
       gizmo.dispose();
+      tc.dispose();
       controls.dispose();
       renderer.dispose();
       el.removeChild(renderer.domElement);

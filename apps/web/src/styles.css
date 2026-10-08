@@ -284,9 +284,10 @@ input.num::-webkit-inner-spin-button {
   border: none;
   border-bottom: 2px solid transparent;
   border-radius: 0;
-  padding: 7px 10px 9px;
+  padding: 7px 7px 9px;
   color: var(--muted);
   font-weight: 500;
+  white-space: nowrap;
 }
 .tabs > button:hover:not(:disabled) {
   background: transparent;
@@ -1534,4 +1535,67 @@ table.keys tbody tr:hover {
 .axis-nums button.small {
   white-space: nowrap;
   margin-left: auto;
+}
+.targets {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.target {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 8px 10px;
+  background: var(--panel-2);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.target.sel {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(255, 181, 71, 0.25);
+}
+.target.muted-row {
+  opacity: 0.55;
+}
+.target-head,
+.target-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.target-head b {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+.target-head .spacer {
+  flex: 1;
+}
+.target-row input[type="range"] {
+  flex: 1;
+}
+.target .dot {
+  width: 9px;
+  height: 9px;
+  transform: rotate(45deg);
+  border-radius: 2px;
+}
+.target .dot.ik {
+  background: #3fd0c9;
+}
+.target .dot.aim {
+  background: #b48cff;
+}
+.small {
+  font-size: 11.5px;
+}
+.num-label {
+  font-variant-numeric: tabular-nums;
+  width: 38px;
+  text-align: right;
+}
+.targets button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
 }
