@@ -8,7 +8,7 @@ from mathutils import Vector
 from mathutils.bvhtree import BVHTree
 
 sys.path.insert(0, os.path.dirname(__file__))
-from autorig_core import skeleton
+from autorig_core import refine_tips, skeleton
 
 a = sys.argv[sys.argv.index("--") + 1:]
 src, out = a[0], a[1]
@@ -86,50 +86,82 @@ dims = np.ceil(size / voxel).astype(int) + 2 * pad
 origin = lo - (pad - 0.5) * voxel  # центр вокселя (0,0,0)
 
 bvh = BVHTree.FromObject(body, bpy.context.evaluated_depsgraph_get())
-votes = np.zeros(dims, dtype=np.int8)
-for axis in range(3):
-    u, v = [k for k in range(3) if k != axis]
-    inside = np.zeros(dims, dtype=bool)
-    d = Vector((0, 0, 0))
-    d[axis] = 1
-    for i in range(dims[u]):
-        for j in range(dims[v]):
-            o = np.zeros(3)
-            o[u] = origin[u] + i * voxel
-            o[v] = origin[v] + j * voxel
-            o[axis] = origin[axis] - voxel
-            p = Vector(o)
-            hits = []
-            while len(hits) < 64:
-                loc, _n, _i, _d = bvh.ray_cast(p, d)
-                if loc is None:
-                    break
-                hits.append(loc[axis])
-                p = loc + d * (voxel * 1e-3)
-            if len(hits) < 2:
-                continue
-            cells = (np.arange(dims[axis]) * voxel + origin[axis])
-            n = np.searchsorted(np.array(hits), cells)  # сколько стенок до центра вокселя
-            col = (n % 2) == 1
-            idx = [slice(None)] * 3
-            idx[u], idx[v] = i, j
-            inside[tuple(idx)] = col
-    votes += inside
-occ = votes >= 2
-# поверхность: точки на треугольниках с шагом меньше вокселя — тонкие листы (крылья, плавники) остаются в форме
 mesh = body.data
 mesh.calc_loop_triangles()
-for tri in mesh.loop_triangles:
-    A, B, C = (np.array(mesh.vertices[k].co[:]) for k in tri.vertices)
-    m = int(max(np.linalg.norm(B - A), np.linalg.norm(C - A), np.linalg.norm(C - B)) / (voxel * 0.5)) + 1
-    for s in range(m + 1):
-        for t in range(m + 1 - s):
-            P = A + (B - A) * (s / m) + (C - A) * (t / m)
-            k = np.floor((P - origin) / voxel + 0.5).astype(int)
-            if (k >= 0).all() and (k < dims).all():
-                occ[tuple(k)] = True
+TRI = np.array([[mesh.vertices[k].co[:] for k in tri.vertices] for tri in mesh.loop_triangles], dtype=np.float64).reshape(-1, 3, 3)
+
+
+def voxelize(origin, dims, voxel):
+    """Воксели тела в сетке: центр вокселя (0,0,0) в origin."""
+    votes = np.zeros(dims, dtype=np.int8)
+    for axis in range(3):
+        u, v = [k for k in range(3) if k != axis]
+        inside = np.zeros(dims, dtype=bool)
+        d = Vector((0, 0, 0))
+        d[axis] = 1
+        cells = (np.arange(dims[axis]) * voxel + origin[axis])
+        for i in range(dims[u]):
+            for j in range(dims[v]):
+                o = np.zeros(3)
+                o[u] = origin[u] + i * voxel
+                o[v] = origin[v] + j * voxel
+                o[axis] = origin[axis] - voxel
+                p = Vector(o)
+                # луч стартует у края сетки: стенки до неё тоже считаем, иначе внутри куба кисти чётность сбита
+                hits = []
+                q = Vector(o)
+                q[axis] = -1e9
+                pre = 0
+                while True:
+                    loc, _n, _i, _d = bvh.ray_cast(q, d, max(0.0, p[axis] - q[axis]))
+                    if loc is None:
+                        break
+                    pre += 1
+                    q = loc + d * (voxel * 1e-3)
+                p = q if pre else p
+                while len(hits) < 64:
+                    loc, _n, _i, _d = bvh.ray_cast(p, d)
+                    if loc is None:
+                        break
+                    hits.append(loc[axis])
+                    p = loc + d * (voxel * 1e-3)
+                if pre + len(hits) < 2:
+                    continue
+                n = np.searchsorted(np.array(hits), cells) + pre  # сколько стенок до центра вокселя
+                col = (n % 2) == 1
+                idx = [slice(None)] * 3
+                idx[u], idx[v] = i, j
+                inside[tuple(idx)] = col
+        votes += inside
+    occ = votes >= 2
+    # поверхность: точки на треугольниках с шагом меньше вокселя — тонкие листы (крылья, плавники) остаются в форме
+    top = origin + (np.array(dims) - 1) * voxel
+    sel = ((TRI.max(1) >= origin - voxel) & (TRI.min(1) <= top + voxel)).all(1)
+    for A, B, C in TRI[sel]:
+        m = int(max(np.linalg.norm(B - A), np.linalg.norm(C - A), np.linalg.norm(C - B)) / (voxel * 0.5)) + 1
+        st = np.array([(s_ / m, t_ / m) for s_ in range(m + 1) for t_ in range(m + 1 - s_)])
+        P = A + np.outer(st[:, 0], B - A) + np.outer(st[:, 1], C - A)
+        k = np.floor((P - origin) / voxel + 0.5).astype(int)
+        k = k[((k >= 0) & (k < dims)).all(1)]
+        occ[k[:, 0], k[:, 1], k[:, 2]] = True
+    return occ
+
+
+occ = voxelize(origin, dims, voxel)
 
 joints, parents, info = skeleton(occ, voxel=voxel, origin=tuple(origin), bones_along=along)
+
+
+def sample(c, half, vox):
+    o = np.asarray(c) - half
+    n = int(np.ceil(2 * half / vox)) + 1
+    return voxelize(o, np.array([n, n, n]), vox), tuple(o)
+
+
+# пальцы: у кончиков веток форма мельче (AUTORIG_FINGERS=1 — включить; дольше в полтора раза)
+hands = 0
+if os.environ.get("AUTORIG_FINGERS") == "1":
+    joints, parents, hands = refine_tips(joints, parents, sample, log=print if os.environ.get("AUTORIG_DEBUG") else None)
 if os.environ.get("AUTORIG_DEBUG"):
     # отладка: проекции формы и скелета (debug_autorig.py рисует из этого картинку)
     import json
@@ -409,4 +441,4 @@ if len(islands) > 1:
 
 os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
 bpy.ops.export_scene.gltf(filepath=out, export_format="GLB", export_animations=False, export_skins=True, use_selection=False)
-print(f"AUTORIG_OK joints={len(joints)} snapped={snapped} dropped={dropped} weights={method} rigid_parts={rigid} unweighted={unweighted} voxels={info['voxels']} branches={info['branches']} res={res}")
+print(f"AUTORIG_OK joints={len(joints)} hands={hands} snapped={snapped} dropped={dropped} weights={method} rigid_parts={rigid} unweighted={unweighted} voxels={info['voxels']} branches={info['branches']} res={res}")

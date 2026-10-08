@@ -260,3 +260,124 @@ def reroot(joints, parents, up=2, extent=1.0, major=0.25):
                 q.append(w)
     idx = {v: k for k, v in enumerate(order)}
     return [joints[v] for v in order], [idx[par[v]] if par[v] >= 0 else -1 for v in order]
+
+
+def refine_tips(joints, parents, sample, min_fingers=4, max_fingers=6, log=None, fine=48, up=2):
+    """Пальцы: на 128 вокселей пальцы кисти сливаются в лопату, и ветка руки кончается одним суставом.
+    У каждого кончика ветки форму рядом с ним вокселим мельче (sample — колбэк, Blender или тест) и строим
+    скелет заново; если за ладонью расходятся 4–6 отростков, кончик заменяем запястьем-ладонью-пальцами.
+    Уши, рога, морда дают меньше отростков, лапа без отдельных пальцев — ни одного: там всё как было.
+    sample(center, half, voxel) → (occ, origin): воксели тела в кубе center ± half.
+    Возвращает (joints, parents, сколько кончиков заменено)."""
+    J = [np.array(j, dtype=float) for j in joints]
+    kids = [[] for _ in J]
+    for i, p in enumerate(parents):
+        if p >= 0:
+            kids[p].append(i)
+    new_j, new_p = [tuple(map(float, j)) for j in J], list(parents)
+    removed, hands = set(), 0
+    # кисти — не у самых нижних кончиков (ступни, лапы) и не у самого верхнего (голова): там отростки
+    # на мелкой сетке — детали обуви и черепа, а не пальцы
+    leaves = [i for i in range(len(J)) if not kids[i] and parents[i] >= 0]
+    hz = np.array([J[i][up] for i in range(len(J))])
+    low = hz.min() + 0.15 * (hz.max() - hz.min())
+    top = max(leaves, key=lambda i: hz[i]) if leaves else -1
+    for L in leaves:
+        P = parents[L]
+        if hz[L] < low or L == top:
+            continue
+        PL = float(np.linalg.norm(J[L] - J[P]))
+        if PL < 1e-9:
+            continue
+        # куб вокруг отрезка запястье → кончик, с запасом: кисть целиком, предплечье — обрубком
+        c = (J[L] + J[P]) / 2
+        vox = PL / fine
+        occ, org = sample(c, 0.75 * PL, vox)
+        # шар, а не куб: углы куба на срезе толстой части (голова) дают ложные отростки
+        g = np.indices(occ.shape).reshape(3, -1).T * vox + np.asarray(org)
+        occ = occ & (np.linalg.norm(g - c, axis=1) <= 0.75 * PL).reshape(occ.shape)
+        if occ.sum() < 50:
+            continue
+        try:
+            lj, lp, _ = skeleton(occ, voxel=vox, origin=org, bones_along=10, min_branch=0.1)
+        except ValueError:
+            continue
+        lj = [np.array(x) for x in lj]
+        adj = [[] for _ in lj]
+        for i, p in enumerate(lp):
+            if p >= 0:
+                adj[i].append(p)
+                adj[p].append(i)
+        # от обрубка предплечья (самый задний сустав вдоль руки): идём до первой развилки — это ладонь
+        ax = (J[L] - J[P]) / PL
+        W = min(range(len(lj)), key=lambda k: float(np.dot(lj[k] - c, ax)))
+        par, order, q = {W: -1}, [W], deque([W])
+        while q:
+            v = q.popleft()
+            for w in adj[v]:
+                if w not in par:
+                    par[w] = v
+                    order.append(w)
+                    q.append(w)
+        ch = {v: [w for w in adj[v] if par.get(w) == v] for v in order}
+        H = W
+        while len(ch[H]) == 1:
+            H = ch[H][0]
+        tips = [v for v in order if not ch[v] and v != W]
+        def depth(v):
+            d = 0.0
+            while v != H and par[v] >= 0:
+                d += float(np.linalg.norm(lj[v] - lj[par[v]]))
+                v = par[v]
+            return d
+        def branch(v):
+            # длина пальца: от кончика до ближайшей развилки
+            d = 0.0
+            while par[v] >= 0 and len(ch[par[v]]) == 1:
+                d += float(np.linalg.norm(lj[v] - lj[par[v]]))
+                v = par[v]
+            return d + (float(np.linalg.norm(lj[v] - lj[par[v]])) if par[v] >= 0 else 0.0)
+        # отростки короче 0.15 руки до кисти — шум вокселизации, не пальцы
+        tips = [v for v in tips if branch(v) >= 0.15 * PL]
+        fingers = tips
+        # пальцы смотрят от запястья (кроме, может быть, большого) и похожи по длине; у головы отростки
+        # торчат куда попало (уши, затылок, подбородок)
+        ahead = sum(1 for v in fingers if float(np.dot(lj[v] - lj[H], ax)) > 0.5 * float(np.linalg.norm(lj[v] - lj[H])))
+        lens = [branch(v) for v in fingers] or [0]
+        # пальцы тонкие: толщина у середины пальца — не больше 0.12 длины кисти (у отростков головы — в разы больше)
+        thick = surface_distance(largest_component(occ))
+        def radius(v):
+            m = (lj[v] + lj[par[v]]) / 2 if par[v] >= 0 else lj[v]
+            k = np.clip(np.floor((m - np.asarray(org)) / vox + 0.5).astype(int), 0, np.array(occ.shape) - 1)
+            return float(thick[tuple(k)]) * vox
+        fat = max((radius(v) for v in fingers), default=0.0) / PL
+        if log:
+            log(f"tip {L} at {np.round(J[L], 2).tolist()} PL={PL:.3f}: tips={len(tips)} fingers={len(fingers)} ahead={ahead} fat={fat:.2f} lens={[round(x / PL, 2) for x in lens]}")
+        if not (min_fingers <= len(fingers) <= max_fingers) or len(fingers) != len(tips):
+            continue
+        # и почти параллельны: направления ладонь → кончик в пределах 45° от среднего (большой палец может выбиваться)
+        dirs = [(lj[v] - lj[H]) / max(float(np.linalg.norm(lj[v] - lj[H])), 1e-9) for v in fingers]
+        mean = np.sum(dirs, axis=0) / max(float(np.linalg.norm(np.sum(dirs, axis=0))), 1e-9) if dirs else ax
+        par_n = sum(1 for d in dirs if float(np.dot(d, mean)) > np.cos(np.radians(45)))
+        if log:
+            log(f"   parallel={par_n}")
+        if ahead < len(fingers) - 1 or par_n < len(fingers) - 1 or max(lens) > 3 * min(lens) or fat > 0.12:
+            continue
+        # приживляем: обрубок W — это сустав P; всё, что за ним, — новые суставы
+        want = set()
+        for v in fingers:
+            while v != W:
+                want.add(v)
+                v = par[v]
+        idx = {W: P}
+        for v in [v for v in order[1:] if v in want]:
+            new_j.append(tuple(map(float, lj[v])))
+            new_p.append(idx[par[v]])
+            idx[v] = len(new_j) - 1
+        removed.add(L)
+        hands += 1
+    if not removed:
+        return [tuple(map(float, j)) for j in J], list(parents), 0
+    keep = [i for i in range(len(new_j)) if i not in removed]
+    remap = {o: k for k, o in enumerate(keep)}
+    return [new_j[i] for i in keep], [remap[new_p[i]] if new_p[i] >= 0 else -1 for i in keep], hands

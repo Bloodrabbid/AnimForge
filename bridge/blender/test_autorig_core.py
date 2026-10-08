@@ -3,7 +3,7 @@ import os, sys, unittest
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(__file__))
-from autorig_core import skeleton
+from autorig_core import refine_tips, skeleton
 
 
 def tube(occ, a, b, r):
@@ -42,6 +42,34 @@ def human():
     tube(occ, (32, 10, 62), (61, 10, 63), 2)
     tube(occ, (32, 10, 70), (32, 10, 84), 4)  # голова
     return occ
+
+
+def capsules_occ(caps, lo, voxel, dims):
+    """Воксели набора капсул (a, b, r) в мировых координатах: сетка с центром вокселя (0,0,0) в lo."""
+    g = np.indices(dims).reshape(3, -1).T * voxel + np.asarray(lo, float)
+    occ = np.zeros(len(g), bool)
+    for a, b, r in caps:
+        a, b = np.array(a, float), np.array(b, float)
+        ab = b - a
+        t = np.clip(((g - a) @ ab) / (ab @ ab), 0, 1)
+        occ |= np.linalg.norm(g - (a + t[:, None] * ab), axis=1) <= r
+    return occ.reshape(dims)
+
+
+def hand_human(fingers=4, gap=0.6):
+    """Человек в T-позе (рост ~90), у левой руки ладонь и пальцы толщиной 1.2 с зазором gap — на крупной сетке
+    они сливаются."""
+    caps = [((32, 10, 42), (32, 10, 66), 7), ((27, 10, 42), (25, 10, 3), 3), ((37, 10, 42), (39, 10, 3), 3),
+            ((32, 10, 62), (61, 10, 63), 2), ((32, 10, 70), (32, 10, 84), 4),
+            ((32, 10, 62), (8, 10, 63), 2), ((8, 10, 63), (4, 10, 63), 2.2)]  # правая рука до запястья, ладонь
+    # ступня с пальцами вперёд (+Y): пальцы ног — не кисть, их не трогаем
+    caps.append(((39, 10, 3), (39, 4, 2), 2.2))
+    for k in range(4):
+        caps.append(((36.6 + k * 1.6, 4, 2), (36.6 + k * 1.6, -2, 1.5), 0.6))
+    for k in range(fingers):
+        z = 63 + (k - (fingers - 1) / 2) * (2 * 1.2 + gap) * 0.5
+        caps.append(((4, 10, z), (-4, 10, z + (k - 1.5) * 0.4), 0.6))
+    return caps
 
 
 class AutorigCore(unittest.TestCase):
@@ -85,6 +113,39 @@ class AutorigCore(unittest.TestCase):
         j1, _, _ = skeleton(occ)
         j2, _, _ = skeleton(occ, voxel=0.5, origin=(10, 0, 0))
         self.assertAlmostEqual(j2[0][0], 10 + j1[0][0] * 0.5, places=6)
+
+
+class Fingers(unittest.TestCase):
+    def run_hand(self, fingers):
+        caps = hand_human(fingers)
+        lo = np.array([-8.0, 0.0, 0.0])
+        coarse = 1.0
+        occ = capsules_occ(caps, lo, coarse, (74, 20, 90))
+        joints, parents, _ = skeleton(occ, voxel=coarse, origin=tuple(lo))
+        calls = []
+
+        def sample(c, half, voxel):
+            calls.append(voxel)
+            o = np.asarray(c) - half
+            n = int(np.ceil(2 * half / voxel)) + 1
+            return capsules_occ(caps, o, voxel, (n, n, n)), tuple(o)
+
+        return joints, parents, refine_tips(joints, parents, sample), calls
+
+    def test_fingers_grow_on_hand_only(self):
+        joints, parents, (j2, p2, hands), calls = self.run_hand(4)
+        self.assertGreater(len(calls), 0)
+        self.assertLess(min(calls), 0.5, "кисть вокселится мельче основной сетки")
+        self.assertEqual(hands, 1, "пальцы — только у руки с пальцами")
+        tips = leaves(j2, p2)
+        finger_tips = [t for t in tips if t[0] < -1]
+        self.assertEqual(len(finger_tips), 4, f"четыре пальца: {finger_tips}")
+        self.assertEqual(len(tips), len(leaves(joints, parents)) - 1 + 4)
+        self.assertTrue(all(p < i for i, p in enumerate(p2)), "родитель раньше ребёнка")
+
+    def test_mitten_stays(self):
+        _, _, (_, _, hands), _ = self.run_hand(0)
+        self.assertEqual(hands, 0, "кисть без пальцев не трогаем")
 
 
 if __name__ == "__main__":

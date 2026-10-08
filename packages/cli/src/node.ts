@@ -219,12 +219,13 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
       out: { type: "string", help: "куда (по умолчанию assets/model.glb)" },
       res: { type: "number", help: "вокселей вдоль длинной стороны, по умолчанию 128 (тоньше — дольше; 64 — если ноги не касаются)" },
       bones: { type: "number", help: "костей вдоль тела, по умолчанию 10" },
+      fingers: { type: "boolean", help: "пальцы: кисти вокселит мельче и ищет 4–6 раздельных пальцев (дольше; у сомкнутых пальцев, как у Xbot, не найдёт)" },
     },
     async run(dir, a) {
       const src = resolve(process.env.INIT_CWD ?? process.cwd(), a.file);
       const out = resolve(dir, a.out ?? "assets/model.glb");
       mkdirSync(dirname(out), { recursive: true });
-      const log = execFileSync(BLENDER, ["-b", "--factory-startup", "--python", join(ROOT, "bridge/blender/autorig.py"), "--", src, out, String(a.res ?? 128), String(a.bones ?? 10)], { env: BLENDER_ENV, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 });
+      const log = execFileSync(BLENDER, ["-b", "--factory-startup", "--python", join(ROOT, "bridge/blender/autorig.py"), "--", src, out, String(a.res ?? 128), String(a.bones ?? 10)], { env: { ...BLENDER_ENV, AUTORIG_FINGERS: a.fingers ? "1" : "0" }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 });
       const ok = log.split("\n").find((l) => l.startsWith("AUTORIG_OK"));
       if (!ok) throw new Error("авториг не удался:\n" + log.split("\n").filter((l) => /AUTORIG|Error|Traceback/.test(l)).join("\n"));
       return { out, log: ok };
