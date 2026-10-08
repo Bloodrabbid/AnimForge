@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { COMMANDS, Clip, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectFins, detectForward, detectMultiLeg, detectWings, detectQuadruped, detectRig, emptyProject, frameTimes, posePartsAt, readSkeleton, runCommand, samplePreset, suggestAlign, writeClips } from "../../core/src/index.ts";
+import { COMMANDS, Clip, type LibPreset, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectFins, detectForward, detectMultiLeg, detectWings, detectQuadruped, detectRig, emptyProject, frameTimes, posePartsAt, readSkeleton, runCommand, samplePreset, suggestAlign, writeClips } from "../../core/src/index.ts";
 import { loadSkinScene, skinFrame, skinTopology } from "./skin.ts";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -33,12 +33,7 @@ export function saveProject(dir: string, p: Project) {
   writeFileSync(projectFile(dir), JSON.stringify(p, null, 2) + "\n");
 }
 
-interface Preset {
-  name: string;
-  help: string;
-  params: Record<string, unknown>;
-  provenance: unknown[];
-}
+type Preset = LibPreset;
 
 export function loadPresets(): { recipe: string; presets: Preset[] }[] {
   const d = join(ROOT, "library/presets");
@@ -103,12 +98,14 @@ const findClip = (ctx: Ctx, name: string) => {
 };
 
 /** Видео клипа: один проход рендерится в Blender, ffmpeg повторяет его loops раз. */
-export async function renderVideo(ctx: Ctx & { dir: string }, clipName: string, view: string, loops: number, dist: number, out: string) {
+export async function renderVideo(ctx: Ctx & { dir: string }, clipName: string, view: string, loops: number, dist: number, out: string, caption?: string) {
   const clip = findClip(ctx, clipName);
   const tmp = mkdtempSync(join(tmpdir(), "af-video-"));
   try {
     const n = Math.max(2, Math.round(clip.duration * clip.fps));
     await renderFrames(ctx, clip, tmp, n, view, dist, [720, 720]);
+    // подпись внизу кадра (ffmpeg без drawtext — пишем на кадры ImageMagick)
+    if (caption) execFileSync("magick", ["mogrify", "-font", "/System/Library/Fonts/Supplemental/Arial.ttf", "-pointsize", "30", "-fill", "#222", "-gravity", "south", "-annotate", "+0+24", caption, ...readdirSync(tmp).filter((f) => f.endsWith(".png")).map((f) => join(tmp, f))]);
     mkdirSync(dirname(out), { recursive: true });
     execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-stream_loop", String(Math.max(0, loops - 1)), "-framerate", String(n / clip.duration), "-i", join(tmp, "f_%03d.png"), "-pix_fmt", "yuv420p", "-vf", "scale=720:720", out]);
     return { out, frames: n, loops, seconds: +(clip.duration * loops).toFixed(2) };
@@ -500,6 +497,23 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
     },
     run: async (dir, a) => renderVideo(await loadCtx(dir), a.clip, a.view ?? "three_quarter", a.loops ?? 4, a.dist ?? 1, resolve(dir, a.out)),
   },
+};
+
+NODE_COMMANDS.make = {
+  help: "От модели до готового файла одним вызовом: проект и авториг (если их нет), клипы из библиотеки, анатомические пределы, glb, видео всех клипов с подписями, копия в игру на Godot. Сомнительный риг — остановка с картинкой.",
+  args: {
+    clips: { type: "string", required: true, help: "клипы через «;» (или запятую): «имя=пресет{json-параметры}», «пресет» или слова «ленивая ходьба» — тогда поиск по библиотеке" },
+    file: { type: "string", help: "модель (FBX, glTF/GLB, OBJ, DAE) — если проекта в папке ещё нет" },
+    name: { type: "string", help: "имя проекта" },
+    style: { type: "json", help: "карточка стиля: {genre, stylization, role: player|enemy|npc, fps, refs[], notes} — запоминается в проекте" },
+    godot: { type: "string", help: "папка внутри проекта Godot, куда класть glb — запоминается в проекте" },
+    force: { type: "boolean", help: "не останавливаться на сомнительном риге" },
+    video: { type: "boolean", help: "рендерить видео (по умолчанию да)" },
+    view: { type: "string", help: "ракурс видео, как у sheet (по умолчанию по телу)" },
+    out: { type: "string", help: "куда glb, по умолчанию out/<имя>.glb" },
+    send: { type: "boolean", help: "прислать видео и glb в Telegram (harbor-send)" },
+  },
+  run: async (dir, a) => (await import("./make.ts")).make(dir, a),
 };
 
 /** Единая точка вызова любой команды: и ядра, и адаптера. Команды ядра, меняющие проект, сохраняют его. */

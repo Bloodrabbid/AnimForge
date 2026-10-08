@@ -159,6 +159,19 @@ export interface Project {
   /** Ограничения: диапазон движения кости по осям, градусы [от, до] (limits.ts). Действуют на все клипы. */
   limits?: Record<string, Partial<Record<"lateral" | "vertical" | "roll" | "pitch" | "yaw" | "bank", [number, number]>>>;
   clips: Clip[];
+  /** Карточка стиля: что нужно игре — по ней судят автопроверки и критик. Заполняет агент из запроса. */
+  style?: StyleCard;
+  /** Куда класть готовый glb в игре на Godot (папка внутри проекта Godot) — make копирует туда после экспорта. */
+  godot?: string;
+}
+
+export interface StyleCard {
+  genre?: string; // жанр и камера: «экшен от третьего лица», «вид сверху»
+  stylization?: "realistic" | "stylized" | "cartoon" | string;
+  role?: "player" | "enemy" | "npc" | string; // чей персонаж: у игрока короткий замах, у врага читаемый
+  fps?: number; // частота игры — частота запекания клипов
+  refs?: string[]; // игры-ориентиры: «как в DREDGE»
+  notes?: string;
 }
 
 export function emptyProject(name: string, model: string): Project {

@@ -7,6 +7,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer as createVite } from "vite";
+import { libRoles } from "../../packages/core/src/index.ts";
 import { RECIPES, ROOT, call, dryRun, exportGlb, loadCtx, loadPresets, projectFile } from "../../packages/cli/src/node.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -185,11 +186,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   if (req.method === "GET" && path === "/api/library") {
     // пресеты с происхождением и что нужно рецепту от скелета: роли → цепочки
     const lib = loadPresets().map((l) => {
-      const def = RECIPES[l.recipe];
-      const roles = def?.roles
-        ? Object.fromEntries(Object.entries(def.roles).map(([role, r]) => [role, { chain: typeof r.chain === "function" ? r.chain("r") : r.chain, optional: !!r.optional }]))
-        : null;
-      return { recipe: l.recipe, help: def?.help ?? "", roles, presets: l.presets };
+      return { recipe: l.recipe, help: RECIPES[l.recipe]?.help ?? "", roles: libRoles(l.recipe), presets: l.presets };
     });
     return sendJson(res, 200, lib);
   }

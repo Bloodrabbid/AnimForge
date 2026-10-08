@@ -1,20 +1,9 @@
 // Библиотека пресетов: поиск, разделы по типу существа, карточки с кривой движения и происхождением.
 // Клик по карточке — примерка на свою модель (без записи на диск), «Применить» — команды ядра.
 import { useMemo, useState } from "react";
-import { RECIPES, withDefaults } from "../../../packages/core/src/index.ts";
+import { BODY_FIRST, CATEGORIES, RECIPES, missingChains, withDefaults } from "../../../packages/core/src/index.ts";
+export { CATEGORIES, chainsFor } from "../../../packages/core/src/index.ts";
 import type { LibPreset, LibRecipe } from "./api.ts";
-
-export const CATEGORIES: { id: string; title: string; recipes: string[] }[] = [
-  { id: "walk", title: "Ходьба", recipes: ["waddle-walk", "compass-step"] },
-  { id: "quad", title: "Четвероногие", recipes: ["quadruped-gait"] },
-  { id: "multi", title: "Многоногие", recipes: ["multileg-gait"] },
-  { id: "wing", title: "Крылья и ласты", recipes: ["wing-flap"] },
-  { id: "swim", title: "Плавание и хвосты", recipes: ["wave", "curl"] },
-  { id: "hover", title: "Парение", recipes: ["hover"] },
-  { id: "fight", title: "Удары", recipes: ["melee-strike", "charge-release", "tentacle-strike"] },
-  { id: "emerge", title: "Появление", recipes: ["emerge"] },
-  { id: "small", title: "Мелочи", recipes: ["blink", "jiggle"] },
-];
 
 const SOURCES: Record<string, string> = {
   "research/witcher": "Witcher 3",
@@ -26,50 +15,12 @@ const SOURCES: Record<string, string> = {
 };
 export const sourceOf = (p: LibPreset) => [...new Set((p.provenance ?? []).map((s) => SOURCES[s.source] ?? s.source))];
 
-/** Цепочки, которые подходят рецепту без ролей, — в порядке предпочтения. */
-const CHAIN_PREF: Record<string, string[]> = {
-  wave: ["body", "tail", "spine"],
-  curl: ["tail", "body", "spine"],
-  jiggle: ["tail", "body", "spine"],
-  "tentacle-strike": ["body", "tail", "spine"],
-  emerge: ["body", "pelvis", "spine"],
-};
-export function chainsFor(recipe: string, chains: Record<string, string[]>): string[] {
-  const all = Object.keys(chains);
-  const pref = (CHAIN_PREF[recipe] ?? []).filter((c) => chains[c]);
-  return [...pref, ...all.filter((c) => !pref.includes(c))];
-}
-
-/** Подходит ли рецепт скелету: у рецепта с ролями должны быть все обязательные цепочки. */
-export function missingChains(lib: LibRecipe, chains: Record<string, string[]>): string[] {
-  if (!lib.roles) return Object.keys(chains).length ? [] : ["любая цепочка"];
-  const roles = Object.values(lib.roles);
-  const missing = [...new Set(roles.filter((r) => !r.optional && !chains[r.chain]).map((r) => r.chain))];
-  // обязательных ролей нет (лапы многоногого: leg_l0…leg_r11) — нужна хотя бы одна главная, той же породы, что первая роль;
-  // таз или позвоночник сами по себе походку не делают
-  if (!missing.length && !roles.some((r) => !r.optional)) {
-    const kind = roles[0]?.chain.match(/^[a-z]+/)?.[0] ?? "";
-    if (!roles.some((r) => r.chain.startsWith(kind) && chains[r.chain])) return [`${roles[0]?.chain ?? "цепочки"}…`];
-  }
-  return missing;
-}
-
 export interface Entry {
   lib: LibRecipe;
   preset: LibPreset;
   category: string;
   missing: string[];
 }
-
-/** Какие разделы ближе всего телу из rig.detect — их движения идут первыми. */
-const BODY_FIRST: Record<string, string[]> = {
-  quadruped: ["quad", "small", "swim"],
-  multileg: ["multi", "swim"],
-  winged: ["wing", "hover"],
-  finned: ["wing", "swim", "hover"],
-  biped: ["walk", "fight", "hover"],
-  other: ["swim", "emerge", "fight"],
-};
 
 interface Props {
   library: LibRecipe[];
@@ -88,7 +39,7 @@ export function LibraryPanel({ library, chains, body, active, onTry }: Props) {
     const out: Entry[] = [];
     for (const lib of library) {
       const category = CATEGORIES.find((c) => c.recipes.includes(lib.recipe))?.id ?? "small";
-      const missing = missingChains(lib, chains);
+      const missing = missingChains(lib.roles, chains);
       for (const preset of lib.presets) out.push({ lib, preset, category, missing });
     }
     return out;

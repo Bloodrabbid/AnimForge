@@ -3,7 +3,7 @@
 // Примерка пресета — те же команды на копии проекта (/api/preview): видно на своей модели, на диск не пишется,
 // пока не нажато «Применить».
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RECIPES, buildRig, withDefaults, type Project } from "../../../packages/core/src/index.ts";
+import { buildRig, clipSteps, type Project } from "../../../packages/core/src/index.ts";
 import {
   command,
   downloadUrl,
@@ -35,7 +35,6 @@ import { Viewport, type ViewCmd } from "./Viewport.tsx";
 const query = new URLSearchParams(location.search);
 const DIR = query.get("dir") ?? "projects/fish-demo";
 const BODY_RU: Record<string, string> = { quadruped: "четвероногое", multileg: "многоногое", winged: "крылатое", biped: "двуногое", finned: "с ластами", other: "без ног" };
-const ONE_SHOT = new Set(["melee-strike", "charge-release", "tentacle-strike", "emerge"]);
 
 export interface Status {
   text: string;
@@ -160,22 +159,10 @@ export function App() {
   const tryOn = useCallback(
     async (entry: Entry, chain?: string) => {
       if (!project) return;
-      const def = RECIPES[entry.lib.recipe];
-      const p = withDefaults(def, entry.preset.params);
-      const period = Number(p.period);
-      const duration = period > 0 ? period * Math.max(1, Math.round(2 / period)) : Number(p.duration) > 0 ? Number(p.duration) : 1.6;
       let name = entry.preset.name;
       for (let i = 2; project.clips.some((c) => c.name === name); i++) name = `${entry.preset.name}-${i}`;
       const ch = entry.lib.roles ? undefined : (chain ?? chainsFor(entry.lib.recipe, project.chains)[0]);
-      const steps: Step[] = [
-        { name: "clip.add", args: { name, duration: +duration.toFixed(3), loop: !ONE_SHOT.has(entry.lib.recipe) } },
-        entry.lib.roles
-          ? { name: "recipe.rig", args: { clip: name, recipe: entry.lib.recipe, preset: entry.preset.name } }
-          : { name: "preset.apply", args: { clip: name, preset: entry.preset.name, chain: ch } },
-      ];
-      // походка четвероногого и многоногого — лапы на пол, колени сгибаются (как в README)
-      if ((entry.lib.recipe === "quadruped-gait" || entry.lib.recipe === "multileg-gait") && body?.paws.length)
-        steps.push({ name: "clip.ground", args: { clip: name, bones: body.paws.join(","), mode: "floor", ik: true } });
+      const steps: Step[] = clipSteps({ recipe: entry.lib.recipe, preset: entry.preset, name, chains: project.chains, paws: body?.paws, chain: ch });
       setBusy(true);
       try {
         const next = await preview(DIR, steps);

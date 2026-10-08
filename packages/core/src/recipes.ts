@@ -37,6 +37,8 @@ export interface RecipeDef {
   roles?: Record<string, { chain: string | ((side: "l" | "r") => string); params?: Record<string, string | number>; optional?: boolean }>;
   /** События рецепта (удар, звук, шлейф, окно ввода) в секундах клипа — уходят в экспорт и в Godot. */
   events?(p: Record<string, any>): ClipEvent[];
+  /** Длина разового движения целиком, с — под неё делается клип (у циклов длина — период). */
+  length?(p: Record<string, any>): number;
 }
 
 const wave: RecipeDef = {
@@ -330,6 +332,8 @@ const strikeRoles: RecipeDef["roles"] = { arm: { chain: (s) => `arm_${s}` }, cor
 const meleeStrike: RecipeDef = {
   name: "melee-strike",
   roles: strikeRoles,
+  // клип кончается чуть позже открытия окна ввода: рука уже вернулась
+  length: (p) => +((meleeStrike.events!(p).find((e) => e.name === "window_open")?.t ?? 1.3) + 0.3).toFixed(3),
   help:
     "Удар или серия ударов (Witcher + Tools Up!): замах → взмах с пиком скорости в контакте → доводка → возврат → окно на " +
     "следующий ввод. Один слой на роль: arm — цепочка плечо→локоть (мах vertical, локоть сгибается в крайних точках), " +
@@ -403,6 +407,7 @@ const meleeStrike: RecipeDef = {
 const chargeRelease: RecipeDef = {
   name: "charge-release",
   roles: strikeRoles,
+  length: (p) => +(p.windup + p.hold + p.release + 0.3).toFixed(3),
   help:
     "Силовая атака (Witcher): долгий замах → удержание с пружинящим корнем (петля) → выпуск двумя ударами → возврат. " +
     "Роли как у melee-strike. События: charge_start, charge_full, hit ×2, window_open.",
@@ -699,6 +704,7 @@ function strikeCurve(p: Record<string, any>, t: number): number {
 }
 const tentacleStrike: RecipeDef = {
   name: "tentacle-strike",
+  length: (p) => +(p.windupT + p.strikeT + p.hold + p.returnT + 0.3).toFixed(3),
   help:
     "Удар щупальцем, стеблем или хвостом (Witcher: щупальце, эхинопс, зейгл): замах назад, удар за доли секунды, удержание, " +
     "медленный возврат. delay — задержка удара на кость: 0 — вся цепочка бьёт разом (щупальце Witcher), 0.057 с — настоящий хлыст " +
