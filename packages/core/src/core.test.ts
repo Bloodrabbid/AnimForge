@@ -736,3 +736,22 @@ test("hover: подъём таза — доля его высоты, накло�
   let s = 0; for (let k = 0; k < 100; k++) s += at((k / 100) * p.period).pitch!;
   close(s / 100, 15, 1e-6, "средний наклон");
 });
+
+test("тяжесть и корпус: поклон груди голема дважды за цикл, корпус кикиморы, нарастающий кивок ифрита", () => {
+  const w = RECIPES["waddle-walk"];
+  const g = withDefaults(w, { role: "chest", chestBow: 15, period: 1.8 });
+  close(w.evaluate(g, 0, 1, 0).pitch!, 15, 1e-9); close(w.evaluate(g, 0, 1, 0.45).pitch!, -15, 1e-9, "через четверть цикла — обратно");
+  close(w.evaluate(g, 0, 1, 0.9).pitch!, 15, 1e-9, "через полцикла — снова поклон");
+  assert.equal(w.evaluate(withDefaults(w, { role: "chest" }), 0, 1, 0.3).pitch, undefined, "у Tools Up! поклона нет");
+  const m = RECIPES["multileg-gait"], k = withDefaults(m, { role: "pelvis", pelvisYaw: 10, bob: 0.05, period: 1 });
+  close(m.evaluate(k, 0, 1, 0.07).yaw!, 10, 1e-9, "пик рыскания таза");
+  close(m.evaluate(k, 0, 1, 0, { height: 2 }).move_up!, 0.1, 1e-9); close(m.evaluate(k, 0, 1, 0.25, { height: 2 }).move_up!, -0.1, 1e-9, "подскок дважды за цикл");
+  const c = withDefaults(m, { role: "chest", chestRoll: 17, pelvisYaw: 10, period: 1 });
+  close(m.evaluate(c, 0, 1, 0.57).bank!, 17, 1e-9); close(m.evaluate(c, 0, 1, 0.07).yaw!, -6.7, 1e-9, "грудь против таза");
+  const h = RECIPES.hover, hp = (role: string) => withDefaults(h, { role, pitch: 8, chestPitch: 37, headPitch: 48, lean: 0, period: 1 });
+  for (const t of [0.1, 0.4, 0.7]) {
+    const pel = h.evaluate(hp("pelvis"), 0, 1, t).pitch!, ch = h.evaluate(hp("chest"), 0, 1, t).pitch!, hd = h.evaluate(hp("head"), 0, 1, t).pitch!;
+    close(pel + ch, 37 * Math.cos(2 * Math.PI * (t - 0.82)), 1e-9, "грудь в мире");
+    close(pel + ch + hd, 48 * Math.cos(2 * Math.PI * (t - 0.67)), 1e-9, "голова в мире");
+  }
+});

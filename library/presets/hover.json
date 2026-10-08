@@ -57,6 +57,31 @@
      "ref": "analysis/06-creatures-tentacle-float.md: §4, M_ready"
     }
    ]
+  },
+  {
+   "name": "witcher-ifryt-dive",
+   "help": "Ифрит Witcher парит «нырками»: корпус ходит вверх-вниз на ±0.44 м, кивок нарастает от таза к голове (8 → 37 → 48°).",
+   "params": {
+    "period": 1.133,
+    "bob": 0.3,
+    "lean": 0,
+    "pitch": 8,
+    "roll": 0.4,
+    "chestYaw": 1.9,
+    "look": 0,
+    "chestPitch": 37,
+    "headPitch": 48
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/05-creatures-legs-wings.md: §cr_ifryt, M_walk: подскок 1-й гармоникой 0.444 м при тазе 1.35–1.47 м; пики тангажа 0.72 / 0.82 / 0.67"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "пик подъёма взят от призрака (0.75), у ифрита 0.29 — неточность фазы"
+    }
+   ]
   }
  ]
 }

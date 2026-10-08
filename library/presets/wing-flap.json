@@ -1,0 +1,30 @@
+{
+ "recipe": "wing-flap",
+ "presets": [
+  {
+   "name": "witcher-cockatrice-flap",
+   "help": "Кокатрикс Witcher взлетает: взмах 0.6 с, ход вниз короткий (0.36 цикла), размах от −40 до +55°, крыло почти не складывается.",
+   "params": {
+    "period": 0.6,
+    "amp": 47.5,
+    "mean": 7.5,
+    "down": 0.36,
+    "lag": 0.05,
+    "fold": 8,
+    "bob": 0.04,
+    "tailPitch": 6,
+    "tuck": 40
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/05-creatures-legs-wings.md: §cr_avian, Disappear: ход вниз 0.36, −40…+55°, раскрытость 0.83"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "lag, bob, tailPitch, tuck — на глаз"
+    }
+   ]
+  }
+ ]
+}

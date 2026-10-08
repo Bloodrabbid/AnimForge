@@ -1,0 +1,120 @@
+{
+ "recipe": "multileg-gait",
+ "presets": [
+  {
+   "name": "witcher-centipede",
+   "help": "Ножки сколопендры Witcher (cr_scolo): волна, соседние пары сдвинуты на 1/7 периода, цикл 0.45 с, ±23°.",
+   "params": {
+    "period": 0.45,
+    "duty": 0.5,
+    "lag": 0.143,
+    "side": 0,
+    "swing": 23,
+    "lift": 15,
+    "fold": 10,
+    "bodyWave": 0
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/05-creatures-legs-wings.md: §cr_scolo: сдвиг −0.143 ± 0.003, период 0.41–0.50, амплитуда ±23°"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "side 0 — ряды в данных синфазны (стороны не определить, неуверенно); duty, lift, fold — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "witcher-kikimora-trot",
+   "help": "Кикимора Witcher: рысь раскинутых ног — диагональные пары вместе, опора 0.65, протракция ±40°, таз рыщет, грудь кренится.",
+   "params": {
+    "period": 1.033,
+    "duty": 0.65,
+    "lag": 0.5,
+    "side": 0.5,
+    "swing": 40,
+    "lift": 18,
+    "fold": 27,
+    "pelvisYaw": 9.8,
+    "chestRoll": 17.3,
+    "bob": 0.035
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/05-creatures-legs-wings.md: §cr_kikimora, M_walk: фазы FL 0, HR .05, FR .5, HL .5; подскок 2-й гармоникой 0.066 м при тазе 1.86 м"
+    }
+   ]
+  },
+  {
+   "name": "witcher-kikimora-run",
+   "help": "Кикимора бегом: та же рысь быстрее, опора 0.55.",
+   "params": {
+    "period": 0.733,
+    "duty": 0.55,
+    "lag": 0.5,
+    "side": 0.5,
+    "swing": 40,
+    "lift": 22,
+    "fold": 27,
+    "pelvisYaw": 4.8,
+    "chestRoll": 8.4,
+    "bob": 0.027
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/05-creatures-legs-wings.md: §cr_kikimora, M_run"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "lift 22 — на глаз (задние ноги выше: 0.34 м)"
+    }
+   ]
+  },
+  {
+   "name": "witcher-kosh-walk",
+   "help": "Кош (паукообразное Witcher): волна спереди назад, пары через тело в противофазе, задняя половина отстаёт на 1/3 цикла; корпус почти неподвижен.",
+   "params": {
+    "period": 1.333,
+    "duty": 0.55,
+    "lag": -0.333,
+    "side": 0.5,
+    "swing": 25,
+    "lift": 25,
+    "fold": 20,
+    "bodyWave": 0
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/05-creatures-legs-wings.md: §cr_kosh, m_walk: опора .50–.64, подъём 0.43–0.70 м"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "swing, fold — на глаз; порядок ног местами нарушен — неуверенно"
+    }
+   ]
+  },
+  {
+   "name": "tripod",
+   "help": "Трипод шестиногого насекомого: передняя и задняя одной стороны вместе со средней другой.",
+   "params": {
+    "period": 0.5,
+    "duty": 0.5,
+    "lag": 0.5,
+    "side": 0.5,
+    "swing": 20,
+    "lift": 20,
+    "fold": 15
+   },
+   "provenance": [
+    {
+     "source": "hand-tuned",
+     "ref": "фазы — по определению трипода; остальное — на глаз"
+    }
+   ]
+  }
+ ]
+}

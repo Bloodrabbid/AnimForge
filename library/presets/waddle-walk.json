@@ -260,6 +260,68 @@
      "ref": "04 «что поменять в рецептах»: chestPhase=-9 — после расширения рецепта (chestPhase, chestCounter до 2)"
     }
    ]
+  },
+  {
+   "name": "witcher-golem-walk",
+   "help": "Голем Witcher: тяжёлый шаг — цикл 1.8 с, подскок вдвое больше человеческого, грудь кланяется на каждом шаге ±15° и раскачивается креном ±17°.",
+   "params": {
+    "period": 1.8,
+    "pelvisYaw": 18.7,
+    "chestCounter": 0.4,
+    "chestPhase": 180,
+    "headYaw": 4,
+    "pelvisRoll": 6.8,
+    "chestRoll": 17,
+    "headRoll": 6,
+    "rollPhase": 80,
+    "headLag": 54,
+    "bob": 0.133,
+    "armSwing": 25,
+    "legSwing": 25,
+    "knee": 40,
+    "chestBow": 15
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/05-creatures-legs-wings.md: §cr_golem, Walk: подскок 2-й гармоникой ±0.055 м при тазе 0.83 м (размах 0.11 = 13.3 %), рыскание ±18.7, крен таза ±6.8, груди ±17.2, поклон ±15"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "chestCounter, headYaw, headRoll, armSwing, legSwing, knee — на глаз; хромота не передана"
+    }
+   ]
+  },
+  {
+   "name": "witcher-zjad-walk",
+   "help": "Зджад Witcher: человеческий шаг в приседе, таз рыщет вдвое сильнее человека.",
+   "params": {
+    "period": 1.067,
+    "pelvisYaw": 15.5,
+    "chestCounter": 0.5,
+    "chestPhase": 180,
+    "headYaw": 3,
+    "pelvisRoll": 5.5,
+    "chestRoll": 11,
+    "headRoll": 5,
+    "rollPhase": 80,
+    "headLag": 54,
+    "bob": 0.074,
+    "armSwing": 30,
+    "legSwing": 25,
+    "knee": 45,
+    "chestBow": 0
+   },
+   "provenance": [
+    {
+     "source": "research/witcher",
+     "ref": "analysis/05-creatures-legs-wings.md: §cr_zjad, M_walk: подскок ±0.029 м при тазе 0.78 м, рыскание ±15.5, крен ±5.5 / 11.0"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "chestCounter, head*, armSwing, legSwing, knee — на глаз"
+    }
+   ]
   }
  ]
 }

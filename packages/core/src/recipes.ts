@@ -190,6 +190,7 @@ const waddleWalk: RecipeDef = {
     armSwing: { type: "number", default: 30, min: 0, max: 60, unit: "°", help: "маятник рук, в противофазе ногам (UpperArm ±30)" },
     legSwing: { type: "number", default: 30, min: 0, max: 60, unit: "°", help: "мах бедра (Witcher: шаг ±24.7, бег ±31.8; TLJ ±14–17)" },
     knee: { type: "number", default: 45, min: 0, max: 120, unit: "°", help: "подгиб колена в переносе ноги (на глаз)" },
+    chestBow: { type: "number", default: 0, min: 0, max: 30, unit: "°", help: "поклон груди на каждом шаге, 2-я гармоника (голем Witcher ±15; Tools Up! 0)" },
   },
   evaluate(p, i, n, t, info) {
     const w = (2 * Math.PI * t) / p.period;
@@ -210,7 +211,8 @@ const waddleWalk: RecipeDef = {
         // и принимает вес (sin = ±1). Привязка фазы к ногам — допущение: ноги в Tools Up! в углах не замерены.
         return { ...world.pelvis, move_up: p.bob * (info?.height ?? 0) * bobAt((2 * t) / p.period - 0.5 + 3 / 14) };
       case "chest":
-        return i > 0 ? {} : rel(world.chest, world.pelvis);
+        // поклон — дважды за цикл, в низ шага (когда нога принимает вес); фаза — допущение
+        return i > 0 ? {} : { ...rel(world.chest, world.pelvis), ...(p.chestBow ? { pitch: p.chestBow * Math.cos(2 * w) } : {}) };
       case "head":
         return i > 0 ? {} : rel(world.head, world.chest);
       case "arm_l":
@@ -500,7 +502,7 @@ const quadrupedGait: RecipeDef = {
     offsetHR: { type: "number", default: 0.892, min: 0, max: 1, help: "фаза задней правой (шаг 0.892, галоп 0.933, рысь 0, иноходь 0.5)" },
     legs: { type: "number", default: 1, min: 0, max: 2, help: "размах суставов лап — доля от собаки" },
     body: { type: "number", default: 1, min: 0, max: 3, help: "качание корпуса и шеи — доля от собаки (шаг: спина ±1.1°, шея ±3°; галоп: корпус ±11°, шея ±8.5°)" },
-    bob: { type: "number", default: 1, min: 0, max: 3, help: "подскок таза — доля от собаки (шаг 1.3 % высоты таза, галоп 7.4 %)" },
+    bob: { type: "number", default: 1, min: 0, max: 5, help: "подскок таза — доля от собаки (шаг 1.3 % высоты таза, галоп 7.4 %)" },
   },
   evaluate(p, i, n, t, info) {
     const g = QUAD[p.gait] ?? QUAD.walk;
@@ -551,6 +553,10 @@ const multilegGait: RecipeDef = {
   roles: {
     ...Object.fromEntries([...Array(MAX_PAIRS).keys()].flatMap((k) => (["l", "r"] as const).map((s) => [`leg_${s}${k}`, { chain: `leg_${s}${k}`, optional: true }]))),
     spine: { chain: "spine", optional: true },
+    // раскоряка на четырёх ногах (кикимора): rig.detect называет её ноги как у четвероногого
+    fore_l: { chain: "arm_l", params: { role: "leg_l0" }, optional: true }, fore_r: { chain: "arm_r", params: { role: "leg_r0" }, optional: true },
+    hind_l: { chain: "leg_l", params: { role: "leg_l1" }, optional: true }, hind_r: { chain: "leg_r", params: { role: "leg_r1" }, optional: true },
+    pelvis: { chain: "pelvis", optional: true }, chest: { chain: "chest", optional: true },
   },
   help:
     "Походка многоногого (насекомое, паук, сколопендра): каждая нога — опора (стопа равномерно уходит назад) и перенос " +
@@ -558,7 +564,7 @@ const multilegGait: RecipeDef = {
     "к голове), side — между левой и правой. У шести ног lag 0.5 и side 0.5 дают трипод. Цепочки — из rig.detect: leg_l0, leg_r0 " +
     "(передняя пара), leg_l1… и spine (волна тела, у сколопендры).",
   params: {
-    role: { type: "enum", default: "leg_l0", options: [...[...Array(MAX_PAIRS).keys()].flatMap((k) => [`leg_l${k}`, `leg_r${k}`]), "spine"], help: "нога (leg_l0 — передняя левая) или spine" },
+    role: { type: "enum", default: "leg_l0", options: [...[...Array(MAX_PAIRS).keys()].flatMap((k) => [`leg_l${k}`, `leg_r${k}`]), "spine", "pelvis", "chest"], help: "нога (leg_l0 — передняя левая), spine, pelvis или chest" },
     period: { type: "number", default: 0.6, min: 0.1, max: 4, unit: "с", help: "цикл одной ноги" },
     duty: { type: "number", default: 0.5, min: 0.2, max: 0.9, help: "доля опоры в цикле (трипод 0.5, медленная волна 0.6–0.8)" },
     lag: { type: "number", default: 0.5, min: -1, max: 1, help: "сдвиг фазы между соседними парами, доля цикла (трипод 0.5; волна сколопендры 0.1–0.2)" },
@@ -568,8 +574,14 @@ const multilegGait: RecipeDef = {
     fold: { type: "number", default: 15, min: 0, max: 60, unit: "°", help: "складывание голени в переносе" },
     bodyWave: { type: "number", default: 0, min: 0, max: 30, unit: "°", help: "волна тела вбок на кость spine (сколопендра)" },
     waveLag: { type: "number", default: 0.1, min: -1, max: 1, help: "сдвиг фазы волны тела на кость" },
+    pelvisYaw: { type: "number", default: 0, min: 0, max: 30, unit: "°", help: "рыскание таза раз за цикл (кикимора ±9.8)" },
+    chestRoll: { type: "number", default: 0, min: 0, max: 30, unit: "°", help: "крен груди раз за цикл (кикимора ±17.3)" },
+    bob: { type: "number", default: 0, min: 0, max: 0.2, help: "подскок таза дважды за цикл — доля высоты (кикимора 0.066 / 1.86 = 3.5 %)" },
   },
-  evaluate(p, i, n, t) {
+  evaluate(p, i, n, t, info) {
+    const cyc = 2 * Math.PI * (t / p.period);
+    if (p.role === "pelvis") return i > 0 ? {} : { yaw: p.pelvisYaw * Math.cos(cyc - 2 * Math.PI * 0.07), move_up: p.bob * (info?.height ?? 0) * Math.cos(2 * cyc) };
+    if (p.role === "chest") return i > 0 ? {} : { bank: p.chestRoll * Math.cos(cyc - 2 * Math.PI * 0.57), yaw: -0.67 * p.pelvisYaw * Math.cos(cyc - 2 * Math.PI * 0.07) };
     if (p.role === "spine") {
       if (!p.bodyWave) return {};
       return { yaw: p.bodyWave * Math.sin(2 * Math.PI * (t / p.period + i * p.waveLag)) };
@@ -658,14 +670,17 @@ const hover: RecipeDef = {
     roll: { type: "number", default: 4.1, min: 0, max: 20, unit: "°", help: "крен таза" },
     chestYaw: { type: "number", default: 7.3, min: 0, max: 30, unit: "°", help: "рыскание груди" },
     look: { type: "number", default: 0, min: 0, max: 40, unit: "°", help: "голова озирается (боевая стойка: ±24 + 2-я гармоника ±29)" },
+    chestPitch: { type: "number", default: 0, min: 0, max: 60, unit: "°", help: "кивок груди (ифрит: нарастает от таза к голове 8 → 37 → 48°)" },
+    headPitch: { type: "number", default: 0, min: 0, max: 60, unit: "°", help: "кивок головы (ифрит ±48)" },
   },
   evaluate(p, i, n, t, info) {
     if (i > 0) return {};
     const s = t / p.period, c = (peak: number, k = 1) => Math.cos(2 * Math.PI * k * (s - peak));
     // пики гармоник — из M_walk: подъём 0.75, тангаж 0.93, крен 0.18, рыскание груди 0.78 (доли цикла)
     if (p.role === "pelvis") return { move_up: p.bob * (info?.height ?? 0) * c(0.75), pitch: p.lean + p.pitch * c(0.93), bank: p.roll * c(0.18) };
-    if (p.role === "chest") return { yaw: p.chestYaw * c(0.78) };
-    return p.look ? { yaw: p.look * c(0.3) + 1.2 * p.look * c(0.1, 2) } : {};
+    // кивки груди и головы — в мире (ифрит: пики 0.82 и 0.67); слой отдаёт разницу с родителем
+    if (p.role === "chest") return { yaw: p.chestYaw * c(0.78), ...(p.chestPitch ? { pitch: p.chestPitch * c(0.82) - p.pitch * c(0.93) } : {}) };
+    return { ...(p.look ? { yaw: p.look * c(0.3) + 1.2 * p.look * c(0.1, 2) } : {}), ...(p.headPitch ? { pitch: p.headPitch * c(0.67) - (p.chestPitch ? p.chestPitch * c(0.82) : p.pitch * c(0.93)) } : {}) };
   },
 };
 
