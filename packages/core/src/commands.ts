@@ -1,11 +1,11 @@
 // Ядро команд. Каждое действие — команда с описанием и параметрами: её одинаково вызывают интерфейс, CLI и MCP.
 // Команды здесь чистые: меняют проект в памяти и возвращают результат. Файлы, Blender и рендер — в адаптерах (packages/cli).
 import { CHANNELS } from "./project.ts";
-import type { Channel, Clip, Constraint, ConstraintTarget, Interp, KeyLayer, Project, RecipeLayer, Skeleton } from "./project.ts";
+import type { Channel, Clip, Constraint, ConstraintTarget, Interp, KeyLayer, PoseKey, PoseLayer, Project, RecipeLayer, Skeleton } from "./project.ts";
 import { RECIPES } from "./recipes.ts";
-import { buildRig, frameTimes, motionAt } from "./evaluate.ts";
+import { buildRig, frameTimes, motionAt, reach, samplePose } from "./evaluate.ts";
 import { LIMIT_AXES, boneAngles, limitFrame, type BoneLimit, type LimitAxis } from "./limits.ts";
-import { DEG, qaxis, qrot, vdot, vsub } from "./math.ts";
+import { DEG, QI, qaxis, qmul, qnorm, qrot, vadd, vdot, vsub } from "./math.ts";
 import { bodyFrame } from "./evaluate.ts";
 
 export interface Ctx {
@@ -75,6 +75,23 @@ function addConstraint(clip: Clip, c: Constraint) {
   else clip.constraints.push(c);
 }
 
+/** Ключ позы в момент t (слой «pose» создаётся при первом ключе, ключ — если в этот момент его нет). */
+function poseKey(clip: Clip, t: number): PoseKey {
+  let l = clip.layers.find((l) => l.type === "pose") as PoseLayer | undefined;
+  if (!l) clip.layers.push((l = { id: "pose", type: "pose", keys: [] }));
+  let k = l.keys.find((k) => Math.abs(k.t - t) < 1e-6);
+  if (!k) {
+    // новый ключ между старыми — с тем, что там уже было по интерполяции, иначе поза в этот момент прыгнет
+    const cur = samplePose(l, t, clip);
+    k = { t };
+    if (Object.keys(cur.rot).length) k.rot = cur.rot;
+    if (Object.keys(cur.move).length) k.move = cur.move;
+    l.keys.push(k);
+    l.keys.sort((x, y) => x.t - y.t);
+  }
+  return k;
+}
+
 function keyLayer(clip: Clip): KeyLayer {
   let l = clip.layers.find((l) => l.type === "keys") as KeyLayer | undefined;
   if (!l) {
@@ -100,7 +117,7 @@ const defs: CommandDef[] = [
         duration: c.duration,
         fps: c.fps,
         loop: c.loop,
-        layers: c.layers.map((l) => (l.type === "recipe" ? `${l.id}: ${l.recipe}(${l.target.chain})` : `${l.id}: ключи, треков ${l.tracks.length}`)),
+        layers: c.layers.map((l) => (l.type === "recipe" ? `${l.id}: ${l.recipe}(${l.target.chain})` : l.type === "pose" ? `${l.id}: позы, ключей ${l.keys.length}` : `${l.id}: ключи, треков ${l.tracks.length}`)),
       })),
     }),
   },
@@ -435,6 +452,7 @@ const defs: CommandDef[] = [
       targetBone: { type: "string", help: "или кость-цель" },
       offset: { type: "string", help: "сдвиг цели «x,y,z»" },
       pole: { type: "string", help: "точка «x,y,z», куда смотрит локоть/колено" },
+      length: { type: "number", help: "сколько костей сгибать от кончика вверх: 2 (по умолчанию) — рука/нога, 3–4 — с ключицей и корпусом, больше — весь хвост" },
       weight: { type: "number", help: "0…1, по умолчанию 1" },
       id: { type: "string", help: "имя, по умолчанию ik_<цепочка>" },
     },
@@ -464,6 +482,7 @@ const defs: CommandDef[] = [
         ...(end ? { end: true } : {}),
         target: targetOf(ctx, a),
         ...(a.pole != null ? { pole: vec(a.pole, "pole") } : {}),
+        ...(a.length != null && +a.length !== 2 ? { length: Math.max(1, Math.round(+a.length)) } : {}),
         ...(a.weight != null && +a.weight !== 1 ? { weight: +a.weight } : {}),
       };
       addConstraint(clip, c);
@@ -514,6 +533,54 @@ const defs: CommandDef[] = [
     },
   },
   {
+    name: "pose.reach",
+    help: "Позинг: потянуть кость в точку в момент t — сгибаются length костей над ней с учётом пределов, результат пишется ключом позы (слой «pose»). length 0 — перенести тело целиком (за таз: присесть, наклониться; закреплённые IK-ступни останутся на месте).",
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      t: { type: "number", required: true, help: "время, с" },
+      bone: { type: "string", required: true, help: "какую кость тянуть (кисть, голову, кончик хвоста, таз)" },
+      target: { type: "string", required: true, help: "куда, «x,y,z» в координатах модели" },
+      length: { type: "number", help: "сколько костей сгибать, по умолчанию 2" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const clip = clipOf(ctx, a.clip);
+      const rig = buildRig(ctx.skeleton);
+      need(rig.index.has(a.bone), `нет кости «${a.bone}»`);
+      const r = reach(ctx.project, rig, clip, +a.t, a.bone, vec(a.target, "target"), a.length == null ? 2 : Math.max(0, Math.round(+a.length)));
+      const key = poseKey(clip, +a.t);
+      for (const [b, q] of Object.entries(r.rot)) (key.rot ??= {})[b] = qnorm(qmul(q, key.rot?.[b] ?? QI));
+      for (const [b, v] of Object.entries(r.move)) (key.move ??= {})[b] = vadd(key.move?.[b] ?? [0, 0, 0], v);
+      return { t: key.t, bones: [...Object.keys(r.rot), ...Object.keys(r.move)] };
+    },
+  },
+  {
+    name: "pose.clear",
+    help: "Убрать ключи позы: в момент t (или все), для кости bone (или всех).",
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      t: { type: "number", help: "время ключа; без него — все ключи" },
+      bone: { type: "string", help: "кость; без неё — все" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const clip = clipOf(ctx, a.clip);
+      const layer = clip.layers.find((l) => l.type === "pose") as PoseLayer | undefined;
+      if (!layer) return { removed: 0 };
+      let removed = 0;
+      for (const k of layer.keys) {
+        if (a.t != null && Math.abs(k.t - +a.t) > 1e-6) continue;
+        for (const m of [k.rot, k.move]) {
+          if (!m) continue;
+          for (const b of Object.keys(m)) if (!a.bone || b === a.bone) delete m[b], removed++;
+        }
+      }
+      layer.keys = layer.keys.filter((k) => Object.keys(k.rot ?? {}).length || Object.keys(k.move ?? {}).length);
+      if (!layer.keys.length) clip.layers = clip.layers.filter((l) => l !== layer);
+      return { removed };
+    },
+  },
+  {
     name: "constraint.key",
     help: "Ключ цели констрейна во времени t: цель едет по ключам (рука тянется к двигающемуся предмету, взгляд провожает).",
     args: {
@@ -556,6 +623,7 @@ const defs: CommandDef[] = [
       targetBone: { type: "string", help: "кость-цель" },
       offset: { type: "string", help: "сдвиг цели" },
       pole: { type: "string", help: "«x,y,z» или none" },
+      length: { type: "number", help: "IK: сколько костей сгибать" },
     },
     mutates: true,
     run(ctx, a) {
@@ -573,6 +641,11 @@ const defs: CommandDef[] = [
       if (c.type === "copy") need(a.target == null && a.targetBone == null && a.offset == null, "у копии поворота нет цели");
       else if (a.target != null || a.targetBone != null) c.target = targetOf(ctx, a);
       else if (a.offset != null) c.target.offset = vec(a.offset, "offset");
+      if (a.length != null && c.type === "ik") {
+        const n = Math.max(1, Math.round(+a.length));
+        if (n === 2) delete c.length;
+        else c.length = n;
+      }
       if (a.pole != null && c.type === "ik") {
         if (a.pole === "none") delete c.pole;
         else c.pole = vec(a.pole, "pole");

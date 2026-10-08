@@ -61,7 +61,22 @@ export interface KeyLayer {
   tracks: KeyTrack[]; // добавочные повороты поверх нижних слоёв
 }
 
-export type Layer = RecipeLayer | KeyLayer;
+/** Ключ позы: добавочные повороты костей (кватернион-дельта в локальных осях позы покоя, поверх нижних слоёв)
+ * и сдвиги (мировые, м) в момент t. Так записывается поза, которую тянули мышью или pose.reach. */
+export interface PoseKey {
+  t: number;
+  rot?: Record<string, Quat>;
+  move?: Record<string, Vec3>;
+  interp?: Interp; // как идти к следующему ключу; по умолчанию smooth
+}
+
+export interface PoseLayer {
+  id: string;
+  type: "pose";
+  keys: PoseKey[];
+}
+
+export type Layer = RecipeLayer | KeyLayer | PoseLayer;
 
 /** Цель констрейна: точка в координатах модели (как у костей в rest), кость (+ сдвиг в мировых осях) или
  * точка с ключами по времени — цель движется, рука или взгляд следуют. */
@@ -95,6 +110,9 @@ export interface IKConstraint {
   end?: boolean;
   target: ConstraintTarget;
   pole?: Vec3;
+  /** сколько костей сгибать, считая вверх от кончика: 2 — рука или нога, больше — ещё ключица и позвоночник,
+   * весь хвост. Пределы суставов учитываются при подборе позы, а не обрезают её потом. */
+  length?: number;
   weight?: number;
   muted?: boolean;
 }

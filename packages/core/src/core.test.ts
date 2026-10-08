@@ -1125,3 +1125,58 @@ test("копия поворота: кость повторяет движени�
   assert.throws(() => runCommand(ctx, "copy.add", { clip: "c", bone: "head", source: "head" }), /сама себя/);
   assert.throws(() => runCommand(ctx, "constraint.key", { clip: "c", id: "copy_arm_l", t: 1, target: "0,0,0" }), /нет цели/);
 });
+
+test("IK длиннее двух костей: за далёкой целью тянется корпус; пределы учитываются при подборе позы, а не обрезают её", () => {
+  const far: Vec3 = [0.85, 1.2, 0.3];
+  const err = (cons: any, extra: Partial<Project> = {}) => {
+    const pr = conProject([{ id: "ik", type: "ik", tip: "hand_l", target: { pos: far }, ...cons }], extra);
+    const r = W(pr);
+    return { e: dist(r.at("hand_l"), far), r, pr };
+  };
+  assert.ok(err({}).e > 0.1, "рука сама не дотягивается");
+  const long = err({ length: 6 });
+  close(long.e, 0, 1e-3, "с ключицей и позвоночником — дотянулась");
+  assert.ok(dist(long.r.at("spine"), [0, 1.15, 0]) < 1e-9 && dist(long.r.at("chest"), [0, 1.42, 0]) > 1e-3, "грудь наклонилась, основание цепочки на месте");
+  // прямой локоть (±5°): дотягивается за счёт корпуса, локоть в пределе
+  const lim = { farm_l: { lateral: [-5, 5], vertical: [-5, 5] } } as Project["limits"];
+  const straight = err({ length: 6 }, { limits: lim });
+  close(straight.e, 0, 2e-3, "дотянулась с прямым локтем");
+  const rig = straight.r.rig;
+  const m = motionAt(straight.pr, rig, straight.pr.clips[0], 0);
+  const a = boneAngles(rig, straight.pr, "farm_l", m.rot.get("farm_l")!, m.base.get("farm_l"));
+  assert.ok(Math.abs(a.lateral!) <= 5 + 1e-6 && Math.abs(a.vertical!) <= 5 + 1e-6, `локоть в пределе: ${a.lateral}, ${a.vertical}`);
+  // близкая цель (нужен сильный сгиб локтя) при длине 2 и пределах — CCD, а не обрезка формулы
+  const near: Vec3 = [0.45, 1.5, 0.2];
+  const lim2 = { farm_l: { lateral: [-150, 0], vertical: [-8, 8] } } as Project["limits"];
+  const n2 = W(conProject([{ id: "ik", type: "ik", tip: "hand_l", target: { pos: near } }], { limits: lim2 }));
+  const n2b = W(conProject([{ id: "ik", type: "ik", tip: "hand_l", target: { pos: near } }], { limits: { farm_l: { lateral: [0, 150], vertical: [-8, 8] } } }));
+  // локоть гнётся только в одну сторону — какую ни разреши, рука находит позу с плечом и дотягивается
+  close(dist(n2.at("hand_l"), near), 0, 2e-3, "локоть только вперёд");
+  close(dist(n2b.at("hand_l"), near), 0, 2e-3, "локоть только назад");
+});
+
+test("позинг: pose.reach тянет кисть в точку и пишет ключ позы; за таз — тело целиком, закреплённая ступня стоит; ключи позы интерполируются", () => {
+  const ctx = { project: conProject([]), skeleton: plain() };
+  const P: Vec3 = [0.5, 1.3, 0.3];
+  const r = runCommand(ctx, "pose.reach", { clip: "c", t: 0, bone: "hand_l", target: P.join(",") }) as any;
+  assert.deepEqual(r.bones.sort(), ["farm_l", "uarm_l"]);
+  close(dist(W(ctx.project).at("hand_l"), P), 0, 1e-4, "кисть там, куда тянули");
+  // второй ключ в t=2 — рука снова в покое; в t=1 — посередине
+  runCommand(ctx, "pose.reach", { clip: "c", t: 2, bone: "hand_l", target: "0.7,1.5,0" });
+  close(dist(W(ctx.project, 2).at("hand_l"), [0.7, 1.5, 0]), 0, 1e-4, "второй ключ");
+  const mid = W(ctx.project, 1).at("hand_l");
+  assert.ok(dist(mid, P) > 0.05 && dist(mid, [0.7, 1.5, 0]) > 0.05, `посередине: ${mid}`);
+  // новый ключ между старыми не дёргает позу: t=1 без перемещения цели — кисть там же
+  runCommand(ctx, "pose.reach", { clip: "c", t: 1, bone: "hand_l", target: mid.join(",") });
+  close(dist(W(ctx.project, 1).at("hand_l"), mid), 0, 1e-4, "ключ посередине с той же позой");
+  // присесть: ступня закреплена IK, таз тянут вниз на 0.2
+  ctx.project.chains.leg_l = ["thigh_l", "shin_l"];
+  runCommand(ctx, "ik.add", { clip: "c", chain: "leg_l", target: "0.1,0.08,0", pole: "0.1,0.5,1" });
+  runCommand(ctx, "pose.reach", { clip: "c", t: 0, bone: "hips", target: "0,0.8,0", length: 0 });
+  const sq = W(ctx.project, 0);
+  close(sq.at("hips")[1], 0.8, 1e-9, "таз опустился");
+  close(dist(sq.at("foot_l"), [0.1, 0.08, 0]), 0, 1e-6, "ступня на месте");
+  assert.ok(sq.at("shin_l")[2] > 0.05, "колено ушло вперёд");
+  runCommand(ctx, "pose.clear", { clip: "c" });
+  assert.equal(ctx.project.clips[0].layers.length, 0);
+});
