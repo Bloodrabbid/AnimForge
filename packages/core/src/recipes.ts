@@ -449,9 +449,91 @@ const chargeRelease: RecipeDef = {
   },
 };
 
-export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease };
 
-export { strikePlan, strikePos, swingEase };
+// ── четвероногие: собака Witcher (cr_canine; баргест играет те же клипы) ──────────────────────────────────────────
+// Кривые суставов лап за цикл (research: witcher/analysis/s11_quad_curves.py). Угол — в плоскости тела, + — конец кости
+// вперёд; j0 — плечо/бедро от вертикали мира, j1…j3 — сустав относительно родителя. Фаза 0 — лапа дальше всего впереди.
+// 20 отсчётов на цикл, отклонение от среднего, среднее левой и правой лапы.
+const QUAD: Record<string, { fore: number[][]; hind: number[][]; body: Record<string, [number, number][]>; pelvisH: number }> = {
+  walk: {
+    fore: [[36.8, 34.9, 26.0, 18.9, 12.7, 7.9, 4.0, 0.5, -2.7, -5.5, -8.1, -12.1, -19.1, -25.0, -29.8, -32.2, -24.3, -9.9, 4.7, 22.6], [-18.6, -23.9, -16.5, -12.0, -7.3, -4.2, -2.8, -2.7, -3.7, -5.8, -8.6, -9.3, -6.6, -5.5, -1.2, 16.7, 32.5, 39.1, 32.7, 7.8], [10.1, 5.8, 0.3, 2.3, 4.9, 7.1, 10.2, 13.9, 18.1, 22.5, 26.7, 27.9, 23.9, 19.2, 9.7, -17.8, -52.2, -69.6, -51.7, -12.1], [-28.3, -16.8, -9.8, -9.2, -10.2, -10.9, -11.4, -11.7, -11.6, -11.1, -10.0, -6.4, 1.8, 11.3, 21.2, 33.3, 44.0, 40.3, 14.3, -18.4]],
+    hind: [[17.1, 18.3, 18.2, 14.3, 7.8, 0.2, -7.9, -15.6, -21.1, -23.5, -24.2, -23.3, -23.1, -24.5, -13.8, -0.1, 16.7, 28.7, 30.2, 24.6], [25.0, 15.0, 4.7, -0.8, -1.9, -0.0, 4.5, 9.6, 12.1, 10.2, 6.5, 2.0, -0.2, 1.1, -10.8, -23.2, -28.4, -21.8, -10.0, 8.6], [-30.3, -18.6, -7.5, 1.2, 8.0, 12.0, 13.1, 12.2, 10.6, 8.9, 6.3, 2.7, -1.9, -4.6, 4.7, 12.3, 9.0, -3.4, -13.0, -23.2], [29.3, 7.9, -1.9, -1.3, -0.3, 1.4, 3.9, 6.6, 9.0, 10.8, 11.8, 8.9, 3.6, -2.8, -16.0, -26.4, -26.7, -19.9, -7.5, 12.8]],
+    // гармоники [амплитуда, пик в долях цикла от выноса левой передней]: 1-я и 2-я
+    body: {"spine_pitch": [[0.078, 0.94], [1.087, 0.06]], "spine_yaw": [[3.54, 0.156], [0.103, 0.219]], "neck_pitch": [[0.499, 0.056], [3.008, 0.033]], "neck_yaw": [[2.539, 0.712], [0.549, 0.327]], "pelvis_bob_m": [[0.004, 0.314], [0.007, 0.043]]},
+    pelvisH: 0.531,
+  },
+  run: {
+    fore: [[60.5, 42.7, 24.8, 8.5, -4.1, -10.7, -16.1, -22.3, -31.0, -30.6, -26.7, -25.7, -33.6, -31.6, -20.4, -5.2, 9.1, 23.2, 38.1, 51.4], [-39.6, -23.8, -9.3, 2.2, 8.6, 5.3, 1.7, -1.4, -3.4, -14.1, -26.3, -26.0, 0.7, 21.5, 33.6, 37.5, 34.6, 22.3, -0.1, -23.8], [29.5, 28.0, 25.4, 23.0, 22.2, 24.3, 24.3, 22.2, 17.8, 10.3, 4.3, -4.0, -19.0, -32.6, -44.7, -51.3, -49.3, -36.8, -10.4, 16.8], [-50.3, -46.9, -40.9, -33.7, -26.7, -18.9, -9.9, 1.4, 16.6, 34.3, 48.7, 55.7, 51.9, 42.7, 31.5, 19.0, 5.6, -8.7, -27.6, -44.4]],
+    hind: [[25.3, 22.1, 17.7, 12.0, 5.1, -5.3, -15.6, -23.2, -25.5, -25.7, -21.2, -14.4, -7.4, -3.4, -1.3, 0.7, 4.3, 12.3, 19.5, 24.4], [23.8, 17.2, 6.6, -4.2, -11.2, -7.8, 0.7, 9.3, 13.2, 14.7, 6.1, -7.7, -22.0, -26.4, -21.8, -12.8, -4.0, 1.3, 8.5, 16.5], [-22.2, -16.1, -7.7, 0.1, 4.5, 1.6, -6.7, -17.5, -28.0, -31.7, -22.9, -6.5, 12.9, 27.3, 35.4, 37.5, 33.3, 18.7, 1.6, -13.5], [11.1, 13.0, 18.3, 22.4, 20.8, 18.1, 14.3, 7.7, -2.9, -11.8, -16.5, -18.6, -20.1, -20.3, -19.5, -17.0, -12.2, -3.8, 5.1, 11.1]],
+    // гармоники [амплитуда, пик в долях цикла от выноса левой передней]: 1-я и 2-я
+    body: {"spine_pitch": [[11.266, 0.004], [1.248, 0.321]], "spine_yaw": [[2.074, 0.87], [0.503, 0.363]], "neck_pitch": [[8.489, 0.805], [1.223, 0.187]], "neck_yaw": [[1.762, 0.449], [0.649, 0.352]], "pelvis_bob_m": [[0.038, 0.528], [0.004, 0.235]]},
+    pelvisH: 0.517,
+  },
+};
+
+/** Периодическая таблица → значение в доле цикла s (Катмулл-Ром, без излома на стыке цикла). */
+function periodic(tab: number[], s: number): number {
+  const n = tab.length;
+  const f = (((s % 1) + 1) % 1) * n;
+  const k = Math.floor(f), u = f - k;
+  const p0 = tab[(k - 1 + n) % n], p1 = tab[k], p2 = tab[(k + 1) % n], p3 = tab[(k + 2) % n];
+  return 0.5 * (2 * p1 + (p2 - p0) * u + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u * u + (3 * p1 - p0 - 3 * p2 + p3) * u * u * u);
+}
+const harmAt = (h: [number, number][], s: number) => h.reduce((a, [amp, peak], k) => a + amp * Math.cos(2 * Math.PI * (k + 1) * (s - peak)), 0);
+
+const QUAD_ROLES = { pelvis: "pelvis", spine: "spine", neck: "neck", leg_fl: "arm_l", leg_fr: "arm_r", leg_hl: "leg_l", leg_hr: "leg_r" } as const;
+
+const quadrupedGait: RecipeDef = {
+  name: "quadruped-gait",
+  roles: Object.fromEntries(Object.entries(QUAD_ROLES).map(([role, chain]) => [role, { chain }])),
+  help:
+    "Походка четвероногого по собаке Witcher: у каждой лапы свои кривые плеча/бедра, локтя/колена, пясти/плюсны и пальцев " +
+    "(вынос быстрый, опора ≈70 % цикла), лапы сдвинуты по фазе (шаг — почти диагональные пары, галоп — задние, потом передние). " +
+    "Корпус качается носом вверх-вниз и изгибается вбок, шея — своё минус корпус, таз подскакивает. Цепочки — как у rig.detect " +
+    "для четвероногих: передние лапы arm_l/arm_r, задние leg_l/leg_r. Хвост не анимирован и в Witcher — повесь на него jiggle.",
+  params: {
+    role: { type: "enum", default: "leg_fl", options: Object.keys(QUAD_ROLES), help: "какую часть крутит слой: таз, спина, шея или лапа (fl — передняя левая, hr — задняя правая)" },
+    gait: { type: "enum", default: "walk", options: ["walk", "run"], help: "набор кривых: walk — шаг собаки (M_walk), run — галоп (M_run)" },
+    period: { type: "number", default: 0.933, min: 0.25, max: 3, unit: "с", help: "цикл: каждая лапа шагает один раз (собака: шаг 0.933, галоп 0.5)" },
+    offsetFR: { type: "number", default: 0.496, min: 0, max: 1, help: "фаза передней правой от передней левой, доля цикла (шаг 0.496, галоп 0.333, рысь 0.5)" },
+    offsetHL: { type: "number", default: 0.463, min: 0, max: 1, help: "фаза задней левой (шаг 0.463, галоп 0.733, рысь 0.5, иноходь 0)" },
+    offsetHR: { type: "number", default: 0.892, min: 0, max: 1, help: "фаза задней правой (шаг 0.892, галоп 0.933, рысь 0, иноходь 0.5)" },
+    legs: { type: "number", default: 1, min: 0, max: 2, help: "размах суставов лап — доля от собаки" },
+    body: { type: "number", default: 1, min: 0, max: 3, help: "качание корпуса и шеи — доля от собаки (шаг: спина ±1.1°, шея ±3°; галоп: корпус ±11°, шея ±8.5°)" },
+    bob: { type: "number", default: 1, min: 0, max: 3, help: "подскок таза — доля от собаки (шаг 1.3 % высоты таза, галоп 7.4 %)" },
+  },
+  evaluate(p, i, n, t, info) {
+    const g = QUAD[p.gait] ?? QUAD.walk;
+    const s = t / p.period;
+    // корпус носом вверх (+): поворачиваем таз — всё тело качается вокруг бёдер
+    const nose = p.body * harmAt(g.body.spine_pitch, s);
+    const bend = p.body * harmAt(g.body.spine_yaw, s); // + — грудь влево
+    switch (p.role) {
+      case "pelvis":
+        if (i > 0) return {};
+        return { pitch: -nose, move_up: p.bob * (info?.height ?? 0) * harmAt(g.body.pelvis_bob_m, s) / g.pelvisH };
+      case "spine":
+        return { yaw: bend / n };
+      case "neck":
+        // шея в Witcher замерена в мире: отдаём разницу с корпусом, делим на кости шеи
+        return { pitch: -(p.body * harmAt(g.body.neck_pitch, s) - nose) / n, yaw: (p.body * harmAt(g.body.neck_yaw, s) - bend) / n };
+      default: {
+        const fore = p.role === "leg_fl" || p.role === "leg_fr";
+        const off = { leg_fl: 0, leg_fr: p.offsetFR, leg_hl: p.offsetHL, leg_hr: p.offsetHR }[p.role as "leg_fl"];
+        // у длинной цепочки (лопатка/таз + 4 кости) первую кость не трогаем: кривые начинаются с плеча/бедра
+        const j = i - (n >= 5 ? 1 : 0);
+        if (j < 0 || j > 3) return {};
+        let a = p.legs * periodic((fore ? g.fore : g.hind)[j], s - off);
+        if (j === 0) a -= nose; // плечо и бедро замерены от вертикали мира, а корпус уже качнули
+        return { pitch: -a }; // + угла — конец кости вперёд, а pitch + уводит висящую кость назад
+      }
+    }
+  },
+};
+
+export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait };
+
+export { QUAD, periodic, strikePlan, strikePos, swingEase };
 
 export function withDefaults(def: RecipeDef, params: Record<string, unknown>): Record<string, any> {
   const out: Record<string, any> = {};

@@ -24,6 +24,35 @@
       "neck_0",
       "neck_1",
       "head"
+    ],
+    "arm_l": [
+      "leg_fl_0",
+      "leg_fl_1",
+      "leg_fl_2"
+    ],
+    "arm_r": [
+      "leg_fr_0",
+      "leg_fr_1",
+      "leg_fr_2"
+    ],
+    "leg_l": [
+      "leg_bl_0",
+      "leg_bl_1",
+      "leg_bl_2"
+    ],
+    "leg_r": [
+      "leg_br_0",
+      "leg_br_1",
+      "leg_br_2"
+    ],
+    "pelvis": [
+      "spine_0"
+    ],
+    "chest": [
+      "spine_3"
+    ],
+    "head": [
+      "head"
     ]
   },
   "clips": [
@@ -94,6 +123,345 @@
           ]
         }
       ]
+    },
+    {
+      "name": "walk",
+      "duration": 0.933,
+      "fps": 30,
+      "loop": true,
+      "layers": [
+        {
+          "id": "pelvis_quadruped-gait",
+          "type": "recipe",
+          "recipe": "quadruped-gait",
+          "target": {
+            "chain": "pelvis"
+          },
+          "params": {
+            "gait": "walk",
+            "period": 0.933,
+            "offsetFR": 0.496,
+            "offsetHL": 0.463,
+            "offsetHR": 0.892,
+            "legs": 1,
+            "body": 1,
+            "bob": 1,
+            "role": "pelvis"
+          },
+          "preset": "witcher-dog-walk"
+        },
+        {
+          "id": "spine_quadruped-gait",
+          "type": "recipe",
+          "recipe": "quadruped-gait",
+          "target": {
+            "chain": "spine"
+          },
+          "params": {
+            "gait": "walk",
+            "period": 0.933,
+            "offsetFR": 0.496,
+            "offsetHL": 0.463,
+            "offsetHR": 0.892,
+            "legs": 1,
+            "body": 1,
+            "bob": 1,
+            "role": "spine"
+          },
+          "preset": "witcher-dog-walk"
+        },
+        {
+          "id": "neck_quadruped-gait",
+          "type": "recipe",
+          "recipe": "quadruped-gait",
+          "target": {
+            "chain": "neck"
+          },
+          "params": {
+            "gait": "walk",
+            "period": 0.933,
+            "offsetFR": 0.496,
+            "offsetHL": 0.463,
+            "offsetHR": 0.892,
+            "legs": 1,
+            "body": 1,
+            "bob": 1,
+            "role": "neck"
+          },
+          "preset": "witcher-dog-walk"
+        },
+        {
+          "id": "arm_l_quadruped-gait",
+          "type": "recipe",
+          "recipe": "quadruped-gait",
+          "target": {
+            "chain": "arm_l"
+          },
+          "params": {
+            "gait": "walk",
+            "period": 0.933,
+            "offsetFR": 0.496,
+            "offsetHL": 0.463,
+            "offsetHR": 0.892,
+            "legs": 1,
+            "body": 1,
+            "bob": 1,
+            "role": "leg_fl"
+          },
+          "preset": "witcher-dog-walk"
+        },
+        {
+          "id": "arm_r_quadruped-gait",
+          "type": "recipe",
+          "recipe": "quadruped-gait",
+          "target": {
+            "chain": "arm_r"
+          },
+          "params": {
+            "gait": "walk",
+            "period": 0.933,
+            "offsetFR": 0.496,
+            "offsetHL": 0.463,
+            "offsetHR": 0.892,
+            "legs": 1,
+            "body": 1,
+            "bob": 1,
+            "role": "leg_fr"
+          },
+          "preset": "witcher-dog-walk"
+        },
+        {
+          "id": "leg_l_quadruped-gait",
+          "type": "recipe",
+          "recipe": "quadruped-gait",
+          "target": {
+            "chain": "leg_l"
+          },
+          "params": {
+            "gait": "walk",
+            "period": 0.933,
+            "offsetFR": 0.496,
+            "offsetHL": 0.463,
+            "offsetHR": 0.892,
+            "legs": 1,
+            "body": 1,
+            "bob": 1,
+            "role": "leg_hl"
+          },
+          "preset": "witcher-dog-walk"
+        },
+        {
+          "id": "leg_r_quadruped-gait",
+          "type": "recipe",
+          "recipe": "quadruped-gait",
+          "target": {
+            "chain": "leg_r"
+          },
+          "params": {
+            "gait": "walk",
+            "period": 0.933,
+            "offsetFR": 0.496,
+            "offsetHL": 0.463,
+            "offsetHR": 0.892,
+            "legs": 1,
+            "body": 1,
+            "bob": 1,
+            "role": "leg_hr"
+          },
+          "preset": "witcher-dog-walk"
+        },
+        {
+          "id": "tail_jiggle",
+          "type": "recipe",
+          "recipe": "jiggle",
+          "target": {
+            "chain": "tail"
+          },
+          "params": {}
+        }
+      ],
+      "ground": {
+        "bones": [
+          "leg_fl_2",
+          "leg_fr_2",
+          "leg_bl_2",
+          "leg_br_2"
+        ],
+        "mode": "floor",
+        "ik": true
+      }
+    },
+    {
+      "name": "gallop",
+      "duration": 0.5,
+      "fps": 30,
+      "loop": true,
+      "layers": [
+        {
+          "id": "pelvis_quadruped-gait",
+          "type": "recipe",
+          "recipe": "quadruped-gait",
+          "target": {
+            "chain": "pelvis"
+          },
+          "params": {
+            "gait": "run",
+            "period": 0.5,
+            "offsetFR": 0.333,
+            "offsetHL": 0.733,
+            "offsetHR": 0.933,
+            "legs": 1,
+            "body": 1,
+            "bob": 1,
+            "role": "pelvis"
+          },
+          "preset": "witcher-dog-run"
+        },
+        {
+          "id": "spine_quadruped-gait",
+          "type": "recipe",
+          "recipe": "quadruped-gait",
+          "target": {
+            "chain": "spine"
+          },
+          "params": {
+            "gait": "run",
+            "period": 0.5,
+            "offsetFR": 0.333,
+            "offsetHL": 0.733,
+            "offsetHR": 0.933,
+            "legs": 1,
+            "body": 1,
+            "bob": 1,
+            "role": "spine"
+          },
+          "preset": "witcher-dog-run"
+        },
+        {
+          "id": "neck_quadruped-gait",
+          "type": "recipe",
+          "recipe": "quadruped-gait",
+          "target": {
+            "chain": "neck"
+          },
+          "params": {
+            "gait": "run",
+            "period": 0.5,
+            "offsetFR": 0.333,
+            "offsetHL": 0.733,
+            "offsetHR": 0.933,
+            "legs": 1,
+            "body": 1,
+            "bob": 1,
+            "role": "neck"
+          },
+          "preset": "witcher-dog-run"
+        },
+        {
+          "id": "arm_l_quadruped-gait",
+          "type": "recipe",
+          "recipe": "quadruped-gait",
+          "target": {
+            "chain": "arm_l"
+          },
+          "params": {
+            "gait": "run",
+            "period": 0.5,
+            "offsetFR": 0.333,
+            "offsetHL": 0.733,
+            "offsetHR": 0.933,
+            "legs": 1,
+            "body": 1,
+            "bob": 1,
+            "role": "leg_fl"
+          },
+          "preset": "witcher-dog-run"
+        },
+        {
+          "id": "arm_r_quadruped-gait",
+          "type": "recipe",
+          "recipe": "quadruped-gait",
+          "target": {
+            "chain": "arm_r"
+          },
+          "params": {
+            "gait": "run",
+            "period": 0.5,
+            "offsetFR": 0.333,
+            "offsetHL": 0.733,
+            "offsetHR": 0.933,
+            "legs": 1,
+            "body": 1,
+            "bob": 1,
+            "role": "leg_fr"
+          },
+          "preset": "witcher-dog-run"
+        },
+        {
+          "id": "leg_l_quadruped-gait",
+          "type": "recipe",
+          "recipe": "quadruped-gait",
+          "target": {
+            "chain": "leg_l"
+          },
+          "params": {
+            "gait": "run",
+            "period": 0.5,
+            "offsetFR": 0.333,
+            "offsetHL": 0.733,
+            "offsetHR": 0.933,
+            "legs": 1,
+            "body": 1,
+            "bob": 1,
+            "role": "leg_hl"
+          },
+          "preset": "witcher-dog-run"
+        },
+        {
+          "id": "leg_r_quadruped-gait",
+          "type": "recipe",
+          "recipe": "quadruped-gait",
+          "target": {
+            "chain": "leg_r"
+          },
+          "params": {
+            "gait": "run",
+            "period": 0.5,
+            "offsetFR": 0.333,
+            "offsetHL": 0.733,
+            "offsetHR": 0.933,
+            "legs": 1,
+            "body": 1,
+            "bob": 1,
+            "role": "leg_hr"
+          },
+          "preset": "witcher-dog-run"
+        },
+        {
+          "id": "tail_jiggle",
+          "type": "recipe",
+          "recipe": "jiggle",
+          "target": {
+            "chain": "tail"
+          },
+          "params": {}
+        }
+      ],
+      "ground": {
+        "bones": [
+          "leg_fl_2",
+          "leg_fr_2",
+          "leg_bl_2",
+          "leg_br_2"
+        ],
+        "mode": "floor",
+        "ik": true
+      }
     }
+  ],
+  "forward": [
+    1,
+    0,
+    0
   ]
 }

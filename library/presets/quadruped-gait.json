@@ -1,0 +1,39 @@
+{
+ "recipe": "quadruped-gait",
+ "presets": [
+  {
+   "name": "witcher-dog-walk",
+   "help": "Шаг собаки Witcher (cr_canine M_walk, у баргеста тот же клип): цикл 0.933 с, лапы почти диагональными парами — задняя на 0.1 цикла раньше своей передней.",
+   "params": { "gait": "walk", "period": 0.933, "offsetFR": 0.496, "offsetHL": 0.463, "offsetHR": 0.892, "legs": 1, "body": 1, "bob": 1 },
+   "provenance": [
+    { "source": "research/witcher", "ref": "analysis/s11_quad_curves.py: cr_canine/M_walk, кривые суставов 4 лап, фазы по выносу лапы, гармоники спины, шеи, таза" }
+   ]
+  },
+  {
+   "name": "witcher-dog-run",
+   "help": "Галоп собаки Witcher (cr_canine M_run): цикл 0.5 с, поперечный галоп — задняя левая, задняя правая, передняя левая, передняя правая; корпус качается ±11°, голова ±10 см.",
+   "params": { "gait": "run", "period": 0.5, "offsetFR": 0.333, "offsetHL": 0.733, "offsetHR": 0.933, "legs": 1, "body": 1, "bob": 1 },
+   "provenance": [
+    { "source": "research/witcher", "ref": "analysis/s11_quad_curves.py: cr_canine/M_run" }
+   ]
+  },
+  {
+   "name": "trot",
+   "help": "Рысь: диагональные пары строго вместе. Кривые лап — шаг собаки Witcher, цикл короче.",
+   "params": { "gait": "walk", "period": 0.6, "offsetFR": 0.5, "offsetHL": 0.5, "offsetHR": 0, "legs": 1.1, "body": 0.7, "bob": 1.5 },
+   "provenance": [
+    { "source": "research/witcher", "ref": "кривые суставов — cr_canine/M_walk" },
+    { "source": "hand-tuned", "ref": "фазы — по определению рыси (диагональные пары синхронно); period 0.6, legs 1.1, body 0.7, bob 1.5 — на глаз" }
+   ]
+  },
+  {
+   "name": "pace",
+   "help": "Иноходь (верблюд, жираф, медведь): лапы одной стороны вместе — корпус переваливается с боку на бок.",
+   "params": { "gait": "walk", "period": 1.1, "offsetFR": 0.5, "offsetHL": 0, "offsetHR": 0.5, "legs": 1, "body": 1.5, "bob": 1 },
+   "provenance": [
+    { "source": "research/witcher", "ref": "кривые суставов — cr_canine/M_walk" },
+    { "source": "hand-tuned", "ref": "фазы — по определению иноходи (боковые пары синхронно); period 1.1, body 1.5 — на глаз" }
+   ]
+  }
+ ]
+}

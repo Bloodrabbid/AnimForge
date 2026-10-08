@@ -329,7 +329,7 @@ test("библиотека: параметры пресетов есть в ре
   assert.deepEqual(problems, []);
 });
 
-import { strikePlan, strikePos, swingEase } from "./recipes.ts";
+import { QUAD as QUADT, periodic, strikePlan, strikePos, swingEase } from "./recipes.ts";
 import { clipEvents } from "./evaluate.ts";
 
 test("взмах: пик скорости в доле a, края без скорости", () => {
@@ -507,4 +507,89 @@ test("масштаб корня (FBX в сантиметрах) входит в 
   const mv = worldPose(rig, posePartsAt({ version: 1, name: "t", model: "", up: [0, 1, 0], chains: {}, clips: [] }, rig, { name: "c", duration: 1, fps: 10, loop: true,
     layers: [{ id: "k", type: "keys", tracks: [{ bone: "hips", axis: "move_up", keys: [{ t: 0, v: 0.1 }] }] }] } as any, 0));
   close(mv.T[1][1], 1.1, 1e-9, "move_up в метрах");
+});
+
+// ── четвероногие ──
+import { detectQuadruped } from "./rig.ts";
+
+/** Безымянное четвероногое (кости b0, b1…), смотрит на +X: таз → 3 позвонка → шея → голова, хвост, 4 лапы по 3 кости. */
+function quadSkel(hindFirst = false): Skeleton {
+  const pts: [string, string | null, Vec3][] = [
+    ["hip", null, [-0.5, 0.6, 0]], ["sp1", "hip", [-0.15, 0.62, 0]], ["sp2", "sp1", [0.2, 0.62, 0]], ["chest", "sp2", [0.5, 0.62, 0]],
+    ["neck", "chest", [0.7, 0.8, 0]], ["head", "neck", [0.85, 0.95, 0]], ["nose", "head", [1.05, 0.9, 0]],
+    ["tail1", "hip", [-0.75, 0.62, 0]], ["tail2", "tail1", [-1.0, 0.55, 0]],
+  ];
+  // у правых лап z < 0: смотрит на +X, вверх +Y → влево = up × forward = −Z… проверяем: Y × X = −Z, значит левые при z < 0
+  const L = [["fl", 0.5, -0.12, "chest"], ["fr", 0.5, 0.12, "chest"], ["hl", -0.5, -0.12, "hip"], ["hr", -0.5, 0.12, "hip"]] as const;
+  for (const [tag, x, z, at] of hindFirst ? [L[2], L[3], L[0], L[1]] : L) {
+    pts.push([`${tag}0`, at, [x, 0.55, z]], [`${tag}1`, `${tag}0`, [x + 0.02, 0.3, z]], [`${tag}2`, `${tag}1`, [x, 0.05, z]], [`${tag}3`, `${tag}2`, [x + 0.08, 0.0, z]]);
+  }
+  const pos = new Map(pts.map(([n, , p]) => [n, p]));
+  const nm = (n: string) => `b${pts.findIndex((h) => h[0] === n)}`;
+  return { nodes: pts.map(([n, par, p]) => ({ name: nm(n), parent: par ? nm(par) : null, restT: (par ? vsub(p, pos.get(par)!) : p) as Vec3, restR: [0, 0, 0, 1] as Quat, restS: [1, 1, 1] as Vec3, isJoint: true })) };
+}
+const qn = (sk: Skeleton, n: string) => sk.nodes[["hip", "sp1", "sp2", "chest", "neck", "head", "nose", "tail1", "tail2"].indexOf(n)]?.name;
+
+test("четвероногое без имён: лапы, перед-зад по голове, стороны, спина, шея, хвост; двуногое — не четвероногое", () => {
+  const sk = quadSkel();
+  const d = detectQuadruped(sk)!;
+  assert.ok(d, "узнано");
+  d.forward.forEach((v, k) => close(v, [1, 0, 0][k], 1e-6, "вперёд к голове"));
+  const leg = (tag: string) => [0, 1, 2, 3].map((k) => sk.nodes[9 + ["fl", "fr", "hl", "hr"].indexOf(tag) * 4 + k].name);
+  assert.deepEqual(d.chains.arm_l, leg("fl")); assert.deepEqual(d.chains.arm_r, leg("fr"));
+  assert.deepEqual(d.chains.leg_l, leg("hl")); assert.deepEqual(d.chains.leg_r, leg("hr"));
+  assert.deepEqual(d.chains.pelvis, [qn(sk, "hip")]); assert.deepEqual(d.chains.chest, [qn(sk, "chest")]);
+  assert.deepEqual(d.chains.spine, ["sp1", "sp2", "chest"].map((n) => qn(sk, n)));
+  assert.deepEqual(d.chains.neck, [qn(sk, "neck")]); assert.deepEqual(d.chains.head, [qn(sk, "head")]);
+  assert.deepEqual(d.chains.tail, ["tail1", "tail2"].map((n) => qn(sk, n)));
+  // развёрнутое на 180° (голова к −X): перед и зад, лево и право меняются местами
+  const flip: Skeleton = { nodes: sk.nodes.map((n) => (n.parent ? n : { ...n, restR: [0, 1, 0, 0] as Quat })) };
+  const f = detectQuadruped(flip)!;
+  close(f.forward[0], -1, 1e-6); assert.deepEqual(f.chains.arm_l, leg("fl"), "лево — по телу, а не по миру");
+  // задние лапы записаны в файле раньше передних — перед всё равно там, где голова
+  const hf = quadSkel(true), byName = (sk2: Skeleton, i: number) => sk2.nodes[i].name;
+  assert.deepEqual(detectQuadruped(hf)!.chains.arm_l, [0, 1, 2, 3].map((k) => byName(hf, 17 + k)), "передняя левая");
+  // человек: две стопы — не четвероногое; и с костями-помощниками на полу (корень движения, цели IK) тоже
+  const hs = humanSkel(null);
+  assert.equal(detectQuadruped(hs), null);
+  const hips = hs.nodes.find((n) => n.parent === "Armature")!;
+  const help = (nm: string, z: number) => ({ name: nm, parent: hips.name, restT: vsub([0, 0, z], hips.restT) as Vec3, restR: [0, 0, 0, 1] as Quat, restS: [1, 1, 1] as Vec3, isJoint: true });
+  assert.equal(detectQuadruped({ nodes: [...hs.nodes, help("helper_a", 0.5), help("helper_b", -0.5)] }), null, "помощники на полу — не лапы");
+});
+
+test("quadruped-gait: лапа выносится к своей фазе, вынос быстрый (опора ≈ 70 % цикла), корпус не уносит бедро", () => {
+  const def = RECIPES["quadruped-gait"];
+  const P = (o: Record<string, unknown>) => withDefaults(def, o);
+  const p = P({ role: "leg_hl", body: 0 });
+  // в свою фазу бедро дальше всего впереди: −pitch = таблица[0] = 17.1
+  const at = (pp: any, s: number, i = 0, n = 4) => -def.evaluate(pp, i, n, s * pp.period).pitch!;
+  close(at(p, p.offsetHL), 17.1, 1e-9, "фаза задней левой");
+  let best = -1e9, arg = 0;
+  for (let k = 0; k < 400; k++) { const v = at(p, k / 400); if (v > best) { best = v; arg = k / 400; } }
+  // пик бедра — раньше выноса лапы (лапу дотягивает колено): в таблице он на отсчёте 18 из 20
+  const tab = QUADT.walk.hind[0], kmax = tab.indexOf(Math.max(...tab));
+  close(((arg - p.offsetHL - kmax / 20) % 1 + 1.5) % 1 - 0.5, 0, 0.03, "пик бедра сдвинут на фазу лапы");
+  // передняя: доля цикла, когда плечо идёт назад (опора) — около 0.7, а не 0.5, как у синуса
+  const f = P({ role: "leg_fl", body: 0 });
+  let back = 0;
+  for (let k = 0; k < 400; k++) if (at(f, (k + 1) / 400) < at(f, k / 400)) back++;
+  assert.ok(back / 400 > 0.64 && back / 400 < 0.8, `опора ${back / 400}`);
+  // корпус качнули носом вверх — бедро от вертикали мира не меняется: таз + бедро = таблица
+  const full = P({ role: "leg_hl", gait: "run" }), pel = P({ role: "pelvis", gait: "run" });
+  for (const s of [0.1, 0.37, 0.8]) {
+    const sum = def.evaluate(pel, 0, 1, s * pel.period).pitch! + def.evaluate(full, 0, 4, s * full.period).pitch!;
+    close(-sum, periodic(QUADT.run.hind[0], s - full.offsetHL), 1e-9, "бедро в мире");
+  }
+  // корпус в галопе качается заметно (±11°), а в шаге почти нет
+  const amp = (g: string) => Math.max(...[...Array(50).keys()].map((k) => Math.abs(def.evaluate(P({ role: "pelvis", gait: g }), 0, 1, (k / 50) * P({ gait: g }).period).pitch!)));
+  assert.ok(amp("run") > 9 && amp("walk") < 2, `корпус: галоп ${amp("run")}, шаг ${amp("walk")}`);
+  // в шаге корпус кивает дважды за цикл (2-я гармоника): через полцикла — тот же наклон, в галопе — обратный
+  const corr = (g: string) => [...Array(40).keys()].reduce((a, k) => { const pp = P({ role: "pelvis", gait: g }); const v = (u: number) => def.evaluate(pp, 0, 1, u * pp.period).pitch!; return a + v(k / 40) * v(k / 40 + 0.5); }, 0);
+  assert.ok(corr("walk") > 0 && corr("run") < 0, `кивки: шаг ${corr("walk")}, галоп ${corr("run")}`);
+  // у длинной цепочки (лопатка + 4 кости) лопатку не трогаем
+  assert.deepEqual(def.evaluate(P({ role: "leg_fl" }), 0, 5, 0.1), {});
+  close(at(P({ role: "leg_fl", body: 0 }), 0, 1, 5), 36.8, 1e-9, "плечо — вторая кость");
+  // подскок — доля высоты таза
+  const b = (h: number) => def.evaluate(P({ role: "pelvis", gait: "run" }), 0, 1, 0.13, { height: h }).move_up!;
+  close(b(2), 2 * b(1), 1e-12); assert.ok(Math.abs(b(1)) > 0.01);
 });

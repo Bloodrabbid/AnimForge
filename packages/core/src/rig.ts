@@ -204,6 +204,97 @@ export function detectRig(skel: Skeleton, project: Pick<Project, "up" | "forward
   return det;
 }
 
+/** Четвероногое по геометрии (имена не нужны): внизу четыре лапы, у каждой свой корень — самая высокая кость, под которой
+ * все нижние концы лежат кучкой (пальцы одной лапы). Передняя пара — та, что ближе к голове (самому высокому концу вне лап).
+ * Цепочки — как у двуногих, чтобы рецепты и пресеты работали без переименований: передние лапы — arm_l/arm_r,
+ * задние — leg_l/leg_r, таз — место крепления задних лап, грудь — передних, между ними spine, дальше neck/head и tail.
+ * Лапа — весь путь от корня до нижнего конца (у собаки это плечо → предплечье → пясть → палец). null — не четвероногое. */
+export function detectQuadruped(skel: Skeleton, up: Vec3 = [0, 1, 0]): (RigDetection & { forward: Vec3; paws: string[] }) | null {
+  const rig = buildRig(skel);
+  const U = vnorm(up);
+  const H = (i: number) => vdot(rig.worldT[i], U);
+  const flat = (v: Vec3) => vsub(v, vscale(U, vdot(v, U)));
+  const joints = skel.nodes.map((_, i) => i).filter((i) => skel.nodes[i].isJoint);
+  const kids = new Map<number, number[]>();
+  for (const i of joints) if (rig.parent[i] >= 0) kids.set(rig.parent[i], [...(kids.get(rig.parent[i]) ?? []), i]);
+  const leaves = joints.filter((i) => !kids.has(i));
+  if (leaves.length < 4) return null;
+  const floor = Math.min(...joints.map(H)), height = Math.max(...joints.map(H)) - floor || 1;
+  const low = leaves.filter((i) => H(i) - floor < 0.15 * height);
+  const name = (i: number) => skel.nodes[i].name;
+  const below = (a: number): number[] => (kids.get(a) ?? []).flatMap((c) => [c, ...below(c)]);
+  const lowUnder = (a: number) => [a, ...below(a)].filter((i) => low.includes(i));
+  const spread = (ids: number[]) => Math.max(0, ...ids.flatMap((a) => ids.map((b) => Math.hypot(...flat(vsub(rig.worldT[a], rig.worldT[b]))))));
+  // корень лапы: поднимаемся, пока под родителем остаётся одна кучка нижних концов
+  const roots = new Set<number>();
+  for (const leaf of low) {
+    let r = leaf;
+    while (rig.parent[r] >= 0 && skel.nodes[rig.parent[r]].isJoint && spread(lowUnder(rig.parent[r])) < 0.08 * height) r = rig.parent[r];
+    roots.add(r);
+  }
+  if (roots.size !== 4) return null;
+  const legs = [...roots].map((r) => {
+    const paw = lowUnder(r).sort((a, b) => H(a) - H(b))[0];
+    const path: number[] = [];
+    for (let c = paw; c !== rig.parent[r]; c = rig.parent[c]) path.unshift(c);
+    return { root: r, paw, path, at: rig.parent[r], pos: rig.worldT[paw] };
+  });
+  // лапа должна доходить до тела: служебные кости на полу (у April 02_b2) — не лапы
+  const len = (path: number[]) => path.slice(1).reduce((a, c) => a + Math.hypot(...vsub(rig.worldT[c], rig.worldT[rig.parent[c]])), 0);
+  if (legs.some((l) => H(l.root) - floor < 0.25 * height || len(l.path) < 0.2 * height)) return null;
+  // пары — по месту крепления (две лапы на одной кости или рядом); иначе по расстоянию
+  const attach = [...new Set(legs.map((l) => l.at))];
+  let pairs: (typeof legs)[];
+  if (attach.length === 2) pairs = attach.map((a) => legs.filter((l) => l.at === a));
+  else {
+    const [a] = legs; const rest = legs.slice(1).sort((x, y) => Math.hypot(...flat(vsub(x.pos, a.pos))) - Math.hypot(...flat(vsub(y.pos, a.pos))));
+    // ближайшая к первой лапе — её пара по другую сторону тела, если поперёк ближе, чем вдоль
+    pairs = [[a, rest[0]], [rest[1], rest[2]]];
+  }
+  if (pairs.some((p) => p.length !== 2)) return null;
+  const mid = (p: typeof legs) => vscale([0, 1, 2].map((k) => p[0].pos[k] + p[1].pos[k]) as Vec3, 0.5);
+  const legSet = new Set(legs.flatMap((l) => l.path));
+  const head = leaves.filter((i) => !legSet.has(i)).sort((a, b) => H(b) - H(a))[0];
+  if (head == null) return null;
+  const axis = flat(vsub(mid(pairs[0]), mid(pairs[1])));
+  if (Math.hypot(...axis) < 1e-6 * height) return null; // пары в одном месте — направления нет
+  const toHead = vdot(flat(vsub(rig.worldT[head], mid(pairs[1]))), axis) - vdot(flat(vsub(mid(pairs[0]), mid(pairs[1]))), axis) / 2;
+  const [fore, hind] = toHead > 0 ? [pairs[0], pairs[1]] : [pairs[1], pairs[0]];
+  const forward = vnorm(toHead > 0 ? axis : vscale(axis, -1));
+  const left = vcross(U, forward);
+  const sides = (p: typeof legs) => (vdot(p[0].pos, left) > vdot(p[1].pos, left) ? [["l", p[0]], ["r", p[1]]] : [["r", p[0]], ["l", p[1]]]) as ["l" | "r", (typeof legs)[number]][];
+  const det: RigDetection & { forward: Vec3; paws: string[] } = { chains: {}, feet: {}, hands: {}, method: {}, notes: ["четвероногое: передние лапы — arm_l/arm_r, задние — leg_l/leg_r"], forward, paws: legs.map((l) => name(l.paw)) };
+  for (const [s, l] of sides(fore)) { det.chains[`arm_${s}`] = l.path.map(name); det.hands[s] = name(l.paw); det.method[`arm_${s}`] = "geometry"; }
+  for (const [s, l] of sides(hind)) { det.chains[`leg_${s}`] = l.path.map(name); det.feet[s] = name(l.paw); det.method[`leg_${s}`] = "geometry"; }
+  // таз и грудь — места крепления (если лапы одной пары крепятся к разным костям — их общий предок)
+  const common = (a: number, b: number) => { const s1 = new Set<number>(); for (let p = a; p >= 0; p = rig.parent[p]) s1.add(p); for (let p = b; p >= 0; p = rig.parent[p]) if (s1.has(p)) return p; return -1; };
+  const pelvis = common(hind[0].at, hind[1].at), chest = common(fore[0].at, fore[1].at);
+  if (pelvis < 0 || chest < 0) return null;
+  const pathDown = (from: number, to: number) => { const p: number[] = []; for (let c = to; c >= 0 && c !== from; c = rig.parent[c]) p.unshift(c); return p; };
+  det.chains.pelvis = [name(pelvis)];
+  det.chains.chest = [name(chest)];
+  const sp = pathDown(pelvis, chest);
+  if (sp.length) det.chains.spine = sp.map(name); // от таза к груди, грудь — последняя
+  const isUnder = (a: number, b: number) => { for (let p = b; p >= 0; p = rig.parent[p]) if (p === a) return true; return false; };
+  if (isUnder(chest, head)) {
+    const nh = pathDown(chest, head);
+    // голова — кость с именем «head» на пути, иначе предпоследняя (последняя — кончик: ухо, челюсть)
+    const hi = nh.findIndex((i) => roleOf(norm(name(i)).base)?.role === "head");
+    const h = hi >= 0 ? hi : Math.max(0, nh.length - (nh.length > 2 ? 2 : 1));
+    if (h > 0) det.chains.neck = nh.slice(0, h).map(name);
+    det.chains.head = [name(nh[h])];
+  }
+  // хвост — самая длинная ветка таза вне лап и спины
+  const tailLeaf = leaves.filter((i) => isUnder(pelvis, i) && !legSet.has(i) && !isUnder(chest, i) && i !== chest)
+    .sort((a, b) => pathDown(pelvis, b).length - pathDown(pelvis, a).length)[0];
+  if (tailLeaf != null) {
+    const tp = pathDown(pelvis, tailLeaf).filter((i) => !sp.includes(i));
+    if (tp.length) det.chains.tail = tp.map(name);
+  }
+  for (const c of ["pelvis", "chest", "neck", "head", "tail"] as const) det.method[c] = "geometry";
+  return det;
+}
+
 function depth(rig: Rig, i: number) { let d = 0; for (let p = rig.parent[i]; p >= 0; p = rig.parent[p]) d++; return d; }
 
 export type { Vec3 };

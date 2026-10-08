@@ -106,3 +106,22 @@ pnpm af clip.ground --clip walk --bones LeftFoot,RightFoot --mode floor --ik tru
 - `af verify` сверяет кости в Godot. Godot заменяет `:` в именах костей на `_` (`mixamorig:Hips`), и проверка это учитывает.
   Если кость не найдена, проверка падает, а не сравнивает с нулём.
 - Проверено на Xbot (Mixamo, T-поза), Worker и DeliveryGuy (Tools Up!, A-поза, сцена-витрина) и April (The Longest Journey).
+
+## Четвероногие
+
+```sh
+pnpm af rig.detect --project $P     # четвероногое узнаётся по лапам, «вперёд» — к голове
+pnpm af recipe.rig --clip walk --recipe quadruped-gait --preset witcher-dog-walk --project $P
+pnpm af recipe.add --clip walk --recipe jiggle --chain tail --id tail_jiggle --project $P
+pnpm af clip.ground --clip walk --bones <4 лапы из rig.detect: paws> --mode floor --ik true --project $P
+```
+
+- `rig.detect` узнаёт четвероногое по геометрии, имена не нужны. Внизу должно быть четыре лапы, корень каждой — у тела.
+  Передняя пара — та, что ближе к голове. Цепочки те же, что у двуногих: передние лапы — `arm_l/arm_r`, задние — `leg_l/leg_r`,
+  таз и грудь — места крепления лап, а также `spine`, `neck`, `head`, `tail`. В ответе есть `paws` — концы лап для `clip.ground`.
+- `quadruped-gait` построен по собаке Witcher (`cr_canine`, у баргеста те же клипы). У каждой лапы четыре кривые суставов за цикл:
+  плечо или бедро, локоть или колено, пясть или плюсна, пальцы. Вынос лапы быстрый, опора занимает около 70 % цикла.
+  Лапы сдвинуты по фазе, корпус качается, шея считается как «своё минус корпус», таз подскакивает.
+- Пресеты: `witcher-dog-walk` (шаг, пары почти диагональные), `witcher-dog-run` (поперечный галоп),
+  `trot` (рысь) и `pace` (иноходь). В двух последних фазы взяты из определения аллюра, а кривые — от шага собаки.
+- Проверено на лисе Khronos Fox (glTF Sample Assets, CC-BY 4.0) и на шаблоне `quadruped`, у которого теперь есть ступни.

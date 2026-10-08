@@ -5,3 +5,4 @@ out/
 godot/verify/.godot/
 .claude/
 godot/*/.godot/
+__pycache__/
