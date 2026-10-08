@@ -99,7 +99,9 @@ try {
     // перетащить ручку активной цели настоящей мышью: AF_DRAG="dx,dy" — сдвиг в пикселях от её центра
     const [dx, dy] = process.env.AF_DRAG.split(",").map(Number);
     await new Promise((r) => setTimeout(r, 800));
-    const h = await send("Runtime.evaluate", { expression: "window.__afHandle ? window.__afHandle() : null", returnByValue: true }, sessionId);
+    // AF_DRAG_JOINT=имя — тянуть сустав в режиме позы, иначе ручку активной цели
+    const expr = process.env.AF_DRAG_JOINT ? `window.__afJoint ? window.__afJoint(${JSON.stringify(process.env.AF_DRAG_JOINT)}) : null` : "window.__afHandle ? window.__afHandle() : null";
+    const h = await send("Runtime.evaluate", { expression: expr, returnByValue: true }, sessionId);
     if (!h.result.value) throw new Error("нет активной цели для перетаскивания");
     const [x, y] = h.result.value as [number, number];
     const mouse = (type: string, px: number, py: number, buttons = 1) =>
@@ -119,6 +121,8 @@ try {
       await new Promise((r) => setTimeout(r, 200));
     }
     await new Promise((r) => setTimeout(r, 1500));
+    const last = await send("Runtime.evaluate", { expression: "JSON.stringify(window.__afLastDrop ?? null)", returnByValue: true }, sessionId);
+    if (last.result.value !== "null") console.log(`отпущено: ${last.result.value}`);
   }
   if (process.env.AF_CLICK) {
     // нажать кнопку по началу её текста (например «Ключ в t») и дождаться ответа команды в строке статуса

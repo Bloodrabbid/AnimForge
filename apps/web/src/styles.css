@@ -1614,3 +1614,12 @@ table.keys tbody tr:hover {
 .copy-form select {
   max-width: 120px;
 }
+.toolbar select.plen {
+  font-size: 11.5px;
+  padding: 2px 4px;
+  height: 26px;
+  align-self: center;
+}
+.toolbar button.small {
+  align-self: center;
+}

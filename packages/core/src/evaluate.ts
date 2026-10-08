@@ -4,7 +4,7 @@ import { evalKeys } from "./curves.ts";
 import { DEG, QI, Quat, Vec3, angVel, qaxis, qinv, qmul, qnorm, qrot, qscale, vadd, vcross, vdot, vmul, vnorm, vscale, vsub } from "./math.ts";
 import type { Channel, Clip, Constraint, ConstraintTarget, PoseLayer, Project, RecipeLayer, SemanticAxis, Skeleton } from "./project.ts";
 import { RECIPES, withDefaults, type ClipEvent } from "./recipes.ts";
-import { clampRotation } from "./limits.ts";
+import { clampRotation, decompose, limitFrame } from "./limits.ts";
 
 export interface Rig {
   skel: Skeleton;
@@ -304,6 +304,25 @@ export function samplePose(layer: PoseLayer, t: number, clip: Clip): { rot: Reco
   return out;
 }
 
+/** Добавить к ключу позы в момент t добавки reach (ключа нет — создаётся с тем, что там было по интерполяции,
+ * слоя нет — создаётся). Меняет clip. */
+export function addPoseDelta(clip: Clip, t: number, r: { rot: Record<string, Quat>; move: Record<string, Vec3> }) {
+  let l = clip.layers.find((l) => l.type === "pose") as PoseLayer | undefined;
+  if (!l) clip.layers.push((l = { id: "pose", type: "pose", keys: [] }));
+  let k = l.keys.find((k) => Math.abs(k.t - t) < 1e-6);
+  if (!k) {
+    const cur = samplePose(l, t, clip);
+    k = { t };
+    if (Object.keys(cur.rot).length) k.rot = cur.rot;
+    if (Object.keys(cur.move).length) k.move = cur.move;
+    l.keys.push(k);
+    l.keys.sort((x, y) => x.t - y.t);
+  }
+  for (const [b, q] of Object.entries(r.rot)) (k.rot ??= {})[b] = qnorm(qmul(q, k.rot?.[b] ?? QI));
+  for (const [b, v] of Object.entries(r.move)) (k.move ??= {})[b] = vadd(k.move?.[b] ?? [0, 0, 0], v);
+  return k;
+}
+
 function applyPose(acc: Acc, layer: PoseLayer, t: number, clip: Clip) {
   const p = samplePose(layer, t, clip);
   for (const [bone, q] of Object.entries(p.rot)) if (acc.rig.index.has(bone)) acc.turn(bone, q);
@@ -424,27 +443,96 @@ function copyRotation(acc: Acc, rig: Rig, project: Project, bones: string[], sou
   });
 }
 
+const HINGE = Symbol("hinge");
+type HingeSeed = { axis: Vec3; range: [number, number]; k: number; fr: ReturnType<typeof limitFrame> };
+
+/** Точное начало для шарнира (локоть, колено с пределом): сгибаем среднюю кость вокруг её оси сгиба — той, по
+ * которой разрешён широкий диапазон, — ровно настолько, чтобы расстояние основание→кончик стало как до цели
+ * (угол ищем перебором внутри диапазона), потом поворачиваем основание, чтобы кончик лёг в цель. Формула
+ * twoBoneIK гнёт в своей плоскости и у шарнира с поперечной осью упирается в предел. */
+function hingeIK(acc: Acc, rig: Rig, project: Project, chain: number[], eff: (w: { T: Vec3[]; R: Quat[] }) => Vec3, P: Vec3, h: HingeSeed) {
+  const [ti, si] = chain;
+  const w = worldPose(rig, acc.parts());
+  const H = w.T[ti], K = w.T[si], F = eff(w);
+  const d = Math.hypot(...vsub(P, H));
+  const name = rig.skel.nodes[si].name;
+  const now = decompose(qmul(acc.rot.get(name) ?? QI, qinv(acc.base.get(name) ?? QI)), h.fr.axes)[h.k];
+  const at = (deg: number) => vadd(K, qrot(qaxis(h.axis, (deg - now) * DEG), vsub(F, K)));
+  const cost = (deg: number) => Math.abs(Math.hypot(...vsub(at(deg), H)) - d);
+  let bestDeg = now, bestCost = cost(now);
+  const [lo, hi] = [Math.min(...h.range), Math.max(...h.range)];
+  for (let k = 0; k <= 96; k++) {
+    const g = lo + ((hi - lo) * k) / 96, c = cost(g);
+    if (c < bestCost) (bestCost = c), (bestDeg = g);
+  }
+  // уточнение золотым сечением вокруг лучшей точки
+  let a = Math.max(lo, bestDeg - (hi - lo) / 96), b = Math.min(hi, bestDeg + (hi - lo) / 96);
+  for (let it = 0; it < 40; it++) {
+    const m1 = b - (b - a) / 1.618, m2 = a + (b - a) / 1.618;
+    if (cost(m1) < cost(m2)) b = m2;
+    else a = m1;
+  }
+  const deg = (a + b) / 2;
+  const q1 = qaxis(h.axis, (deg - now) * DEG);
+  const F1 = vadd(K, qrot(q1, vsub(F, K)));
+  let q2 = qbetween(vsub(F1, H), vsub(P, H));
+  // поворот вокруг линии основание → цель свободен: берём тот, где локоть ближе всего к тому, где он был
+  // в анимации, — иначе локоть может уйти за спину
+  const ax = vnorm(vsub(P, H));
+  const flat = (v: Vec3) => vsub(v, vscale(ax, vdot(v, ax)));
+  const kNow = flat(qrot(q2, vsub(K, H))), kWas = flat(vsub(K, H));
+  if (Math.hypot(...kNow) > 1e-9 && Math.hypot(...kWas) > 1e-9) {
+    const ang = Math.acos(Math.max(-1, Math.min(1, vdot(vnorm(kNow), vnorm(kWas)))));
+    const s = Math.sign(vdot(vcross(kNow, kWas), ax)) || 1;
+    q2 = qmul(qaxis(ax, s * ang), q2);
+  }
+  setTwo(acc, rig, w, ti, si, q2, q1);
+}
+
 /** IK цепочки с пределами. У сустава, который гнётся в одну сторону (колено, локоть), CCD легко застревает,
  * если начал сгибать не туда: предел обнуляет сгиб, и выхода нет. Поэтому у руки/ноги пробуем несколько начал —
  * точную формулу со сгибом в разные стороны тела — и берём позу, где кончик ближе к цели (при равенстве — первую:
  * заданный pole или текущая плоскость сгиба). */
-function solveLimited(acc: Acc, rig: Rig, project: Project, chain: number[], fi: number, end: boolean, P: Vec3, pole?: Vec3) {
+function solveLimited(acc: Acc, rig: Rig, project: Project, chain: number[], fi: number, end: boolean, P: Vec3, pole?: Vec3, endLength?: number) {
   const names = chain.map((i) => rig.skel.nodes[i].name);
   const start = names.map((n) => acc.rot.get(n) ?? QI);
-  const eff = effectorOf(rig, fi, end);
+  const eff = effectorOf(rig, fi, end, endLength);
   const tip = rig.skel.nodes[fi].name;
   const err = () => Math.hypot(...vsub(eff(worldPose(rig, acc.parts())), P));
-  let seeds: (Vec3 | undefined | null)[] = [null]; // null — без формулы, просто CCD с текущей позы
+  let seeds: (Vec3 | undefined | null | typeof HINGE)[] = [null]; // null — без формулы, просто CCD с текущей позы
+  let hingeSeed: HingeSeed | null = null;
   if (chain.length === 2) {
     const w = worldPose(rig, acc.parts());
     const K = w.T[chain[1]], L = Math.hypot(...vsub(w.T[chain[1]], w.T[chain[0]]));
     const f = bodyFrame(project);
-    seeds = [pole, ...[f.forward, f.up, f.side].flatMap((d) => [vadd(K, vscale(d, L)), vadd(K, vscale(d, -L))]), null];
+    const dirs: Vec3[] = [f.forward, f.up, f.side];
+    // шарнир: ось с самым широким диапазоном — сгиб ровно вокруг неё (полюс поперёк оси и кости) пробуем первым
+    const lim = project.limits?.[names[1]];
+    if (lim) {
+      const body = Object.keys(lim).some((k) => k === "pitch" || k === "yaw" || k === "bank");
+      const fr = limitFrame(rig, project, names[1], body);
+      let best = -1, wide = -1;
+      fr.names.forEach((nm, k) => {
+        const r = lim[nm];
+        const width = nm === "roll" || nm === "yaw" ? -1 : r ? r[1] - r[0] : 360;
+        if (k > 0 && width > wide) (wide = width), (best = k);
+      });
+      if (best > 0) {
+        const hinge = qrot(w.R[chain[1]], fr.axes[best]);
+        const along = vsub(w.T[chain[1]], w.T[chain[0]]);
+        const perp = vcross(hinge, along);
+        if (Math.hypot(...perp) > 1e-9) dirs.unshift(vnorm(perp));
+        hingeSeed = { axis: hinge, range: lim[fr.names[best]] ?? [-180, 180], k: best, fr };
+      }
+    }
+    seeds = [pole, ...dirs.flatMap((d) => [vadd(K, vscale(d, L)), vadd(K, vscale(d, -L))]), null];
+    if (hingeSeed) seeds.unshift(HINGE);
   }
   let best: Quat[] | null = null, bestErr = Infinity;
   for (const sd of seeds) {
     names.forEach((n, k) => acc.rot.set(n, start[k]));
-    if (sd !== null) twoBoneIK(acc, rig, project, tip, P, sd, 1, end);
+    if (sd === HINGE) hingeIK(acc, rig, project, chain, eff, P, hingeSeed!);
+    else if (sd !== null) twoBoneIK(acc, rig, project, tip, P, sd, 1, end);
     ccd(acc, rig, project, chain, eff, P);
     const e = err();
     if (e < bestErr - 1e-9) (bestErr = e), (best = names.map((n) => acc.rot.get(n) ?? QI));
@@ -454,25 +542,28 @@ function solveLimited(acc: Acc, rig: Rig, project: Project, chain: number[], fi:
 }
 
 /** Кончик IK в позе: сама кость или (end) её конец — продолжение на длину родителя. */
-function effectorOf(rig: Rig, fi: number, end: boolean) {
+export function effectorOf(rig: Rig, fi: number, end: boolean, endLength?: number) {
   const pi = rig.parent[fi];
-  const len = pi >= 0 ? vsub(rig.worldT[fi], rig.worldT[pi]) : ([0, 0, 0] as Vec3);
+  let len = pi >= 0 ? vsub(rig.worldT[fi], rig.worldT[pi]) : ([0, 0, 0] as Vec3);
+  // длина конца известна (редактор мерит её по коже) — направление то же, длина своя
+  if (endLength != null && Math.hypot(...len) > 1e-12) len = vscale(vnorm(len), endLength);
   return (w: { T: Vec3[]; R: Quat[] }): Vec3 => (end ? vadd(w.T[fi], qrot(qmul(w.R[fi], qinv(rig.worldR[fi])), len)) : w.T[fi]);
 }
 
 /** Позинг: кость bone тянут в точку P в момент t. Сгибаются length костей над ней (с пределами); length 0 или
  * корень — тело переносится целиком. Возвращает добавки для ключа позы (повороты — как у acc.turn, сдвиги — мир). */
-export function reach(project: Project, rig: Rig, clip: Clip, t: number, bone: string, P: Vec3, length = 2): { rot: Record<string, Quat>; move: Record<string, Vec3> } {
+export function reach(project: Project, rig: Rig, clip: Clip, t: number, bone: string, P: Vec3, length = 2, end = false, endLength?: number): { rot: Record<string, Quat>; move: Record<string, Vec3> } {
   const fi = rig.index.get(bone);
   if (fi == null) throw new Error(`нет кости «${bone}»`);
   const acc = primary(project, rig, clip, t);
-  const chain = length > 0 ? ikChain(rig, fi, length, false) : [];
+  // end — тянут конец кости-листа (кисть-варежка, кончик хвоста): сгибается и она сама
+  const chain = length > 0 ? ikChain(rig, fi, length, end) : [];
   if (!chain.length) {
     const w = worldPose(rig, acc.parts());
     return { rot: {}, move: { [bone]: vsub(P, w.T[fi]) } };
   }
   const before = new Map(chain.map((i) => [rig.skel.nodes[i].name, acc.rot.get(rig.skel.nodes[i].name) ?? QI]));
-  solveLimited(acc, rig, project, chain, fi, false, P);
+  solveLimited(acc, rig, project, chain, fi, end, P, undefined, endLength);
   const rot: Record<string, Quat> = {};
   for (const [n, q0] of before) rot[n] = qnorm(qmul(acc.rot.get(n) ?? QI, qinv(q0)));
   return { rot, move: {} };

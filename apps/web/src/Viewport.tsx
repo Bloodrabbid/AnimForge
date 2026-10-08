@@ -6,7 +6,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { ViewHelper } from "three/examples/jsm/helpers/ViewHelper.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
-import { posePartsAt, targetAt, type Clip, type Project, type Rig } from "../../../packages/core/src/index.ts";
+import { addPoseDelta, effectorOf, posePartsAt, reach, targetAt, worldPose, type Clip, type Project, type Rig } from "../../../packages/core/src/index.ts";
 import { WeightPainter, type Brush, type SkinPart } from "./weightPaint.ts";
 
 export type ViewCmd = { kind: "fit" | "front" | "side" | "top"; n: number };
@@ -32,6 +32,11 @@ interface Props {
   showTargets?: boolean;
   activeTarget?: string | null;
   onMoveTarget?(id: string, pos: [number, number, number]): void;
+  /** режим «Поза»: суставы — точки, сустав тащат мышью (IK с пределами), Alt+клик — закрепить */
+  poseMode?: boolean;
+  poseLength?: number;
+  onPoseDrop?(bone: string, target: [number, number, number], length: number, end: boolean, endLength?: number): void;
+  onPin?(bone: string, at: [number, number, number]): void;
   onStatus(msg: string, error?: boolean): void;
 }
 
@@ -45,6 +50,8 @@ interface Loaded {
   minY: number;
   painter: WeightPainter;
   nameOf: Map<THREE.Object3D, string>;
+  /** длина конца у костей-листьев, измеренная по коже (у руки-варежки — до кончика кисти) */
+  ends: Map<string, number>;
 }
 
 export function Viewport(props: Props) {
@@ -164,6 +171,102 @@ export function Viewport(props: Props) {
       painting = false;
       live.current.onStroke?.(loaded.current?.painter.strokes ?? 0);
     };
+    // позинг: ближайший к курсору сустав (в пикселях), тянем по плоскости экрана через него
+    const jointPool: THREE.Mesh[] = [];
+    const jointMat = new THREE.MeshBasicMaterial({ color: 0xe8e2d6, depthTest: false, transparent: true, opacity: 0.85 });
+    const jointHot = new THREE.MeshBasicMaterial({ color: 0xffb547, depthTest: false });
+    let posing: { bone: string; end: boolean; length: number; plane: THREE.Plane; target: THREE.Vector3 } | null = null;
+    let poseHold: { bone: string; end: boolean; length: number; target: [number, number, number]; until: number } | null = null;
+    let hover = "";
+    // ручки позы: каждый сустав и конец каждой кости-листа («имя>»): у руки-варежки тянут за кисть
+    const jointNames = () => {
+      const p = live.current, m = loaded.current;
+      if (!m) return [] as string[];
+      const joints = p.rig.skel.nodes.filter((n) => n.isJoint && m.bones.has(n.name));
+      const hasKid = new Set(joints.map((n) => n.parent));
+      const jointParent = (n: (typeof joints)[number]) => {
+        const pi = p.rig.parent[p.rig.index.get(n.name)!];
+        return pi >= 0 && p.rig.skel.nodes[pi].isJoint;
+      };
+      return [...joints.map((n) => n.name), ...joints.filter((n) => !hasKid.has(n.name) && jointParent(n)).map((n) => n.name + ">")];
+    };
+    let curWorld: { T: [number, number, number][]; R: [number, number, number, number][] } | null = null;
+    const handlePos = (name: string, out: THREE.Vector3) => {
+      const p = live.current, m = loaded.current!;
+      if (!name.endsWith(">")) return m.bones.get(name)!.obj.getWorldPosition(out);
+      const i = p.rig.index.get(name.slice(0, -1))!;
+      const w = curWorld ?? worldPose(p.rig, { rot: new Map(), pos: new Map(), scl: new Map() });
+      const e = effectorOf(p.rig, i, true, m.ends.get(name.slice(0, -1)))(w);
+      return out.set(e[0], e[1], e[2]);
+    };
+    const pickJoint = (e: PointerEvent) => {
+      const m = loaded.current;
+      if (!m) return null;
+      const r = renderer.domElement.getBoundingClientRect();
+      let best: string | null = null, bd = 18;
+      const v = new THREE.Vector3();
+      for (const name of jointNames()) {
+        handlePos(name, v);
+        v.project(camera);
+        const x = r.left + ((v.x + 1) / 2) * r.width, y = r.top + ((1 - v.y) / 2) * r.height;
+        const d = Math.hypot(x - e.clientX, y - e.clientY);
+        if (d < bd) (bd = d), (best = name);
+      }
+      return best;
+    };
+    const lengthFor = (bone: string) => {
+      // корень скелета (или кость без сустава-родителя) — переносим тело целиком
+      const p = live.current;
+      const i = p.rig.index.get(bone)!, par = p.rig.parent[i];
+      // таз тоже: его тянут, чтобы присесть или наклониться, а не чтобы крутить корень
+      const pelvis = p.project.chains.pelvis?.includes(bone) || p.project.chains.hips?.includes(bone);
+      return par < 0 || !p.rig.skel.nodes[par].isJoint || pelvis ? 0 : (p.poseLength ?? 2);
+    };
+    const rayTo = (e: PointerEvent, plane: THREE.Plane, out: THREE.Vector3) => {
+      const r = renderer.domElement.getBoundingClientRect();
+      ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+      ray.setFromCamera(ndc, camera);
+      return ray.ray.intersectPlane(plane, out);
+    };
+    const poseDown = (e: PointerEvent) => {
+      const p = live.current, m = loaded.current;
+      if (!p.poseMode || !m || !p.clip || e.button !== 0) return;
+      const bone = pickJoint(e);
+      if (!bone) return; // мимо суставов — камера
+      e.stopImmediatePropagation();
+      const at = handlePos(bone, new THREE.Vector3());
+      const end = bone.endsWith(">"), name = end ? bone.slice(0, -1) : bone;
+      if (e.altKey) {
+        if (!end) p.onPin?.(name, [at.x, at.y, at.z].map((x) => +x.toFixed(4)) as [number, number, number]);
+        return;
+      }
+      const normal = camera.getWorldDirection(new THREE.Vector3()).negate();
+      posing = { bone: name, end, length: end ? Math.max(1, p.poseLength ?? 2) : lengthFor(name), plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, at), target: at.clone() };
+      try {
+        renderer.domElement.setPointerCapture(e.pointerId);
+      } catch {
+        /* синтетическое событие */
+      }
+    };
+    const poseMove = (e: PointerEvent) => {
+      if (posing) {
+        rayTo(e, posing.plane, posing.target);
+        return;
+      }
+      if (live.current.poseMode) hover = pickJoint(e) ?? "";
+    };
+    const poseUp = () => {
+      if (!posing) return;
+      const d = posing;
+      posing = null;
+      const tgt = [d.target.x, d.target.y, d.target.z].map((x) => +x.toFixed(4)) as [number, number, number];
+      poseHold = { bone: d.bone, end: d.end, length: d.length, target: tgt, until: performance.now() + 2000 };
+      (window as any).__afLastDrop = { ...poseHold };
+      live.current.onPoseDrop?.(d.bone, tgt, d.length, d.end, d.end ? loaded.current?.ends.get(d.bone) : undefined);
+    };
+    renderer.domElement.addEventListener("pointerdown", poseDown, { capture: true });
+    renderer.domElement.addEventListener("pointermove", poseMove);
+    renderer.domElement.addEventListener("pointerup", poseUp);
     renderer.domElement.addEventListener("pointerdown", down, { capture: true });
     renderer.domElement.addEventListener("pointermove", move);
     renderer.domElement.addEventListener("pointerup", up);
@@ -237,12 +340,25 @@ export function Viewport(props: Props) {
         if (p.project !== lastProject) {
           lastProject = p.project;
           dropUntil = 0;
+          poseHold = null;
         }
         // цель тащат прямо сейчас (или только что отпустили) — поза считается с ней, без ожидания сервера
         const over = drag ?? (performance.now() < dropUntil ? dropped : null);
         let clipNow = p.clip;
         if (over && clipNow?.constraints) {
           clipNow = { ...clipNow, constraints: clipNow.constraints.map((c) => (c.id === over.id && c.type !== "copy" ? { ...c, target: { pos: over.pos } } : c)) };
+        }
+        // сустав тянут (или только что отпустили) — временный ключ позы поверх клипа, ядро считает IK с пределами
+        const drag2 = posing ? { bone: posing.bone, end: posing.end, length: posing.length, target: [posing.target.x, posing.target.y, posing.target.z] as [number, number, number] } : poseHold && performance.now() < poseHold.until ? poseHold : null;
+        if (drag2 && clipNow) {
+          try {
+            const r = reach(p.project, p.rig, clipNow, p.t, drag2.bone, drag2.target, drag2.length, drag2.end, drag2.end ? m.ends.get(drag2.bone) : undefined);
+            const c2 = structuredClone(clipNow);
+            addPoseDelta(c2, p.t, r);
+            clipNow = c2;
+          } catch {
+            /* кость пропала после перезагрузки */
+          }
         }
         const pose: ReturnType<typeof posePartsAt> = clipNow ? posePartsAt(p.project, p.rig, clipNow, p.t) : { rot: new Map(), pos: new Map(), scl: new Map() };
         for (const [name, { obj, rest, restPos, restScale }] of m.bones) {
@@ -319,6 +435,11 @@ export function Viewport(props: Props) {
           if (!drag) handle.position.copy(activeAt);
           if (tc.object !== handle) tc.attach(handle);
         } else if (tc.object) tc.detach();
+        (window as any).__afJoint = (name: string) => {
+          if (!m.bones.has(name.replace(/>$/, ""))) return null;
+          const v = handlePos(name, new THREE.Vector3()).project(camera), r = renderer.domElement.getBoundingClientRect();
+          return [r.left + ((v.x + 1) / 2) * r.width, r.top + ((1 - v.y) / 2) * r.height];
+        };
         // для проверок (screenshot.ts AF_DRAG): где на экране центр ручки активной цели
         (window as any).__afHandle = tc.object
           ? () => {
@@ -326,6 +447,25 @@ export function Viewport(props: Props) {
               return [r.left + ((v.x + 1) / 2) * r.width, r.top + ((1 - v.y) / 2) * r.height];
             }
           : null;
+        // точки суставов в режиме позы
+        const names = p.poseMode ? jointNames() : [];
+        curWorld = p.poseMode ? (worldPose(p.rig, pose) as typeof curWorld) : null;
+        while (jointPool.length < names.length) {
+          const s = new THREE.Mesh(limGeo, jointMat);
+          s.renderOrder = 13;
+          scene.add(s);
+          jointPool.push(s);
+        }
+        jointPool.forEach((s, k) => {
+          s.visible = k < names.length;
+          if (!s.visible) return;
+          const nm = names[k];
+          handlePos(nm, s.position);
+          const hot = nm === hover || (posing && nm === posing.bone + (posing.end ? ">" : ""));
+          s.material = hot ? jointHot : jointMat;
+          s.scale.setScalar(m.size * (hot ? 0.012 : 0.007));
+        });
+        renderer.domElement.style.cursor = p.poseMode ? (posing ? "grabbing" : hover ? "grab" : "") : "";
         const sel = p.selectedBone ? m.bones.get(p.selectedBone) : undefined;
         marker.visible = segment.visible = !!sel;
         if (sel) {
@@ -355,6 +495,9 @@ export function Viewport(props: Props) {
       ro.disconnect();
       renderer.domElement.removeEventListener("pointerup", onPointerUp);
       renderer.domElement.removeEventListener("pointerdown", down, { capture: true });
+      renderer.domElement.removeEventListener("pointerdown", poseDown, { capture: true });
+      renderer.domElement.removeEventListener("pointermove", poseMove);
+      renderer.domElement.removeEventListener("pointerup", poseUp);
       renderer.domElement.removeEventListener("pointermove", move);
       renderer.domElement.removeEventListener("pointerup", up);
       gizmo.dispose();
@@ -400,6 +543,38 @@ export function Viewport(props: Props) {
           parts.push({ mesh: sm, meshIndex: a.meshes, primitive: a.primitives ?? 0, material: sm.material });
         });
         const painter = new WeightPainter(parts);
+        // концы костей-листьев: дальняя вдоль кости вершина, которую эта кость держит сильнее всех
+        const ends = new Map<string, number>();
+        {
+          const rig = live.current.rig;
+          const leafs = new Map<THREE.Object3D, { name: string; at: THREE.Vector3; dir: THREE.Vector3 }>();
+          const hasKid = new Set(rig.skel.nodes.filter((n) => n.isJoint).map((n) => n.parent));
+          root.updateMatrixWorld(true);
+          for (const n of rig.skel.nodes) {
+            const i = rig.index.get(n.name)!, pi = rig.parent[i];
+            if (!n.isJoint || hasKid.has(n.name) || pi < 0 || !rig.skel.nodes[pi].isJoint) continue;
+            const b = bones.get(n.name);
+            if (!b) continue;
+            const a = new THREE.Vector3(...rig.worldT[i]), pp = new THREE.Vector3(...rig.worldT[pi]);
+            leafs.set(b.obj, { name: n.name, at: a, dir: a.clone().sub(pp).normalize() });
+          }
+          const v = new THREE.Vector3();
+          for (const part of parts) {
+            const g = part.mesh.geometry, si = g.attributes.skinIndex, sw = g.attributes.skinWeight, pos = g.attributes.position;
+            for (let k = 0; k < pos.count; k++) {
+              let bi = 0, bw = -1;
+              for (let c = 0; c < 4; c++) {
+                const ww = sw.getComponent(k, c);
+                if (ww > bw) (bw = ww), (bi = si.getComponent(k, c));
+              }
+              const leaf = leafs.get(part.mesh.skeleton.bones[bi]);
+              if (!leaf || bw < 0.5) continue;
+              v.fromBufferAttribute(pos, k).applyMatrix4(part.mesh.matrixWorld);
+              const d = v.sub(leaf.at).dot(leaf.dir);
+              if (d > (ends.get(leaf.name) ?? 0)) ends.set(leaf.name, d);
+            }
+          }
+        }
         const nameOf = new Map<THREE.Object3D, string>([...bones].map(([n, b]) => [b.obj, n]));
         const helper = new THREE.SkeletonHelper(root);
         (helper.material as THREE.LineBasicMaterial).depthTest = false;
@@ -422,7 +597,7 @@ export function Viewport(props: Props) {
         s.sun.position.copy(center).add(new THREE.Vector3(0.5, 1, 0.6).multiplyScalar(size * 2));
         s.sun.target.position.copy(center);
         s.scene.add(root, helper);
-        loaded.current = { root, bones, helper, materials, size, center, minY: box.min.y, painter, nameOf };
+        loaded.current = { root, bones, helper, materials, size, center, minY: box.min.y, painter, nameOf, ends };
         recolor.current = true;
         live.current.onPainter?.(painter);
         aim("fit");

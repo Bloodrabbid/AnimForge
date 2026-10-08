@@ -1,11 +1,11 @@
 // Ядро команд. Каждое действие — команда с описанием и параметрами: её одинаково вызывают интерфейс, CLI и MCP.
 // Команды здесь чистые: меняют проект в памяти и возвращают результат. Файлы, Blender и рендер — в адаптерах (packages/cli).
 import { CHANNELS } from "./project.ts";
-import type { Channel, Clip, Constraint, ConstraintTarget, Interp, KeyLayer, PoseKey, PoseLayer, Project, RecipeLayer, Skeleton } from "./project.ts";
+import type { Channel, Clip, Constraint, ConstraintTarget, Interp, KeyLayer, PoseLayer, Project, RecipeLayer, Skeleton } from "./project.ts";
 import { RECIPES } from "./recipes.ts";
-import { buildRig, frameTimes, motionAt, reach, samplePose } from "./evaluate.ts";
+import { addPoseDelta, buildRig, frameTimes, motionAt, reach } from "./evaluate.ts";
 import { LIMIT_AXES, boneAngles, limitFrame, type BoneLimit, type LimitAxis } from "./limits.ts";
-import { DEG, QI, qaxis, qmul, qnorm, qrot, vadd, vdot, vsub } from "./math.ts";
+import { DEG, qaxis, qrot, vdot, vsub } from "./math.ts";
 import { bodyFrame } from "./evaluate.ts";
 
 export interface Ctx {
@@ -73,23 +73,6 @@ function addConstraint(clip: Clip, c: Constraint) {
   const i = clip.constraints.findIndex((x) => x.id === c.id);
   if (i >= 0) clip.constraints[i] = c;
   else clip.constraints.push(c);
-}
-
-/** Ключ позы в момент t (слой «pose» создаётся при первом ключе, ключ — если в этот момент его нет). */
-function poseKey(clip: Clip, t: number): PoseKey {
-  let l = clip.layers.find((l) => l.type === "pose") as PoseLayer | undefined;
-  if (!l) clip.layers.push((l = { id: "pose", type: "pose", keys: [] }));
-  let k = l.keys.find((k) => Math.abs(k.t - t) < 1e-6);
-  if (!k) {
-    // новый ключ между старыми — с тем, что там уже было по интерполяции, иначе поза в этот момент прыгнет
-    const cur = samplePose(l, t, clip);
-    k = { t };
-    if (Object.keys(cur.rot).length) k.rot = cur.rot;
-    if (Object.keys(cur.move).length) k.move = cur.move;
-    l.keys.push(k);
-    l.keys.sort((x, y) => x.t - y.t);
-  }
-  return k;
 }
 
 function keyLayer(clip: Clip): KeyLayer {
@@ -541,16 +524,16 @@ const defs: CommandDef[] = [
       bone: { type: "string", required: true, help: "какую кость тянуть (кисть, голову, кончик хвоста, таз)" },
       target: { type: "string", required: true, help: "куда, «x,y,z» в координатах модели" },
       length: { type: "number", help: "сколько костей сгибать, по умолчанию 2" },
+      end: { type: "boolean", help: "тянуть конец кости (у кости без дочерней: кисть-варежка, кончик хвоста) — сгибается и она сама" },
+      endLength: { type: "number", help: "длина этого конца (по умолчанию — как у родительской кости; редактор мерит по коже)" },
     },
     mutates: true,
     run(ctx, a) {
       const clip = clipOf(ctx, a.clip);
       const rig = buildRig(ctx.skeleton);
       need(rig.index.has(a.bone), `нет кости «${a.bone}»`);
-      const r = reach(ctx.project, rig, clip, +a.t, a.bone, vec(a.target, "target"), a.length == null ? 2 : Math.max(0, Math.round(+a.length)));
-      const key = poseKey(clip, +a.t);
-      for (const [b, q] of Object.entries(r.rot)) (key.rot ??= {})[b] = qnorm(qmul(q, key.rot?.[b] ?? QI));
-      for (const [b, v] of Object.entries(r.move)) (key.move ??= {})[b] = vadd(key.move?.[b] ?? [0, 0, 0], v);
+      const r = reach(ctx.project, rig, clip, +a.t, a.bone, vec(a.target, "target"), a.length == null ? 2 : Math.max(0, Math.round(+a.length)), !!a.end, a.endLength != null ? +a.endLength : undefined);
+      const key = addPoseDelta(clip, +a.t, r);
       return { t: key.t, bones: [...Object.keys(r.rot), ...Object.keys(r.move)] };
     },
   },

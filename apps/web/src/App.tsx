@@ -68,6 +68,8 @@ export function App() {
   const [leftTab, setLeftTab] = useState<"library" | "bones">((query.get("left") as "bones") ?? "library");
   const [rightTab, setRightTab] = useState<"layers" | "keys" | "weights" | "limits" | "targets">((query.get("right") as "weights") ?? "layers");
   const [activeTarget, setActiveTarget] = useState<string | null>(query.get("target"));
+  const [poseMode, setPoseMode] = useState(query.get("pose") === "1");
+  const [poseLength, setPoseLength] = useState(Number(query.get("plen") ?? 2) || 2);
   const [brush, setBrush] = useState<Brush>({ mode: "add", radius: 0.06, strength: 0.25 });
   const [strokes, setStrokes] = useState(0);
   const [modelVer, setModelVer] = useState(0);
@@ -307,6 +309,7 @@ export function App() {
         s: () => setShowSkeleton((v) => !v),
         w: () => setWireframe((v) => !v),
         g: () => setShowFloor((v) => !v),
+        p: () => (setPoseMode((v) => !v), setPlaying(false)),
         f: () => setView((v) => ({ kind: "fit", n: v.n + 1 })),
         "1": () => setView((v) => ({ kind: "front", n: v.n + 1 })),
         "2": () => setView((v) => ({ kind: "side", n: v.n + 1 })),
@@ -438,6 +441,17 @@ export function App() {
                 c.target.keys?.length ? `ключ цели в ${t.toFixed(2)} с` : "цель",
               );
             }}
+            poseMode={poseMode && !trial && !!clip}
+            poseLength={poseLength}
+            onPoseDrop={(bone, target, length, end, endLength) => {
+              if (!clip) return;
+              runMany([{ name: "pose.reach", args: { clip: clip.name, t: +t.toFixed(3), bone, target: target.join(","), length, ...(end ? { end: true, ...(endLength ? { endLength: +endLength.toFixed(4) } : {}) } : {}) } }], length ? `поза: ${bone} в ${t.toFixed(2)} с` : `тело перенесено в ${t.toFixed(2)} с`);
+            }}
+            onPin={(bone, at) => {
+              if (!clip) return;
+              setActiveTarget(`pin_${bone}`);
+              runMany([{ name: "ik.add", args: { clip: clip.name, tip: bone, target: at.join(","), id: `pin_${bone}` } }], `закреплено: ${bone}`);
+            }}
             onStatus={say}
           />
           <div className="overlay tl">
@@ -456,6 +470,28 @@ export function App() {
               <ToolBtn icon="front" title="спереди (1)" onClick={() => setView((v) => ({ kind: "front", n: v.n + 1 }))} />
               <ToolBtn icon="side" title="сбоку (2)" onClick={() => setView((v) => ({ kind: "side", n: v.n + 1 }))} />
               <ToolBtn icon="top" title="сверху (3)" onClick={() => setView((v) => ({ kind: "top", n: v.n + 1 }))} />
+            </div>
+            <div className="group">
+              <ToolBtn
+                icon="hand"
+                title="поза (P): тяните суставы мышью — сгибаются кости с учётом пределов, поза пишется ключом в текущий кадр; таз — переносит тело; Alt+клик — закрепить"
+                on={poseMode}
+                onClick={() => (setPoseMode((v) => !v), setPlaying(false))}
+              />
+              {poseMode && (
+                <select className="plen" value={poseLength} onChange={(e) => setPoseLength(Number(e.target.value))} title="сколько костей сгибать от схваченного сустава вверх">
+                  {[1, 2, 3, 4, 5, 6, 8].map((n) => (
+                    <option key={n} value={n}>
+                      {n} {n === 1 ? "кость" : n < 5 ? "кости" : "костей"}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {poseMode && clip?.layers.some((l) => l.type === "pose") && (
+                <button className="small" title="убрать ключ позы в этом кадре" onClick={() => runMany([{ name: "pose.clear", args: { clip: clip.name, t: +t.toFixed(3) } }], "поза в кадре сброшена")}>
+                  сбросить
+                </button>
+              )}
             </div>
             <div className="group">
               <ToolBtn icon="bones" title="скелет (S)" on={showSkeleton} onClick={() => setShowSkeleton((v) => !v)} />
@@ -727,6 +763,8 @@ function short(v: unknown) {
   const c = v as { id?: string; type?: string; tip?: string; bones?: string[] } | null;
   if (c && typeof c === "object" && c.id && (c.type === "ik" || c.type === "aim" || c.type === "copy"))
     return `${c.id} (${c.type === "ik" ? `IK · ${c.tip}` : c.type === "aim" ? `взгляд · ${c.bones?.join(" → ")}` : `копия · ${c.bones?.join(", ")}`})`;
+  const pr = v as { t?: number; bones?: string[] } | null;
+  if (pr && typeof pr === "object" && Array.isArray(pr.bones) && typeof pr.t === "number" && !("type" in pr)) return `ключ позы в ${pr.t.toFixed(2)} с: ${pr.bones.join(", ")}`;
   const s = JSON.stringify(v);
   return s && s.length > 120 ? s.slice(0, 120) + "…" : s ?? "";
 }

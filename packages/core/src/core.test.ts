@@ -1177,6 +1177,11 @@ test("позинг: pose.reach тянет кисть в точку и пишет
   close(sq.at("hips")[1], 0.8, 1e-9, "таз опустился");
   close(dist(sq.at("foot_l"), [0.1, 0.08, 0]), 0, 1e-6, "ступня на месте");
   assert.ok(sq.at("shin_l")[2] > 0.05, "колено ушло вперёд");
+  // конец кости (end): тянут конец предплечья-варежки — сгибается и оно само
+  runCommand(ctx, "pose.reach", { clip: "c", t: 0, bone: "farm_l", target: "0.5,1.25,0.3", end: true });
+  const e = W(ctx.project, 0);
+  const endPt = vadd3(e.at("farm_l"), qrot(qmul(e.R("farm_l"), qinv(e.rig.worldR[e.rig.index.get("farm_l")!])), [0.27, 0, 0]));
+  close(dist(endPt, [0.5, 1.25, 0.3]), 0, 1e-4, "конец предплечья там, куда тянули");
   runCommand(ctx, "pose.clear", { clip: "c" });
   assert.equal(ctx.project.clips[0].layers.length, 0);
 });
