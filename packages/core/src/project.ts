@@ -63,6 +63,41 @@ export interface KeyLayer {
 
 export type Layer = RecipeLayer | KeyLayer;
 
+/** Цель констрейна: точка в координатах модели (как у костей в rest), кость (+ сдвиг в мировых осях) или
+ * точка с ключами по времени — цель движется, рука или взгляд следуют. */
+export interface ConstraintTarget {
+  pos?: Vec3;
+  bone?: string;
+  offset?: Vec3;
+  keys?: { t: number; pos: Vec3; interp?: Interp }[];
+}
+
+/** Взгляд: кости bones (от основания к кончику, например шея и голова) поворачиваются так, чтобы «вперёд»
+ * последней (направление forward тела в позе покоя) смотрело на цель; поворот делится между костями поровну. */
+export interface AimConstraint {
+  id: string;
+  type: "aim";
+  bones: string[];
+  target: ConstraintTarget;
+  weight?: number; // 0…1, доля поворота к цели
+  muted?: boolean;
+}
+
+/** IK: кончик tip (кисть, стопа) тянется к цели, сгибаются его родитель и дед (локоть и плечо, колено и бедро).
+ * pole — точка, в сторону которой смотрит сгиб (локоть назад, колено вперёд); без неё — сохраняется текущая
+ * плоскость сгиба. */
+export interface IKConstraint {
+  id: string;
+  type: "ik";
+  tip: string;
+  target: ConstraintTarget;
+  pole?: Vec3;
+  weight?: number;
+  muted?: boolean;
+}
+
+export type Constraint = AimConstraint | IKConstraint;
+
 export interface Clip {
   name: string;
   duration: number;
@@ -72,6 +107,8 @@ export interface Clip {
   /** Постановка на пол: после всех слоёв корень сдвигается по up так, чтобы нижняя из bones стояла на высоте покоя.
    * contact — прижимать всегда (опорная нога на полу); floor — только не проваливаться (подскоки сохраняются). */
   ground?: { bones: string[]; mode: "contact" | "floor"; ik?: boolean }; // ik — сгибать колени, а не двигать тело
+  /** Констрейны клипа: после слоёв и пола, до вторичной динамики; ограничения суставов действуют и на них. */
+  constraints?: Constraint[];
 }
 
 export interface Project {

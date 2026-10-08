@@ -1,7 +1,7 @@
 // Ядро команд. Каждое действие — команда с описанием и параметрами: её одинаково вызывают интерфейс, CLI и MCP.
 // Команды здесь чистые: меняют проект в памяти и возвращают результат. Файлы, Blender и рендер — в адаптерах (packages/cli).
 import { CHANNELS } from "./project.ts";
-import type { Channel, Clip, Interp, KeyLayer, Project, RecipeLayer, Skeleton } from "./project.ts";
+import type { Channel, Clip, Constraint, ConstraintTarget, Interp, KeyLayer, Project, RecipeLayer, Skeleton } from "./project.ts";
 import { RECIPES } from "./recipes.ts";
 import { buildRig, frameTimes, motionAt } from "./evaluate.ts";
 import { LIMIT_AXES, boneAngles, limitFrame, type BoneLimit, type LimitAxis } from "./limits.ts";
@@ -40,6 +40,39 @@ function limitTargets(ctx: Ctx, a: Record<string, any>): string[] {
   need(a.bone, "нужна кость (bone) или цепочка (chain)");
   need(ctx.skeleton.nodes.some((n) => n.name === a.bone), `нет кости «${a.bone}»`);
   return [a.bone];
+}
+
+const vec = (v: unknown, name: string): [number, number, number] => {
+  const a = Array.isArray(v) ? v.map(Number) : String(v).split(",").map((x) => Number(x.trim()));
+  need(a.length === 3 && a.every(Number.isFinite), `${name} — три числа «x,y,z»`);
+  return a as [number, number, number];
+};
+
+/** Цель из аргументов: target="x,y,z" — точка, targetBone — кость (+ offset). */
+function targetOf(ctx: Ctx, a: Record<string, any>): ConstraintTarget {
+  const t: ConstraintTarget = {};
+  if (a.targetBone) {
+    need(ctx.skeleton.nodes.some((n) => n.name === a.targetBone), `нет кости «${a.targetBone}»`);
+    t.bone = a.targetBone;
+  } else {
+    need(a.target != null, "нужна цель: target «x,y,z» или targetBone");
+    t.pos = vec(a.target, "target");
+  }
+  if (a.offset != null) t.offset = vec(a.offset, "offset");
+  return t;
+}
+
+function constraintOf(clip: Clip, id: string): Constraint {
+  const c = clip.constraints?.find((c) => c.id === id);
+  need(c, `нет констрейна «${id}». Есть: ${(clip.constraints ?? []).map((c) => c.id).join(", ") || "—"}`);
+  return c!;
+}
+
+function addConstraint(clip: Clip, c: Constraint) {
+  clip.constraints ??= [];
+  const i = clip.constraints.findIndex((x) => x.id === c.id);
+  if (i >= 0) clip.constraints[i] = c;
+  else clip.constraints.push(c);
 }
 
 function keyLayer(clip: Clip): KeyLayer {
@@ -365,6 +398,150 @@ const defs: CommandDef[] = [
       for (const b of ch.head ?? []) { ctx.project.limits[b] = { pitch: [-45, 45], yaw: [-70, 70], bank: [-35, 35] }; done.push(`голова: ${b}`); }
       if (!done.length) throw new Error("нет стандартных цепочек leg_l/arm_l/neck/head — сначала rig.detect");
       return { set: done };
+    },
+  },
+  {
+    name: "aim.add",
+    help: "Взгляд: голова (и шея) смотрит на цель — точку или кость. bones — кости от основания к кончику через запятую (по умолчанию цепочки neck и head). Поворот делится между костями, ограничения суставов действуют.",
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      bones: { type: "string", help: "кости через запятую; по умолчанию neck + head" },
+      target: { type: "string", help: "точка «x,y,z» в координатах модели" },
+      targetBone: { type: "string", help: "или кость-цель (смотреть на свою руку, на хвост)" },
+      offset: { type: "string", help: "сдвиг цели «x,y,z»" },
+      weight: { type: "number", help: "0…1, по умолчанию 1" },
+      id: { type: "string", help: "имя, по умолчанию aim" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const clip = clipOf(ctx, a.clip);
+      const ch = ctx.project.chains;
+      const bones = a.bones ? String(a.bones).split(",").map((s) => s.trim()).filter(Boolean) : [...(ch.neck ?? []), ...(ch.head ?? [])];
+      need(bones.length, "нет цепочек neck/head — укажи bones");
+      for (const b of bones) need(ctx.skeleton.nodes.some((n) => n.name === b), `нет кости «${b}»`);
+      const c: Constraint = { id: a.id ?? "aim", type: "aim", bones, target: targetOf(ctx, a), ...(a.weight != null && +a.weight !== 1 ? { weight: +a.weight } : {}) };
+      addConstraint(clip, c);
+      return c;
+    },
+  },
+  {
+    name: "ik.add",
+    help: "IK-цель: кисть или стопа тянется к точке или кости, сгибаются локоть и плечо (колено и бедро). chain — цепочка руки/ноги (кончик — следующая кость за ней), или tip — сама кость-кончик. pole — куда смотрит сгиб.",
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      chain: { type: "string", help: "цепочка: arm_l, leg_r…" },
+      tip: { type: "string", help: "или кость-кончик (кисть, стопа)" },
+      target: { type: "string", help: "точка «x,y,z» в координатах модели" },
+      targetBone: { type: "string", help: "или кость-цель" },
+      offset: { type: "string", help: "сдвиг цели «x,y,z»" },
+      pole: { type: "string", help: "точка «x,y,z», куда смотрит локоть/колено" },
+      weight: { type: "number", help: "0…1, по умолчанию 1" },
+      id: { type: "string", help: "имя, по умолчанию ik_<цепочка>" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const clip = clipOf(ctx, a.clip);
+      let tip = a.tip as string | undefined;
+      if (!tip) {
+        need(a.chain, "нужна цепочка (chain) или кончик (tip)");
+        const c = ctx.project.chains[a.chain];
+        need(c, `нет цепочки «${a.chain}»`);
+        const last = c![c!.length - 1];
+        tip = c!.length >= 3 ? last : ctx.skeleton.nodes.find((n) => n.parent === last && n.isJoint)?.name;
+        need(tip, `у «${last}» нет дочерней кости — укажи tip`);
+      }
+      const nodes = ctx.skeleton.nodes;
+      const node = nodes.find((n) => n.name === tip);
+      need(node, `нет кости «${tip}»`);
+      const mid = nodes.find((n) => n.name === node!.parent);
+      need(mid?.isJoint && nodes.some((n) => n.name === mid.parent && n.isJoint), `у «${tip}» нет родителя и деда — IK нужны две кости над кончиком`);
+      const c: Constraint = {
+        id: a.id ?? `ik_${a.chain ?? tip}`,
+        type: "ik",
+        tip: tip!,
+        target: targetOf(ctx, a),
+        ...(a.pole != null ? { pole: vec(a.pole, "pole") } : {}),
+        ...(a.weight != null && +a.weight !== 1 ? { weight: +a.weight } : {}),
+      };
+      addConstraint(clip, c);
+      return c;
+    },
+  },
+  {
+    name: "constraint.key",
+    help: "Ключ цели констрейна во времени t: цель едет по ключам (рука тянется к двигающемуся предмету, взгляд провожает).",
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      id: { type: "string", required: true, help: "констрейн" },
+      t: { type: "number", required: true, help: "время, с" },
+      target: { type: "string", required: true, help: "точка «x,y,z»" },
+      interp: { type: "string", help: "smooth | linear | step" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const clip = clipOf(ctx, a.clip);
+      const c = constraintOf(clip, a.id);
+      const pos = vec(a.target, "target");
+      const keys = (c.target.keys ??= []);
+      // первая точка ключей — там, где цель стояла (иначе до первого ключа цель прыгнет)
+      if (!keys.length && c.target.pos && Math.abs(+a.t) > 1e-6) keys.push({ t: 0, pos: c.target.pos });
+      const k = keys.find((x) => Math.abs(x.t - +a.t) < 1e-6);
+      const interp = a.interp as Interp | undefined;
+      if (k) {
+        k.pos = pos;
+        if (interp) k.interp = interp;
+      } else keys.push({ t: +a.t, pos, ...(interp ? { interp } : {}) });
+      keys.sort((x, y) => x.t - y.t);
+      delete c.target.pos;
+      delete c.target.bone;
+      return c;
+    },
+  },
+  {
+    name: "constraint.set",
+    help: "Поменять констрейн: вес, выключить/включить, новая неподвижная цель (target или targetBone — ключи цели сбрасываются), pole.",
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      id: { type: "string", required: true, help: "констрейн" },
+      weight: { type: "number", help: "0…1" },
+      muted: { type: "boolean", help: "выключить" },
+      target: { type: "string", help: "точка «x,y,z»" },
+      targetBone: { type: "string", help: "кость-цель" },
+      offset: { type: "string", help: "сдвиг цели" },
+      pole: { type: "string", help: "«x,y,z» или none" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const c = constraintOf(clipOf(ctx, a.clip), a.id);
+      if (a.weight != null) {
+        need(+a.weight >= 0 && +a.weight <= 1, "weight — от 0 до 1");
+        if (+a.weight === 1) delete c.weight;
+        else c.weight = +a.weight;
+      }
+      if (a.muted != null) {
+        if (a.muted) c.muted = true;
+        else delete c.muted;
+      }
+      if (a.target != null || a.targetBone != null) c.target = targetOf(ctx, a);
+      else if (a.offset != null) c.target.offset = vec(a.offset, "offset");
+      if (a.pole != null && c.type === "ik") {
+        if (a.pole === "none") delete c.pole;
+        else c.pole = vec(a.pole, "pole");
+      }
+      return c;
+    },
+  },
+  {
+    name: "constraint.remove",
+    help: "Убрать констрейн клипа.",
+    args: { clip: { type: "string", required: true, help: "клип" }, id: { type: "string", required: true, help: "констрейн" } },
+    mutates: true,
+    run(ctx, a) {
+      const clip = clipOf(ctx, a.clip);
+      constraintOf(clip, a.id);
+      clip.constraints = clip.constraints!.filter((c) => c.id !== a.id);
+      if (!clip.constraints.length) delete clip.constraints;
+      return { removed: a.id };
     },
   },
   {

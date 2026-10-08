@@ -55,3 +55,13 @@ export function angVel(q0: Quat, q1: Quat, h: number): Vec3 {
   const ang = 2 * Math.atan2(s, d[3]);
   return [(d[0] / s) * (ang / h), (d[1] / s) * (ang / h), (d[2] / s) * (ang / h)];
 }
+
+/** Доля поворота: тот же поворот вокруг той же оси на угол·k (k = 0 — без поворота, 1 — весь). */
+export function qscale(q: Quat, k: number): Quat {
+  let d = q;
+  if (d[3] < 0) d = [-d[0], -d[1], -d[2], -d[3]];
+  const s = Math.hypot(d[0], d[1], d[2]);
+  if (s < 1e-12) return QI;
+  const ang = 2 * Math.atan2(s, d[3]) * k;
+  return qaxis([d[0] / s, d[1] / s, d[2] / s], ang);
+}

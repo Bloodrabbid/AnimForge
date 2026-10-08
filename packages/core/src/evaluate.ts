@@ -1,8 +1,8 @@
 // Вычисление позы: rest-поза → слои рецептов → ручной слой → постановка на пол → вторичная динамика.
 // Работает одинаково в браузере и в Node.
 import { evalKeys } from "./curves.ts";
-import { DEG, QI, Quat, Vec3, angVel, qaxis, qinv, qmul, qnorm, qrot, vadd, vcross, vdot, vmul, vnorm, vscale, vsub } from "./math.ts";
-import type { Channel, Clip, Project, RecipeLayer, SemanticAxis, Skeleton } from "./project.ts";
+import { DEG, QI, Quat, Vec3, angVel, qaxis, qinv, qmul, qnorm, qrot, qscale, vadd, vcross, vdot, vmul, vnorm, vscale, vsub } from "./math.ts";
+import type { Channel, Clip, Constraint, ConstraintTarget, Project, RecipeLayer, SemanticAxis, Skeleton } from "./project.ts";
 import { RECIPES, withDefaults, type ClipEvent } from "./recipes.ts";
 import { clampRotation } from "./limits.ts";
 
@@ -267,11 +267,105 @@ function primary(project: Project, rig: Rig, clip: Clip, t: number): Acc {
     if (g.ik) for (const b of g.bones) footIK(acc, rig, project, b);
     if (g.mode === "floor") ground(acc, rig, project, g);
   }
+  if (clip.constraints?.some((c) => !c.muted)) {
+    for (const c of clip.constraints) if (!c.muted) solveConstraint(acc, rig, project, clip, c, t);
+    if (project.limits) acc.applyLimits(); // взгляд и IK — тоже в анатомических пределах
+  }
   return acc;
 }
 
+/** Где цель констрейна в момент t (мировые координаты модели). */
+export function targetAt(rig: Rig, parts: PoseParts | null, clip: Clip, tg: ConstraintTarget, t: number): Vec3 | null {
+  let p: Vec3 | null = null;
+  if (tg.keys?.length) {
+    const ks = tg.keys;
+    p = [0, 1, 2].map((k) => evalKeys(ks.map((x) => ({ t: x.t, v: x.pos[k], interp: x.interp })), t, clip.loop, clip.duration)) as Vec3;
+  } else if (tg.bone) {
+    const i = rig.index.get(tg.bone);
+    if (i == null) return null;
+    p = parts ? worldPose(rig, parts).T[i] : rig.worldT[i];
+  } else if (tg.pos) p = tg.pos;
+  if (!p) return null;
+  return tg.offset ? vadd(p, tg.offset) : p;
+}
+
+function solveConstraint(acc: Acc, rig: Rig, project: Project, clip: Clip, c: Constraint, t: number) {
+  const P = targetAt(rig, c.target.bone ? acc.parts() : null, clip, c.target, t);
+  if (!P) return;
+  const w = Math.max(0, Math.min(1, c.weight ?? 1));
+  if (w === 0) return;
+  if (c.type === "ik") twoBoneIK(acc, rig, project, c.tip, P, c.pole, w);
+  else aim(acc, rig, project, c.bones, P, w);
+}
+
+/** Взгляд: «вперёд» последней кости — на цель; каждая кость от основания берёт свою долю оставшегося поворота. */
+function aim(acc: Acc, rig: Rig, project: Project, bones: string[], P: Vec3, weight: number) {
+  const idx = bones.map((b) => rig.index.get(b)).filter((i): i is number => i != null);
+  if (!idx.length) return;
+  const fwd = bodyFrame(project).forward;
+  const tip = idx[idx.length - 1];
+  for (let k = 0; k < idx.length; k++) {
+    const i = idx[k];
+    const wp = worldPose(rig, acc.parts());
+    const cur = qrot(qmul(wp.R[tip], qinv(rig.worldR[tip])), fwd);
+    const want = vsub(P, wp.T[tip]);
+    if (Math.hypot(...want) < 1e-9) return;
+    // вес: у каждой кости доля weight/(сколько осталось) — при весе 1 последняя доводит взгляд точно на цель
+    const q = qscale(qbetween(cur, want), weight / (idx.length - k));
+    const pi = rig.parent[i];
+    const Rp = pi >= 0 ? wp.R[pi] : QI;
+    acc.setLocal(rig.skel.nodes[i].name, qnorm(qmul(qinv(Rp), qmul(q, wp.R[i]))));
+  }
+}
+
+/** Двухзвенная IK: кончик tip — в точку P (если дотягивается; иначе рука вытягивается к ней). Сгибаются родитель
+ * и дед кончика. pole — куда смотрит сгиб; без неё — текущая плоскость сгиба (у прямой — колено вперёд). */
+function twoBoneIK(acc: Acc, rig: Rig, project: Project, tip: string, P: Vec3, pole: Vec3 | undefined, weight: number) {
+  const fi = rig.index.get(tip);
+  if (fi == null) return;
+  const si = rig.parent[fi], ti = si >= 0 ? rig.parent[si] : -1;
+  if (si < 0 || ti < 0) return;
+  const { forward } = bodyFrame(project);
+  const w = worldPose(rig, acc.parts());
+  const H = w.T[ti], K = w.T[si], F = w.T[fi];
+  const a = Math.hypot(...vsub(K, H)), b = Math.hypot(...vsub(F, K));
+  if (a < 1e-9 || b < 1e-9) return;
+  const d = Math.min(a + b - 1e-6, Math.max(Math.abs(a - b) + 1e-6, Math.hypot(...vsub(P, H))));
+  const angle = (x: Vec3, y: Vec3) => Math.acos(Math.max(-1, Math.min(1, vdot(vnorm(x), vnorm(y)))));
+  const cur = angle(vsub(H, K), vsub(F, K));
+  const want = Math.acos(Math.max(-1, Math.min(1, (a * a + b * b - d * d) / (2 * a * b))));
+  let n = vcross(vsub(H, K), vsub(F, K));
+  if (Math.hypot(...n) < 1e-6 * a * b) n = vcross(forward, vsub(H, K));
+  n = vnorm(n);
+  const q1 = qaxis(n, want - cur); // средняя кость: угол сгиба cur → want
+  const F1 = vadd(K, qrot(q1, vsub(F, K)));
+  let q2 = qbetween(vsub(F1, H), vsub(P, H)); // основание: кончик на линию к цели
+  if (pole) {
+    // поворот вокруг оси основание → цель, чтобы сгиб смотрел на pole
+    const ax = vnorm(vsub(P, H));
+    const K2 = vadd(H, qrot(q2, vsub(K, H)));
+    const flat = (v: Vec3) => vsub(v, vscale(ax, vdot(v, ax)));
+    const kv = flat(vsub(K2, H)), pv = flat(vsub(pole, H));
+    if (Math.hypot(...kv) > 1e-9 && Math.hypot(...pv) > 1e-9) {
+      const s = Math.sign(vdot(vcross(kv, pv), ax)) || 1;
+      q2 = qmul(qaxis(ax, s * angle(kv, pv)), q2);
+    }
+  }
+  // вес < 1 — часть пути от анимации к цели
+  setTwo(acc, rig, w, ti, si, qscale(q2, weight), qscale(q1, weight));
+}
+
+function setTwo(acc: Acc, rig: Rig, w: { R: Quat[] }, ti: number, si: number, qRoot: Quat, qMid: Quat) {
+  const pt = rig.parent[ti];
+  const Rp = pt >= 0 ? w.R[pt] : QI;
+  const Rt = qmul(qRoot, w.R[ti]);
+  acc.setLocal(rig.skel.nodes[ti].name, qnorm(qmul(qinv(Rp), Rt)));
+  // средняя кость: сначала свой сгиб (в мире до поворота основания), потом едет вместе с основанием
+  acc.setLocal(rig.skel.nodes[si].name, qnorm(qmul(qinv(w.R[ti]), qmul(qMid, w.R[si]))));
+}
+
 /** Поворот, переводящий направление a в направление b (кратчайший). */
-function qbetween(a: Vec3, b: Vec3): Quat {
+export function qbetween(a: Vec3, b: Vec3): Quat {
   const u = vnorm(a), v = vnorm(b);
   const c = vdot(u, v);
   if (c > 1 - 1e-12) return QI;

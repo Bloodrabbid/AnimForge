@@ -980,3 +980,100 @@ test("limit.fit охватывает размах клипа с запасом, 
   assert.ok(handDir(allowed) > 0.05, `разрешённый сгиб — вперёд: ${handDir(allowed)}`);
   assert.ok(Math.abs(handDir(-allowed)) < 1e-6, `сгиб назад обрезан: ${handDir(-allowed)}`);
 });
+
+// ── констрейны: взгляд и IK ──
+import { targetAt } from "./evaluate.ts";
+import { vnorm as vn, vdot as vd, vcross as vc } from "./math.ts";
+
+const plain = () => humanSkel(Object.fromEntries(HUMAN.map((h) => [h[0], h[0]])));
+const conProject = (constraints: any[], extra: Partial<Project> = {}): Project => ({
+  version: 1, name: "c", model: "", up: [0, 1, 0], forward: [0, 0, 1],
+  chains: { arm_l: ["uarm_l", "farm_l"], neck: ["neck"], head: ["head"] },
+  clips: [{ name: "c", duration: 2, fps: 10, loop: false, layers: [], constraints }], ...extra,
+});
+const W = (pr: Project, t = 0) => {
+  const sk = plain(), rig = buildRig(sk);
+  const w = worldPose(rig, posePartsAt(pr, rig, pr.clips[0], t));
+  return { at: (b: string) => w.T[rig.index.get(b)!], R: (b: string) => w.R[rig.index.get(b)!], rig, parts: posePartsAt(pr, rig, pr.clips[0], t) };
+};
+const dist = (a: Vec3, b: Vec3) => Math.hypot(...vsub(a, b));
+
+test("IK: кисть встаёт в достижимую цель, к недостижимой рука вытягивается; вес — часть пути; pole задаёт сторону локтя", () => {
+  const target: Vec3 = [0.4, 1.2, 0.25];
+  const r = W(conProject([{ id: "ik", type: "ik", tip: "hand_l", target: { pos: target } }]));
+  close(dist(r.at("hand_l"), target), 0, 1e-6, "кисть в цели");
+  close(dist(r.at("uarm_l"), [0.18, 1.5, 0]), 0, 1e-9, "плечо на месте");
+  close(dist(r.at("farm_l"), r.at("uarm_l")), 0.27, 1e-9, "длина плеча не меняется");
+  // недостижимо: кисть на прямой плечо → цель, рука во всю длину
+  const far: Vec3 = [2, 1.5, 1];
+  const f = W(conProject([{ id: "ik", type: "ik", tip: "hand_l", target: { pos: far } }]));
+  const dir = vn(vsub(far, f.at("uarm_l")));
+  close(vd(vn(vsub(f.at("hand_l"), f.at("uarm_l"))), dir), 1, 1e-9, "рука смотрит на цель");
+  close(dist(f.at("hand_l"), f.at("uarm_l")), 0.52, 1e-5, "вытянута");
+  // вес 0.5: не там и не в цели
+  const h = W(conProject([{ id: "ik", type: "ik", tip: "hand_l", target: { pos: target }, weight: 0.5 }]));
+  const d0 = dist([0.7, 1.5, 0], target), dh = dist(h.at("hand_l"), target);
+  assert.ok(dh > 0.02 && dh < d0 - 0.02, `полпути: ${dh} из ${d0}`);
+  // pole: локоть уходит в сторону полюса (вверх или вниз)
+  for (const py of [3, -3]) {
+    const p = W(conProject([{ id: "ik", type: "ik", tip: "hand_l", target: { pos: [0.5, 1.5, 0.1] }, pole: [0.3, py, 0] }]));
+    close(dist(p.at("hand_l"), [0.5, 1.5, 0.1]), 0, 1e-6, "кисть в цели и с полюсом");
+    assert.ok(Math.sign(p.at("farm_l")[1] - 1.5) === Math.sign(py), `локоть к полюсу ${py}: ${p.at("farm_l")}`);
+  }
+  // выключенный — ничего не делает
+  const m = W(conProject([{ id: "ik", type: "ik", tip: "hand_l", target: { pos: target }, muted: true }, { id: "aim", type: "aim", bones: ["head"], target: { pos: [0, 2, 1] } }]));
+  close(dist(m.at("hand_l"), [0.7, 1.5, 0]), 0, 1e-9);
+});
+
+test("взгляд: голова смотрит на цель, поворот делится между шеей и головой; ограничения обрезают; цель по ключам и кость-цель", () => {
+  const look = (pr: Project, t = 0) => {
+    const r = W(pr, t);
+    const fwd = qrot(qmul(r.R("head"), qinv(r.rig.worldR[r.rig.index.get("head")!])), [0, 0, 1]);
+    return { r, fwd };
+  };
+  const P: Vec3 = [1, 2, 1];
+  const a = look(conProject([{ id: "aim", type: "aim", bones: ["neck", "head"], target: { pos: P } }]));
+  close(vd(a.fwd, vn(vsub(P, a.r.at("head")))), 1, 1e-9, "голова на цель");
+  const neckTurn = qrot(a.r.R("neck"), [0, 0, 1]);
+  assert.ok(neckTurn[0] > 0.2, `шея тоже повернулась: ${neckTurn}`);
+  // предел головы и шеи по yaw ±10: смотреть вбок на 90° нельзя
+  const side: Vec3 = [5, 1.65, 0];
+  const lim = conProject([{ id: "aim", type: "aim", bones: ["neck", "head"], target: { pos: side } }], { limits: { neck: { yaw: [-10, 10] }, head: { yaw: [-10, 10] } } });
+  const l = look(lim);
+  const yawDeg = Math.atan2(l.fwd[0], l.fwd[2]) / DEG;
+  close(yawDeg, 20, 0.5, "шея 10 + голова 10");
+  assert.ok(l.r.parts.limited?.has("head"));
+  // цель по ключам: в t=1 — середина пути из слева-спереди в справа-спереди
+  const k = conProject([{ id: "aim", type: "aim", bones: ["head"], target: { keys: [{ t: 0, pos: [-1, 1.65, 1], interp: "linear" }, { t: 2, pos: [1, 1.65, 1] }] } }]);
+  const mid = look(k, 1);
+  close(Math.atan2(mid.fwd[0], mid.fwd[2]), 0, 1e-6, "в середине — прямо");
+  assert.ok(look(k, 0).fwd[0] < -0.5 && look(k, 2).fwd[0] > 0.5, "провожает цель");
+  // кость-цель: смотрит на свою кисть, которую IK двигает раньше
+  const hb = conProject([
+    { id: "ik", type: "ik", tip: "hand_l", target: { pos: [0.3, 1.3, 0.35] } },
+    { id: "aim", type: "aim", bones: ["head"], target: { bone: "hand_l" } },
+  ]);
+  const b = look(hb);
+  close(vd(b.fwd, vn(vsub(b.r.at("hand_l"), b.r.at("head")))), 1, 1e-9, "смотрит на кисть после IK");
+  close(dist(targetAt(b.r.rig, b.r.parts, hb.clips[0], { bone: "hand_l", offset: [0, 0.1, 0] }, 0)!, vsub(b.r.at("hand_l"), [0, -0.1, 0])), 0, 1e-9, "сдвиг цели");
+  void vc;
+});
+
+test("команды констрейнов: ik.add по цепочке находит кисть, constraint.key делает цель движущейся, set и remove", () => {
+  const ctx = { project: conProject([]), skeleton: plain() };
+  const c = runCommand(ctx, "ik.add", { clip: "c", chain: "arm_l", target: "0.4,1.2,0.25" }) as any;
+  assert.equal(c.tip, "hand_l");
+  assert.equal(c.id, "ik_arm_l");
+  runCommand(ctx, "constraint.key", { clip: "c", id: "ik_arm_l", t: 1, target: "0.5,1.0,0.3" });
+  const tg = ctx.project.clips[0].constraints![0].target;
+  assert.deepEqual(tg.keys!.map((k) => k.t), [0, 1], "прежняя точка стала ключом в 0");
+  assert.equal(tg.pos, undefined);
+  runCommand(ctx, "constraint.set", { clip: "c", id: "ik_arm_l", weight: 0.3, muted: true });
+  assert.equal(ctx.project.clips[0].constraints![0].weight, 0.3);
+  assert.throws(() => runCommand(ctx, "ik.add", { clip: "c", tip: "spine", target: "0,0,0" }), /родителя и деда/);
+  const a = runCommand(ctx, "aim.add", { clip: "c", targetBone: "hand_r" }) as any;
+  assert.deepEqual(a.bones, ["neck", "head"]);
+  runCommand(ctx, "constraint.remove", { clip: "c", id: "ik_arm_l" });
+  runCommand(ctx, "constraint.remove", { clip: "c", id: "aim" });
+  assert.equal(ctx.project.clips[0].constraints, undefined);
+});
