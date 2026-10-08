@@ -2,7 +2,8 @@
 # godot --headless --path godot/verify --script verify.gd -- <file.glb> <file.samples.json>
 extends SceneTree
 
-const TOL := 0.02  # допуск по |q_godot - q_core| (с учётом q ≡ -q); между ключами LINEAR против точного значения
+const TOL_POS := 0.0005  # м и доли масштаба; между ключами LINEAR против точного значения
+const TOL := 0.002  # допуск по |q_godot - q_core| (с учётом q ≡ -q); между ключами LINEAR против точного значения
 
 func _init() -> void:
 	var args := OS.get_cmdline_user_args()
@@ -18,6 +19,10 @@ func _init() -> void:
 	var samples = JSON.parse_string(FileAccess.get_file_as_string(args[1]))
 	var worst := 0.0
 	var checked := 0
+	var worst_pos := 0.0  # сдвиги (м) и масштабы — общий допуск TOL_POS
+	var checked_pos := 0
+	var where := ""
+	var where_pos := ""
 	for clip in samples:
 		if not player.has_animation(clip.clip):
 			_fail("нет анимации %s, есть %s" % [clip.clip, player.get_animation_list()])
@@ -35,11 +40,26 @@ func _init() -> void:
 				var want := Quaternion(q[0], q[1], q[2], q[3])
 				var got := skel.get_bone_pose_rotation(skel.find_bone(bone))
 				var d := minf((got - want).length(), (got + want).length())
+				if d > worst: where = "%s t=%.3f поворот" % [bone, c.t]
 				worst = maxf(worst, d)
 				checked += 1
-	print("VERIFY проверено поворотов: %d, худшее расхождение: %.4f (допуск %.2f)" % [checked, worst, TOL])
-	print("VERIFY_OK" if worst <= TOL else "VERIFY_FAIL")
-	quit(0 if worst <= TOL else 1)
+			for bone in c.get("positions", {}):
+				var v: Array = c.positions[bone]
+				var dp := (skel.get_bone_pose_position(skel.find_bone(bone)) - Vector3(v[0], v[1], v[2])).length()
+				if dp > worst_pos: where_pos = "%s t=%.3f сдвиг godot %s, ядро %s" % [bone, c.t, skel.get_bone_pose_position(skel.find_bone(bone)), v]
+				worst_pos = maxf(worst_pos, dp)
+				checked_pos += 1
+			for bone in c.get("scales", {}):
+				var v: Array = c.scales[bone]
+				var ds := (skel.get_bone_pose_scale(skel.find_bone(bone)) - Vector3(v[0], v[1], v[2])).length()
+				if ds > worst_pos: where_pos = "%s t=%.3f масштаб godot %s, ядро %s" % [bone, c.t, skel.get_bone_pose_scale(skel.find_bone(bone)), v]
+				worst_pos = maxf(worst_pos, ds)
+				checked_pos += 1
+	print("VERIFY проверено поворотов: %d, худшее расхождение: %.4f (допуск %.3f) %s" % [checked, worst, TOL, where])
+	print("VERIFY проверено сдвигов и масштабов: %d, худшее расхождение: %.4f (допуск %.4f) %s" % [checked_pos, worst_pos, TOL_POS, where_pos])
+	var ok := worst <= TOL and worst_pos <= TOL_POS
+	print("VERIFY_OK" if ok else "VERIFY_FAIL")
+	quit(0 if ok else 1)
 
 func _fail(msg: String) -> void:
 	print("VERIFY_FAIL ", msg)

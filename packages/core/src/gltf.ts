@@ -34,20 +34,25 @@ export function writeClips(doc: Document, project: Project, rig: Rig): { clip: s
     root.listAnimations().filter((a) => a.getName() === clip.name).forEach((a) => a.dispose());
     const baked = bakeClip(project, rig, clip);
     // анимация без каналов — невалидный glTF: такой клип не пишем, а сообщаем
-    if (baked.rotations.size === 0) {
+    if (baked.rotations.size + baked.translations.size + baked.scales.size === 0) {
       report.push({ clip: clip.name, bones: 0, keys: 0 });
       continue;
     }
     const anim = doc.createAnimation(clip.name);
     const input = doc.createAccessor(`${clip.name}_t`).setType("SCALAR").setArray(new Float32Array(baked.times)).setBuffer(buffer);
-    for (const [bone, qs] of baked.rotations) {
+    const bones = new Set<string>();
+    const channel = (bone: string, vals: number[][], path: "rotation" | "translation" | "scale") => {
       const node = byName.get(bone);
-      if (!node) continue;
-      const output = doc.createAccessor(`${clip.name}_${bone}_r`).setType("VEC4").setArray(new Float32Array(qs.flat())).setBuffer(buffer);
+      if (!node) return;
+      bones.add(bone);
+      const output = doc.createAccessor(`${clip.name}_${bone}_${path[0]}`).setType(path === "rotation" ? "VEC4" : "VEC3").setArray(new Float32Array(vals.flat())).setBuffer(buffer);
       const sampler = doc.createAnimationSampler().setInput(input).setOutput(output).setInterpolation("LINEAR");
-      anim.addSampler(sampler).addChannel(doc.createAnimationChannel().setTargetNode(node).setTargetPath("rotation").setSampler(sampler));
-    }
-    report.push({ clip: clip.name, bones: baked.rotations.size, keys: baked.times.length });
+      anim.addSampler(sampler).addChannel(doc.createAnimationChannel().setTargetNode(node).setTargetPath(path).setSampler(sampler));
+    };
+    for (const [bone, qs] of baked.rotations) channel(bone, qs, "rotation");
+    for (const [bone, vs] of baked.translations) channel(bone, vs, "translation");
+    for (const [bone, vs] of baked.scales) channel(bone, vs, "scale");
+    report.push({ clip: clip.name, bones: bones.size, keys: baked.times.length });
   }
   return report;
 }

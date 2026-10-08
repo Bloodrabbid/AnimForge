@@ -157,3 +157,141 @@ test("шаг циркулем: цикл замкнут, ноги в против
   for (let t = 0; t < 1.2; t += 0.005) max = Math.max(max, v(withDefaults(c, { period: 1.2, springHz: 3, damping: 0.3 }), t));
   assert.ok(max > 90, `перелёт ${max}`);
 });
+
+import { posePartsAt, worldPose } from "./evaluate.ts";
+
+// Нога: таз → бедро → голень → ступня, вертикально вниз; у бедра локальные оси повёрнуты на 90° вокруг X.
+const legSkel: Skeleton = {
+  nodes: [
+    { name: "root", parent: null, restT: [0, 1, 0], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: true },
+    { name: "thigh", parent: "root", restT: [0, 0, 0], restR: roll, restS: [1, 1, 1], isJoint: true },
+    { name: "shin", parent: "thigh", restT: [0, 0, 0.5], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: true },
+    { name: "foot", parent: "shin", restT: [0, 0, 0.5], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: true },
+  ],
+};
+const legProject = (layers: any[], ground?: any): Project => ({
+  version: 1, name: "t", model: "", up: [0, 1, 0], chains: { leg: ["thigh", "shin", "foot"] },
+  clips: [{ name: "c", duration: 1, fps: 10, loop: true, layers, ...(ground ? { ground } : {}) }],
+});
+
+test("сдвиг и масштаб: в осях тела, независимо от осей кости", () => {
+  const rig = buildRig(legSkel);
+  close(rig.worldT[3][1], 0, 1e-9, "ступня у пола");
+  const pr = legProject([{ id: "k", type: "keys", tracks: [
+    { bone: "shin", axis: "move_up", keys: [{ t: 0, v: 0.2 }] },
+    { bone: "thigh", axis: "scale_up", keys: [{ t: 0, v: 0.5 }] },
+  ] }]);
+  const pose = posePartsAt(pr, rig, pr.clips[0], 0);
+  // shin: родитель thigh повёрнут на 90° вокруг X, мировой up (0,1,0) в его осях — это (0,0,−1)
+  const p = pose.pos.get("shin")!;
+  close(p[0], 0); close(p[1], 0); close(p[2], 0.5 - 0.2, 1e-9, "z");
+  // масштаб «вверх» у thigh попадает на его локальную Z (она смотрит вдоль мирового Y)
+  assert.deepEqual(pose.scl.get("thigh")!.map((x) => +x.toFixed(9)), [1, 1, 1.5]);
+  // мировая высота ступни: бедро растянуто в 1.5 раза, голень поднята на 0.2
+  const w = worldPose(rig, pose);
+  close(w.T[3][1], 1 - 1.5 * (0.5 - 0.2) - 1.5 * 0.5, 1e-9, "ступня");
+});
+
+test("постановка на пол: contact прижимает, floor только не даёт провалиться", () => {
+  const rig = buildRig(legSkel);
+  const bend = [{ id: "k", type: "keys", tracks: [{ bone: "thigh", axis: "vertical", keys: [{ t: 0, v: 60 }] }] }];
+  const footY = (pr: Project) => worldPose(rig, posePartsAt(pr, rig, pr.clips[0], 0)).T[3][1];
+  close(footY(legProject(bend)), 1 - Math.cos(60 * DEG), 1e-9, "без пола нога висит");
+  close(footY(legProject(bend, { bones: ["foot"], mode: "contact" })), 0, 1e-9, "contact");
+  close(footY(legProject(bend, { bones: ["foot"], mode: "floor" })), 1 - Math.cos(60 * DEG), 1e-9, "floor не тянет вниз");
+  const down = [{ id: "k", type: "keys", tracks: [{ bone: "root", axis: "move_up", keys: [{ t: 0, v: -0.3 }] }] }];
+  close(footY(legProject(down, { bones: ["foot"], mode: "floor" })), 0, 1e-9, "floor выталкивает из пола");
+});
+
+test("покачивание: вынужденные колебания маятника совпадают с формулой", () => {
+  // родитель p качается по синусу вокруг Z; ухо e0→e1 растёт из точки его вращения вдоль X (линейных ускорений нет)
+  const sk: Skeleton = { nodes: [
+    { name: "p", parent: null, restT: [0, 0, 0], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: true },
+    { name: "e0", parent: "p", restT: [0, 0, 0], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: true },
+    { name: "e1", parent: "e0", restT: [0.3, 0, 0], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: true },
+  ] };
+  const T = 0.5, A = 10, hz = 1.6, z = 0.31, inert = 0.5;
+  const pr: Project = { version: 1, name: "t", model: "", up: [0, 1, 0], chains: { p: ["p"], ear: ["e0", "e1"] },
+    clips: [{ name: "c", duration: T * 2, fps: 30, loop: true, layers: [
+      { id: "sway", type: "recipe", recipe: "wave", target: { chain: "p" }, params: { plane: "lateral", period: T, tipAmp: A, growth: 1 } },
+      { id: "j", type: "recipe", recipe: "jiggle", target: { chain: "ear" }, params: { hz, damping: z, inert } },
+    ] }] };
+  const rig = buildRig(sk);
+  // e0 получает 1/3 общего отклонения (веса 1/2 и 1 из 1.5)
+  let amp = 0;
+  for (let t = 0; t < T; t += 0.002) {
+    const q = posePartsAt(pr, rig, pr.clips[0], t).rot.get("e0")!;
+    amp = Math.max(amp, (2 * Math.asin(Math.min(1, Math.hypot(q[0], q[1], q[2])))) / DEG * 3);
+  }
+  const w = (2 * Math.PI) / T, w0 = 2 * Math.PI * hz;
+  const expect = ((1 - inert) * A * w * w) / Math.hypot(w0 * w0 - w * w, 2 * z * w0 * w);
+  close(amp, expect, expect * 0.03, "амплитуда");
+  // толчки вверх-вниз: основание ходит по синусу B·sin(ωt) — момент (d × a)/L, длина L = 0.3
+  const B = 0.02, keys = Array.from({ length: 65 }, (_, k) => ({ t: (k * 2 * T) / 64, v: B * Math.sin((2 * Math.PI * k * 2) / 64) }));
+  const bob: Project = { ...pr, clips: [{ ...pr.clips[0], layers: [
+    { id: "k", type: "keys", tracks: [{ bone: "p", axis: "move_up", keys }] }, pr.clips[0].layers[1]] }] };
+  let amp2 = 0;
+  for (let t = 0; t < T; t += 0.002) {
+    const q = posePartsAt(bob, rig, bob.clips[0], t).rot.get("e0")!;
+    amp2 = Math.max(amp2, (2 * Math.asin(Math.min(1, Math.hypot(q[0], q[1], q[2])))) / DEG * 3);
+  }
+  const expect2 = (((1 - inert) * B * w * w) / 0.3 / Math.hypot(w0 * w0 - w * w, 2 * z * w0 * w)) / DEG;
+  close(amp2, expect2, expect2 * 0.05, "амплитуда от толчков");
+  // без движения родителя покачивания нет
+  const still = { ...pr, clips: [{ ...pr.clips[0], layers: [pr.clips[0].layers[1]] }] };
+  assert.equal(posePartsAt(still, rig, still.clips[0], 0.3).rot.get("e0"), undefined);
+});
+
+test("ходьба вразвалку: подскок — доля высоты таза, низ шага в момент опоры", () => {
+  const c = RECIPES["waddle-walk"];
+  const p = withDefaults(c, { role: "pelvis", period: 0.48, bob: 0.25 });
+  let lo = Infinity, hi = -Infinity, tlo = 0;
+  for (let t = 0; t < 0.24; t += 0.0005) { const v = c.evaluate(p, 0, 1, t, { height: 0.5 }).move_up!; if (v < lo) { lo = v; tlo = t; } hi = Math.max(hi, v); }
+  close(hi - lo, 0.125, 0.004, "размах = 0.25 · 0.5");
+  close(hi, 0, 0.004, "вершина — без сдвига");
+  close(tlo, 0.12, 0.012, "низ — когда нога впереди (четверть цикла)");
+});
+
+test("моргание: закрыто держится на minY, потом перелёт и возврат к 1", () => {
+  const c = RECIPES.blink;
+  const p = withDefaults(c, {});
+  const y = (t: number) => c.evaluate(p, 0, 1, t).scale_up!;
+  close(y(0.1), 0.3); close(c.evaluate(p, 0, 1, 0.1).scale_side!, 1.2);
+  close(y(0.067 + 0.083 + 0.05), 1.17, 1e-9, "перелёт");
+  close(y(0.2 + 0.05), 1.17 - 0.17 * 0.5, 1e-9, "середина успокоения (smoothstep = 0.5)");
+  close(y(1), 1); close(y(1.8 + 0.1), 0.3, 1e-9, "следующий цикл");
+});
+
+test("ходьба вразвалку: углы груди и головы — относительно родителя, в мире совпадают с замером", () => {
+  const c = RECIPES["waddle-walk"];
+  const at = (role: string, t: number) => c.evaluate(withDefaults(c, { role }), 0, 1, t, { height: 0.5 });
+  const t = 0.479 / 4; // sin = 1
+  // мировое рыскание головы = таз + грудь + голова = headYaw·sin(ωt + π) = −6
+  close(at("pelvis", t).roll! + at("chest", t).roll! + at("head", t).roll!, -6, 1e-9);
+  close(at("pelvis", t).roll! + at("chest", t).roll!, -0.49 * 32, 1e-9, "плечи в мире");
+});
+
+test("IK ступни: при опускании тела колено сгибается вперёд, ступня ровно на полу под тазом", () => {
+  const rig = buildRig(legSkel);
+  const down = [{ id: "k", type: "keys", tracks: [{ bone: "root", axis: "move_up", keys: [{ t: 0, v: -0.3 }] }] }];
+  const pr = legProject(down, { bones: ["foot"], mode: "floor", ik: true });
+  const w = worldPose(rig, posePartsAt(pr, rig, pr.clips[0], 0));
+  close(w.T[3][1], 0, 1e-9, "ступня на полу");
+  close(w.T[0][1], 0.7, 1e-9, "тело опустилось (floor не вытолкнул обратно)");
+  close(w.T[3][2], 0, 1e-9, "ступня под тазом");
+  assert.ok(w.T[2][2] > 0.1, `колено вперёд, z=${w.T[2][2]}`);
+  // высота колена: треугольник 0.5/0.5/0.7 → половина основания 0.35, высота √(0.25 − 0.1225)
+  close(w.T[2][2], Math.sqrt(0.25 - 0.35 * 0.35), 1e-9, "вынос колена");
+  // уже согнутая нога сохраняет плоскость сгиба: тянем бедро вбок, сгиб остаётся в той же плоскости
+  const bent = [{ id: "k", type: "keys", tracks: [
+    { bone: "root", axis: "move_up", keys: [{ t: 0, v: -0.2 }] },
+    { bone: "shin", axis: "vertical", keys: [{ t: 0, v: 20 }] }] }];
+  const pb = legProject(bent, { bones: ["foot"], mode: "floor", ik: true });
+  const wb = worldPose(rig, posePartsAt(pb, rig, pb.clips[0], 0));
+  close(wb.T[3][1], 0, 1e-9, "согнутая нога тоже встаёт на пол");
+  close(wb.T[2][0], 0, 1e-9, "колено в той же плоскости");
+  // нога в переносе (ступня над полом) IK не трогает
+  const lift = [{ id: "k", type: "keys", tracks: [{ bone: "thigh", axis: "vertical", keys: [{ t: 0, v: 40 }] }] }];
+  const pl = legProject(lift, { bones: ["foot"], mode: "floor", ik: true });
+  close(worldPose(rig, posePartsAt(pl, rig, pl.clips[0], 0)).T[3][1], 1 - Math.cos(40 * DEG), 1e-9, "перенос");
+});

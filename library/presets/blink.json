@@ -1,0 +1,28 @@
+{
+ "recipe": "blink",
+ "presets": [
+  {
+   "name": "toolsup-blink",
+   "help": "Моргание Tools Up!: 0.067 / 0.083 / 0.05 с, глаз сплющен до 0.3 и шире на 20 %.",
+   "params": {
+    "close": 0.067,
+    "hold": 0.083,
+    "open": 0.05,
+    "minY": 0.3,
+    "widenX": 1.2,
+    "overshoot": 1.17,
+    "interval": 1.8
+   },
+   "provenance": [
+    {
+     "source": "research/toolsup",
+     "ref": "02 §4.1: Idle_1, медианы по 1270 морганиям; interval — расчёт 2.6–3 с клипа / 1.5"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "settle 0.1 с — на глаз"
+    }
+   ]
+  }
+ ]
+}

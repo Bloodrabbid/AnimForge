@@ -23,7 +23,7 @@ sc = bpy.context.scene
 sc.render.engine = "BLENDER_WORKBENCH"
 sc.display.shading.light = "STUDIO"
 sc.display.shading.color_type = "MATERIAL"
-sc.render.resolution_x, sc.render.resolution_y = 480, 300
+sc.render.resolution_x, sc.render.resolution_y = (int(a[6]), int(a[7])) if len(a) > 7 else (480, 300)
 sc.world = bpy.data.worlds.new("w")
 sc.world.color = (0.92, 0.93, 0.95)
 sc.display.shading.background_type = "WORLD"
@@ -42,10 +42,11 @@ for m in meshes:
     ev.to_mesh_clear()
 c = sum(pts, Vector()) / len(pts)
 r = max((p - c).length for p in pts)
-el, az = {"side": (5, -90), "top": (89, -90), "three_quarter": (35, -60)}[view]
+# side/top/three_quarter — для тел вдоль X (рыба, змея); front/profile — для персонажей, смотрящих на −Y Blender
+el, az = {"side": (5, -90), "top": (89, -90), "three_quarter": (35, -60), "front": (8, -90), "profile": (8, 0), "front_3q": (20, -55)}[view]
 el, az = math.radians(el), math.radians(az)
 d = Vector((math.cos(el) * math.cos(az), math.cos(el) * math.sin(az), math.sin(el)))
-cam.location = c + d * r * 3.4
+cam.location = c + d * r * float(a[5] if len(a) > 5 else 3.4)
 cam.rotation_euler = (c - cam.location).to_track_quat("-Z", "Y").to_euler()
 
 for k in range(count):

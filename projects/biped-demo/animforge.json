@@ -89,7 +89,14 @@
           },
           "preset": "biped-waddle"
         }
-      ]
+      ],
+      "ground": {
+        "bones": [
+          "foot_l",
+          "foot_r"
+        ],
+        "mode": "contact"
+      }
     }
   ]
 }

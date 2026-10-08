@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { COMMANDS, Ctx, Project, RECIPES, TweenPreset, buildRig, emptyProject, poseAt, readSkeleton, runCommand, samplePreset, writeClips } from "../../core/src/index.ts";
+import { COMMANDS, Ctx, Project, RECIPES, TweenPreset, buildRig, emptyProject, frameTimes, posePartsAt, readSkeleton, runCommand, samplePreset, writeClips } from "../../core/src/index.ts";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 export const GODOT = process.env.GODOT ?? "/Applications/Godot.app/Contents/MacOS/Godot";
@@ -55,8 +55,11 @@ export async function exportGlb(ctx: Ctx & { dir: string }, out: string) {
     clip: clip.name,
     duration: clip.duration,
     checks: [0.13, 0.37, 0.71].map((u) => {
-      const t = +(u * clip.duration).toFixed(4);
-      return { t, rotations: Object.fromEntries(poseAt(ctx.project, rig, clip, t)) };
+      // момент ровно на запечённом кадре: сверяем экспорт, а не точность линейной интерполяции между кадрами
+      const times = frameTimes(clip);
+      const t = times[Math.round(u * (times.length - 1))];
+      const pose = posePartsAt(ctx.project, rig, clip, t);
+      return { t, rotations: Object.fromEntries(pose.rot), positions: Object.fromEntries(pose.pos), scales: Object.fromEntries(pose.scl) };
     }),
   }));
   writeFileSync(out.replace(/\.glb$/, ".samples.json"), JSON.stringify(samples.filter((s) => report.find((r) => r.clip === s.clip)!.bones > 0), null, 1));
@@ -65,14 +68,36 @@ export async function exportGlb(ctx: Ctx & { dir: string }, out: string) {
 }
 
 /** «Глаза»: рендер клипа в Blender → лист кадров PNG. */
-export async function renderSheet(ctx: Ctx & { dir: string }, clip: string, frames: number, view: string, out: string) {
+function renderFrames(glb: string, clip: string, dir: string, frames: number, view: string, dist = 3.4, size: [number, number] = [480, 300]) {
+  const log = execFileSync(BLENDER, ["-b", "--python", join(ROOT, "bridge/blender/render_sheet.py"), "--", glb, clip, dir, String(frames), view, String(dist), String(size[0]), String(size[1])], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 });
+  if (!log.includes("SHEET_OK")) throw new Error("Blender не отрендерил кадры:\n" + log.split("\n").filter((l) => /SHEET|Error|Traceback/.test(l)).join("\n"));
+  return readdirSync(dir).filter((f) => f.endsWith(".png")).sort().map((f) => join(dir, f));
+}
+
+/** Видео клипа: один проход рендерится в Blender, ffmpeg повторяет его loops раз. */
+export async function renderVideo(ctx: Ctx & { dir: string }, clipName: string, view: string, loops: number, dist: number, out: string) {
+  const clip = ctx.project.clips.find((c) => c.name === clipName);
+  if (!clip) throw new Error(`нет клипа «${clipName}»`);
+  const tmp = mkdtempSync(join(tmpdir(), "af-video-"));
+  try {
+    const glb = join(tmp, "clip.glb");
+    await exportGlb(ctx, glb);
+    const n = Math.max(2, Math.round(clip.duration * clip.fps));
+    renderFrames(glb, clipName, tmp, n, view, dist, [720, 720]);
+    mkdirSync(dirname(out), { recursive: true });
+    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-stream_loop", String(Math.max(0, loops - 1)), "-framerate", String(n / clip.duration), "-i", join(tmp, "f_%03d.png"), "-pix_fmt", "yuv420p", "-vf", "scale=720:720", out]);
+    return { out, frames: n, loops, seconds: +(clip.duration * loops).toFixed(2) };
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+export async function renderSheet(ctx: Ctx & { dir: string }, clip: string, frames: number, view: string, out: string, dist = 3.4) {
   const tmp = mkdtempSync(join(tmpdir(), "af-sheet-"));
   try {
     const glb = join(tmp, "clip.glb");
     await exportGlb(ctx, glb);
-    const log = execFileSync(BLENDER, ["-b", "--python", join(ROOT, "bridge/blender/render_sheet.py"), "--", glb, clip, tmp, String(frames), view], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-    if (!log.includes("SHEET_OK")) throw new Error("Blender не отрендерил кадры:\n" + log.split("\n").filter((l) => /SHEET|Error|Traceback/.test(l)).join("\n"));
-    const pngs = readdirSync(tmp).filter((f) => f.endsWith(".png")).sort().map((f) => join(tmp, f));
+    const pngs = renderFrames(glb, clip, tmp, frames, view, dist);
     mkdirSync(dirname(out), { recursive: true });
     const cols = Math.min(4, pngs.length);
     // ряды по cols кадров: ( a b c d +append ) ( e f g h +append ) -append — без шрифтов, в отличие от montage
@@ -162,8 +187,8 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
     },
   },
   "template.make": {
-    help: "Собрать модель по шаблону тела в Blender: fish, snake, tentacle, quadruped, biped.",
-    args: { type: { type: "string", required: true, help: "fish | snake | tentacle | quadruped | biped" }, out: { type: "string", required: true, help: "куда положить glb" }, bones: { type: "number", help: "число костей тела (по умолчанию — своё у каждого шаблона)" } },
+    help: "Собрать модель по шаблону тела в Blender: fish, snake, tentacle, quadruped, biped, worker.",
+    args: { type: { type: "string", required: true, help: "fish | snake | tentacle | quadruped | biped | worker" }, out: { type: "string", required: true, help: "куда положить glb" }, bones: { type: "number", help: "число костей тела (по умолчанию — своё у каждого шаблона)" } },
     run: async (dir, a) => makeTemplate(a.type, resolve(dir, a.out), a.bones),
   },
   "preset.list": {
@@ -265,9 +290,21 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
       clip: { type: "string", required: true, help: "клип" },
       out: { type: "string", required: true, help: "png" },
       frames: { type: "number", help: "сколько кадров, по умолчанию 8" },
-      view: { type: "string", help: "side | top | three_quarter (по умолчанию)" },
+      view: { type: "string", help: "side | top | three_quarter (по умолчанию) — тела вдоль X; front | profile | front_3q — персонажи" },
+      dist: { type: "number", help: "отдаление камеры в радиусах модели, по умолчанию 3.4" },
     },
-    run: async (dir, a) => renderSheet(await loadCtx(dir), a.clip, a.frames ?? 8, a.view ?? "three_quarter", resolve(dir, a.out)),
+    run: async (dir, a) => renderSheet(await loadCtx(dir), a.clip, a.frames ?? 8, a.view ?? "three_quarter", resolve(dir, a.out), a.dist ?? 3.4),
+  },
+  video: {
+    help: "Видео клипа (mp4, 720×720) через Blender + ffmpeg: один проход, повторённый loops раз.",
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      out: { type: "string", required: true, help: "mp4" },
+      view: { type: "string", help: "как у sheet, по умолчанию three_quarter" },
+      loops: { type: "number", help: "сколько раз повторить, по умолчанию 4" },
+      dist: { type: "number", help: "отдаление камеры, по умолчанию 2.6" },
+    },
+    run: async (dir, a) => renderVideo(await loadCtx(dir), a.clip, a.view ?? "three_quarter", a.loops ?? 4, a.dist ?? 2.6, resolve(dir, a.out)),
   },
 };
 

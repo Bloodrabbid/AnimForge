@@ -1,0 +1,535 @@
+{
+  "version": 1,
+  "name": "worker-demo",
+  "model": "assets/worker.glb",
+  "up": [
+    0,
+    1,
+    0
+  ],
+  "chains": {
+    "pelvis": [
+      "pelvis"
+    ],
+    "chest": [
+      "chest"
+    ],
+    "head": [
+      "head"
+    ],
+    "eye_l": [
+      "eye_l"
+    ],
+    "eye_r": [
+      "eye_r"
+    ],
+    "arm_l": [
+      "arm_l_0",
+      "arm_l_1"
+    ],
+    "arm_r": [
+      "arm_r_0",
+      "arm_r_1"
+    ],
+    "leg_l": [
+      "leg_l_0",
+      "leg_l_1"
+    ],
+    "leg_r": [
+      "leg_r_0",
+      "leg_r_1"
+    ],
+    "ear_l": [
+      "ear_l_0",
+      "ear_l_1"
+    ],
+    "ear_r": [
+      "ear_r_0",
+      "ear_r_1"
+    ]
+  },
+  "clips": [
+    {
+      "name": "walk",
+      "duration": 1.916,
+      "fps": 30,
+      "loop": true,
+      "layers": [
+        {
+          "id": "pelvis",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "pelvis"
+          },
+          "params": {
+            "role": "pelvis",
+            "period": 0.479,
+            "pelvisYaw": 32,
+            "chestCounter": 0.49,
+            "headYaw": 6,
+            "pelvisRoll": 10,
+            "chestRoll": 14,
+            "headRoll": 7,
+            "rollPhase": 80,
+            "headLag": 54,
+            "bob": 0.248,
+            "armSwing": 30
+          },
+          "preset": "toolsup-worker"
+        },
+        {
+          "id": "chest",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "chest"
+          },
+          "params": {
+            "role": "chest",
+            "period": 0.479,
+            "pelvisYaw": 32,
+            "chestCounter": 0.49,
+            "headYaw": 6,
+            "pelvisRoll": 10,
+            "chestRoll": 14,
+            "headRoll": 7,
+            "rollPhase": 80,
+            "headLag": 54,
+            "bob": 0.248,
+            "armSwing": 30
+          },
+          "preset": "toolsup-worker"
+        },
+        {
+          "id": "head",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "head"
+          },
+          "params": {
+            "role": "head",
+            "period": 0.479,
+            "pelvisYaw": 32,
+            "chestCounter": 0.49,
+            "headYaw": 6,
+            "pelvisRoll": 10,
+            "chestRoll": 14,
+            "headRoll": 7,
+            "rollPhase": 80,
+            "headLag": 54,
+            "bob": 0.248,
+            "armSwing": 30
+          },
+          "preset": "toolsup-worker"
+        },
+        {
+          "id": "arm_l",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "arm_l"
+          },
+          "params": {
+            "role": "arm_l",
+            "period": 0.479,
+            "pelvisYaw": 32,
+            "chestCounter": 0.49,
+            "headYaw": 6,
+            "pelvisRoll": 10,
+            "chestRoll": 14,
+            "headRoll": 7,
+            "rollPhase": 80,
+            "headLag": 54,
+            "bob": 0.248,
+            "armSwing": 30
+          },
+          "preset": "toolsup-worker"
+        },
+        {
+          "id": "arm_r",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "arm_r"
+          },
+          "params": {
+            "role": "arm_r",
+            "period": 0.479,
+            "pelvisYaw": 32,
+            "chestCounter": 0.49,
+            "headYaw": 6,
+            "pelvisRoll": 10,
+            "chestRoll": 14,
+            "headRoll": 7,
+            "rollPhase": 80,
+            "headLag": 54,
+            "bob": 0.248,
+            "armSwing": 30
+          },
+          "preset": "toolsup-worker"
+        },
+        {
+          "id": "leg_l",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "leg_l"
+          },
+          "params": {
+            "role": "leg_l",
+            "period": 0.479,
+            "pelvisYaw": 32,
+            "chestCounter": 0.49,
+            "headYaw": 6,
+            "pelvisRoll": 10,
+            "chestRoll": 14,
+            "headRoll": 7,
+            "rollPhase": 80,
+            "headLag": 54,
+            "bob": 0.248,
+            "armSwing": 30
+          },
+          "preset": "toolsup-worker"
+        },
+        {
+          "id": "leg_r",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "leg_r"
+          },
+          "params": {
+            "role": "leg_r",
+            "period": 0.479,
+            "pelvisYaw": 32,
+            "chestCounter": 0.49,
+            "headYaw": 6,
+            "pelvisRoll": 10,
+            "chestRoll": 14,
+            "headRoll": 7,
+            "rollPhase": 80,
+            "headLag": 54,
+            "bob": 0.248,
+            "armSwing": 30
+          },
+          "preset": "toolsup-worker"
+        },
+        {
+          "id": "eye_l",
+          "type": "recipe",
+          "recipe": "blink",
+          "target": {
+            "chain": "eye_l"
+          },
+          "params": {
+            "interval": 1.916,
+            "close": 0.067,
+            "hold": 0.083,
+            "open": 0.05,
+            "minY": 0.3,
+            "widenX": 1.2,
+            "overshoot": 1.17
+          },
+          "preset": "toolsup-blink"
+        },
+        {
+          "id": "eye_r",
+          "type": "recipe",
+          "recipe": "blink",
+          "target": {
+            "chain": "eye_r"
+          },
+          "params": {
+            "interval": 1.916,
+            "close": 0.067,
+            "hold": 0.083,
+            "open": 0.05,
+            "minY": 0.3,
+            "widenX": 1.2,
+            "overshoot": 1.17
+          },
+          "preset": "toolsup-blink"
+        },
+        {
+          "id": "ear_l",
+          "type": "recipe",
+          "recipe": "jiggle",
+          "target": {
+            "chain": "ear_l"
+          },
+          "params": {
+            "hz": 1.6,
+            "damping": 0.31,
+            "inert": 0.5
+          },
+          "preset": "ear_floppy"
+        },
+        {
+          "id": "ear_r",
+          "type": "recipe",
+          "recipe": "jiggle",
+          "target": {
+            "chain": "ear_r"
+          },
+          "params": {
+            "hz": 1.6,
+            "damping": 0.31,
+            "inert": 0.5
+          },
+          "preset": "ear_floppy"
+        }
+      ],
+      "ground": {
+        "bones": [
+          "foot_l",
+          "foot_r"
+        ],
+        "mode": "floor",
+        "ik": true
+      }
+    },
+    {
+      "name": "walk1",
+      "duration": 0.479,
+      "fps": 30,
+      "loop": true,
+      "layers": [
+        {
+          "id": "pelvis",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "pelvis"
+          },
+          "params": {
+            "role": "pelvis",
+            "period": 0.479,
+            "pelvisYaw": 32,
+            "chestCounter": 0.49,
+            "headYaw": 6,
+            "pelvisRoll": 10,
+            "chestRoll": 14,
+            "headRoll": 7,
+            "rollPhase": 80,
+            "headLag": 54,
+            "bob": 0.248,
+            "armSwing": 30
+          },
+          "preset": "toolsup-worker"
+        },
+        {
+          "id": "chest",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "chest"
+          },
+          "params": {
+            "role": "chest",
+            "period": 0.479,
+            "pelvisYaw": 32,
+            "chestCounter": 0.49,
+            "headYaw": 6,
+            "pelvisRoll": 10,
+            "chestRoll": 14,
+            "headRoll": 7,
+            "rollPhase": 80,
+            "headLag": 54,
+            "bob": 0.248,
+            "armSwing": 30
+          },
+          "preset": "toolsup-worker"
+        },
+        {
+          "id": "head",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "head"
+          },
+          "params": {
+            "role": "head",
+            "period": 0.479,
+            "pelvisYaw": 32,
+            "chestCounter": 0.49,
+            "headYaw": 6,
+            "pelvisRoll": 10,
+            "chestRoll": 14,
+            "headRoll": 7,
+            "rollPhase": 80,
+            "headLag": 54,
+            "bob": 0.248,
+            "armSwing": 30
+          },
+          "preset": "toolsup-worker"
+        },
+        {
+          "id": "arm_l",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "arm_l"
+          },
+          "params": {
+            "role": "arm_l",
+            "period": 0.479,
+            "pelvisYaw": 32,
+            "chestCounter": 0.49,
+            "headYaw": 6,
+            "pelvisRoll": 10,
+            "chestRoll": 14,
+            "headRoll": 7,
+            "rollPhase": 80,
+            "headLag": 54,
+            "bob": 0.248,
+            "armSwing": 30
+          },
+          "preset": "toolsup-worker"
+        },
+        {
+          "id": "arm_r",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "arm_r"
+          },
+          "params": {
+            "role": "arm_r",
+            "period": 0.479,
+            "pelvisYaw": 32,
+            "chestCounter": 0.49,
+            "headYaw": 6,
+            "pelvisRoll": 10,
+            "chestRoll": 14,
+            "headRoll": 7,
+            "rollPhase": 80,
+            "headLag": 54,
+            "bob": 0.248,
+            "armSwing": 30
+          },
+          "preset": "toolsup-worker"
+        },
+        {
+          "id": "leg_l",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "leg_l"
+          },
+          "params": {
+            "role": "leg_l",
+            "period": 0.479,
+            "pelvisYaw": 32,
+            "chestCounter": 0.49,
+            "headYaw": 6,
+            "pelvisRoll": 10,
+            "chestRoll": 14,
+            "headRoll": 7,
+            "rollPhase": 80,
+            "headLag": 54,
+            "bob": 0.248,
+            "armSwing": 30
+          },
+          "preset": "toolsup-worker"
+        },
+        {
+          "id": "leg_r",
+          "type": "recipe",
+          "recipe": "waddle-walk",
+          "target": {
+            "chain": "leg_r"
+          },
+          "params": {
+            "role": "leg_r",
+            "period": 0.479,
+            "pelvisYaw": 32,
+            "chestCounter": 0.49,
+            "headYaw": 6,
+            "pelvisRoll": 10,
+            "chestRoll": 14,
+            "headRoll": 7,
+            "rollPhase": 80,
+            "headLag": 54,
+            "bob": 0.248,
+            "armSwing": 30
+          },
+          "preset": "toolsup-worker"
+        },
+        {
+          "id": "eye_l",
+          "type": "recipe",
+          "recipe": "blink",
+          "target": {
+            "chain": "eye_l"
+          },
+          "params": {
+            "interval": 0.479,
+            "close": 0.067,
+            "hold": 0.083,
+            "open": 0.05,
+            "minY": 0.3,
+            "widenX": 1.2,
+            "overshoot": 1.17
+          },
+          "preset": "toolsup-blink"
+        },
+        {
+          "id": "eye_r",
+          "type": "recipe",
+          "recipe": "blink",
+          "target": {
+            "chain": "eye_r"
+          },
+          "params": {
+            "interval": 0.479,
+            "close": 0.067,
+            "hold": 0.083,
+            "open": 0.05,
+            "minY": 0.3,
+            "widenX": 1.2,
+            "overshoot": 1.17
+          },
+          "preset": "toolsup-blink"
+        },
+        {
+          "id": "ear_l",
+          "type": "recipe",
+          "recipe": "jiggle",
+          "target": {
+            "chain": "ear_l"
+          },
+          "params": {
+            "hz": 1.6,
+            "damping": 0.31,
+            "inert": 0.5
+          },
+          "preset": "ear_floppy"
+        },
+        {
+          "id": "ear_r",
+          "type": "recipe",
+          "recipe": "jiggle",
+          "target": {
+            "chain": "ear_r"
+          },
+          "params": {
+            "hz": 1.6,
+            "damping": 0.31,
+            "inert": 0.5
+          },
+          "preset": "ear_floppy"
+        }
+      ],
+      "ground": {
+        "bones": [
+          "foot_l",
+          "foot_r"
+        ],
+        "mode": "floor",
+        "ik": true
+      }
+    }
+  ]
+}

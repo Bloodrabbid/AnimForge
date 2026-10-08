@@ -1,6 +1,7 @@
 // Ядро команд. Каждое действие — команда с описанием и параметрами: её одинаково вызывают интерфейс, CLI и MCP.
 // Команды здесь чистые: меняют проект в памяти и возвращают результат. Файлы, Blender и рендер — в адаптерах (packages/cli).
-import type { Clip, Interp, KeyLayer, Project, RecipeLayer, SemanticAxis, Skeleton } from "./project.ts";
+import { CHANNELS } from "./project.ts";
+import type { Channel, Clip, Interp, KeyLayer, Project, RecipeLayer, Skeleton } from "./project.ts";
 import { RECIPES } from "./recipes.ts";
 
 export interface Ctx {
@@ -152,28 +153,48 @@ const defs: CommandDef[] = [
   },
   {
     name: "key.set",
-    help: "Поставить ручной ключ поверх рецептов: добавочный поворот кости по оси тела, в градусах.",
+    help: "Поставить ручной ключ поверх рецептов: добавка по каналу — поворот (°), сдвиг (м) или масштаб (добавка к 1).",
     args: {
       clip: { type: "string", required: true, help: "клип" },
       bone: { type: "string", required: true, help: "кость" },
-      axis: { type: "string", required: true, help: "lateral | vertical | roll" },
+      axis: { type: "string", required: true, help: "lateral | vertical | roll | move_up | move_forward | move_side | scale_up | scale_forward | scale_side" },
       t: { type: "number", required: true, help: "время, с" },
-      v: { type: "number", required: true, help: "угол, °" },
+      v: { type: "number", required: true, help: "значение: °, м или добавка к масштабу (0.2 → ×1.2)" },
       interp: { type: "string", help: "smooth | linear | step (переход к следующему ключу)" },
     },
     mutates: true,
     run(ctx, a) {
       const clip = clipOf(ctx, a.clip);
       need(ctx.skeleton.nodes.some((n) => n.name === a.bone), `нет кости «${a.bone}»`);
-      need(["lateral", "vertical", "roll"].includes(a.axis), "axis: lateral | vertical | roll");
+      need(CHANNELS.includes(a.axis), `axis: ${CHANNELS.join(" | ")}`);
       need(+a.t >= 0 && +a.t <= clip.duration, `t вне клипа 0…${clip.duration}`);
       const layer = keyLayer(clip);
       let tr = layer.tracks.find((t) => t.bone === a.bone && t.axis === a.axis);
-      if (!tr) layer.tracks.push((tr = { bone: a.bone, axis: a.axis as SemanticAxis, keys: [] }));
+      if (!tr) layer.tracks.push((tr = { bone: a.bone, axis: a.axis as Channel, keys: [] }));
       tr.keys = tr.keys.filter((k) => Math.abs(k.t - +a.t) > 1e-6);
       tr.keys.push({ t: +a.t, v: +a.v, ...(a.interp ? { interp: a.interp as Interp } : {}) });
       tr.keys.sort((x, y) => x.t - y.t);
       return tr;
+    },
+  },
+  {
+    name: "clip.ground",
+    help: "Ставить кости на пол после всех слоёв: корень сдвигается по вертикали. contact — нижняя кость всегда на полу; floor — только не проваливаться. Без bones — выключить.",
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      bones: { type: "string", help: "кости через запятую (ступни)" },
+      mode: { type: "string", help: "contact (по умолчанию) | floor" },
+      ik: { type: "boolean", help: "провалившуюся ступню поднимать сгибом колена (двухзвенная IK: ступня → голень → бедро)" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const clip = clipOf(ctx, a.clip);
+      if (!a.bones) { delete clip.ground; return { ground: null }; }
+      const bones = String(a.bones).split(",").map((s) => s.trim());
+      for (const b of bones) need(ctx.skeleton.nodes.some((n) => n.name === b), `нет кости «${b}»`);
+      need(!a.mode || a.mode === "contact" || a.mode === "floor", "mode: contact | floor");
+      clip.ground = { bones, mode: a.mode ?? "contact", ...(a.ik ? { ik: true } : {}) };
+      return clip.ground;
     },
   },
   {

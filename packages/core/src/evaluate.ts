@@ -1,41 +1,59 @@
-// Вычисление позы: rest-поза → слои рецептов → ручной слой. Работает одинаково в браузере и в Node.
+// Вычисление позы: rest-поза → слои рецептов → ручной слой → постановка на пол → вторичная динамика.
+// Работает одинаково в браузере и в Node.
 import { evalKeys } from "./curves.ts";
-import { DEG, QI, Quat, Vec3, qaxis, qinv, qmul, qnorm, qrot, vcross, vnorm, vsub } from "./math.ts";
-import type { Clip, Project, SemanticAxis, Skeleton } from "./project.ts";
+import { DEG, QI, Quat, Vec3, angVel, qaxis, qinv, qmul, qnorm, qrot, vadd, vcross, vdot, vmul, vnorm, vscale, vsub } from "./math.ts";
+import type { Channel, Clip, Project, RecipeLayer, SemanticAxis, Skeleton } from "./project.ts";
 import { RECIPES, withDefaults } from "./recipes.ts";
 
 export interface Rig {
   skel: Skeleton;
   index: Map<string, number>;
+  parent: number[]; // индекс родителя, −1 у корня
   worldR: Quat[]; // мировой поворот узла в rest-позе
   worldT: Vec3[];
 }
 
 export function buildRig(skel: Skeleton): Rig {
   const index = new Map(skel.nodes.map((n, i) => [n.name, i]));
-  const worldR: Quat[] = [], worldT: Vec3[] = [];
+  const worldR: Quat[] = [], worldT: Vec3[] = [], parent: number[] = [];
   skel.nodes.forEach((n, i) => {
     const p = n.parent == null ? -1 : index.get(n.parent)!;
+    parent[i] = p;
     if (p < 0) {
       worldR[i] = n.restR;
       worldT[i] = n.restT;
     } else {
       worldR[i] = qnorm(qmul(worldR[p], n.restR));
-      const off = qrot(worldR[p], n.restT);
-      worldT[i] = [worldT[p][0] + off[0], worldT[p][1] + off[1], worldT[p][2] + off[2]];
+      worldT[i] = vadd(worldT[p], qrot(worldR[p], n.restT));
     }
   });
-  return { skel, index, worldR, worldT };
+  return { skel, index, parent, worldR, worldT };
 }
 
-/** Мировые оси цепочки: lateral — вокруг «верха», vertical — вокруг бока, roll — вдоль цепочки. */
+/** Оси тела: up, forward (ортогонализованный к up), side = up × forward (у персонажа, смотрящего на +Z, это +X — влево). */
+export function bodyFrame(project: Project): { up: Vec3; forward: Vec3; side: Vec3 } {
+  const up = vnorm(project.up);
+  const f0 = project.forward ?? [0, 0, 1];
+  const forward = vnorm(vsub(f0, vscale(up, vdot(f0, up))));
+  return { up, forward, side: vcross(up, forward) };
+}
+
+/** Направление кости в rest — её локальная ось +Y (так кости хранят Blender, Mixamo и большинство ригов).
+ * Не «к первому ребёнку»: у головы первым ребёнком может оказаться глаз или ухо. */
+function boneDir(rig: Rig, i: number): Vec3 {
+  return vnorm(qrot(rig.worldR[i], [0, 1, 0]));
+}
+
+/** Мировые оси цепочки: lateral — изгиб вбок (вокруг «верха»), vertical — изгиб вперёд-назад/вверх-вниз (вокруг бока),
+ * roll — кручение вдоль цепочки. У вертикальной цепочки (нога, спина, щупальце) «верхом» служит forward тела. */
 export function chainAxes(rig: Rig, project: Project, chain: string[]): Record<SemanticAxis, Vec3> {
-  const a = rig.worldT[rig.index.get(chain[0])!];
+  const i0 = rig.index.get(chain[0])!;
+  const a = rig.worldT[i0];
   const b = rig.worldT[rig.index.get(chain[chain.length - 1])!];
-  const along = vnorm(vsub(b, a));
-  let up = vnorm(project.up);
-  // вертикальная цепочка (щупальце, шея): «верх» вдоль неё вырождается — берём «вперёд» мира как опору
-  if (Math.hypot(...vcross(along, up)) < 1e-3) up = [0, 0, 1];
+  const along = Math.hypot(...vsub(b, a)) > 1e-6 ? vnorm(vsub(b, a)) : boneDir(rig, i0);
+  const body = bodyFrame(project);
+  let up = body.up;
+  if (Math.hypot(...vcross(along, up)) < 1e-3) up = body.forward;
   const side = vnorm(vcross(along, up));
   return { lateral: up, vertical: side, roll: along };
 }
@@ -50,62 +68,350 @@ function chainOf(project: Project, bone: string): string[] | undefined {
   return Object.values(project.chains).find((c) => c.includes(bone));
 }
 
-/** Локальные повороты всех затронутых костей в момент t. Остальные кости остаются в rest-позе. */
-export function poseAt(project: Project, rig: Rig, clip: Clip, t: number): Map<string, Quat> {
-  const pose = new Map<string, Quat>();
-  const apply = (bone: string, axisWorld: Vec3, deg: number) => {
-    const i = rig.index.get(bone);
-    if (i == null || deg === 0) return;
-    const cur = pose.get(bone) ?? QI;
-    pose.set(bone, qnorm(qmul(cur, localDelta(rig, i, axisWorld, deg * DEG))));
-  };
+/** Локальные трансформы затронутых костей. Чего нет в картах — остаётся в rest. */
+export interface PoseParts {
+  rot: Map<string, Quat>;
+  pos: Map<string, Vec3>;
+  scl: Map<string, Vec3>;
+}
+
+/** Накопитель слоёв в мировых терминах; в локальные трансформы переводится в конце. */
+class Acc {
+  rot = new Map<string, Quat>(); // дельта в локальном пространстве кости
+  move = new Map<string, Vec3>(); // мировой сдвиг, м
+  scale = new Map<string, Vec3>(); // множители по up / forward / side
+  constructor(readonly rig: Rig, readonly project: Project) {}
+
+  add(bone: string, ch: Channel, v: number, axes: () => Record<SemanticAxis, Vec3>) {
+    const i = this.rig.index.get(bone);
+    if (i == null || v === (ch.startsWith("scale_") ? 1 : 0)) return;
+    if (ch === "lateral" || ch === "vertical" || ch === "roll") {
+      const cur = this.rot.get(bone) ?? QI;
+      this.rot.set(bone, qnorm(qmul(cur, localDelta(this.rig, i, axes()[ch], v * DEG))));
+    } else if (ch.startsWith("move_")) {
+      const f = bodyFrame(this.project);
+      const dir = ch === "move_up" ? f.up : ch === "move_forward" ? f.forward : f.side;
+      this.move.set(bone, vadd(this.move.get(bone) ?? [0, 0, 0], vscale(dir, v)));
+    } else {
+      const s = this.scale.get(bone) ?? [1, 1, 1];
+      const k = ch === "scale_up" ? 0 : ch === "scale_forward" ? 1 : 2;
+      s[k] *= v;
+      this.scale.set(bone, s);
+    }
+  }
+
+  /** Задать итоговый локальный поворот кости (в дельту относительно rest). */
+  setLocal(bone: string, q: Quat) {
+    const rest = this.rig.skel.nodes[this.rig.index.get(bone)!].restR;
+    this.rot.set(bone, qnorm(qmul(qinv(rest), q)));
+  }
+
+  parts(): PoseParts {
+    const { rig } = this;
+    const out: PoseParts = { rot: new Map(), pos: new Map(), scl: new Map() };
+    for (const [bone, d] of this.rot) out.rot.set(bone, qnorm(qmul(rig.skel.nodes[rig.index.get(bone)!].restR, d)));
+    for (const [bone, m] of this.move) {
+      const i = rig.index.get(bone)!;
+      const p = rig.parent[i];
+      const local = p < 0 ? m : qrot(qinv(rig.worldR[p]), m); // сдвиг в осях родителя (по его rest-повороту)
+      out.pos.set(bone, vadd(rig.skel.nodes[i].restT, local));
+    }
+    const f = bodyFrame(this.project);
+    for (const [bone, s] of this.scale) {
+      const i = rig.index.get(bone)!;
+      const r = vmul(rig.skel.nodes[i].restS, [1, 1, 1]) as Vec3;
+      // каждое направление тела — на ту локальную ось кости, что к нему ближе
+      [f.up, f.forward, f.side].forEach((dir, k) => {
+        if (s[k] === 1) return;
+        const local = qrot(qinv(rig.worldR[i]), dir);
+        const ax = [0, 1, 2].reduce((best, j) => (Math.abs(local[j]) > Math.abs(local[best]) ? j : best), 0);
+        r[ax] *= s[k];
+      });
+      out.scl.set(bone, r);
+    }
+    return out;
+  }
+}
+
+/** Мировые позиции и повороты всех узлов для локальной позы (прямая кинематика; масштаб родителя растягивает сдвиги детей). */
+export function worldPose(rig: Rig, parts: PoseParts): { T: Vec3[]; R: Quat[] } {
+  const T: Vec3[] = [], R: Quat[] = [], S: Vec3[] = [];
+  rig.skel.nodes.forEach((n, i) => {
+    const lt = parts.pos.get(n.name) ?? n.restT;
+    const lr = parts.rot.get(n.name) ?? n.restR;
+    const ls = parts.scl.get(n.name) ?? n.restS;
+    const p = rig.parent[i];
+    if (p < 0) {
+      T[i] = lt; R[i] = lr; S[i] = ls;
+    } else {
+      T[i] = vadd(T[p], qrot(R[p], vmul(S[p], lt)));
+      R[i] = qnorm(qmul(R[p], lr));
+      S[i] = vmul(S[p], ls);
+    }
+  });
+  return { T, R };
+}
+
+/** Верхняя кость скелета над данной (её двигает постановка на пол). */
+function skeletonRoot(rig: Rig, i: number): number {
+  let r = i;
+  for (let p = rig.parent[i]; p >= 0; p = rig.parent[p]) if (rig.skel.nodes[p].isJoint) r = p;
+  return r;
+}
+
+const isSecondary = (l: Clip["layers"][number]) => l.type === "recipe" && !!RECIPES[l.recipe]?.secondary;
+
+/** Высота кости над самой нижней костью скелета в rest (для рецептов, которым нужен масштаб тела). */
+function restHeights(rig: Rig, project: Project): Map<string, number> {
+  const up = bodyFrame(project).up;
+  const hs = rig.skel.nodes.map((n, i) => (n.isJoint ? vdot(rig.worldT[i], up) : Infinity));
+  const floor = Math.min(...hs);
+  return new Map(rig.skel.nodes.map((n, i) => [n.name, Number.isFinite(hs[i]) ? hs[i] - floor : 0]));
+}
+const heightCache = new WeakMap<Rig, Map<string, number>>();
+
+/** Основные слои (без вторичной динамики) и постановка на пол. */
+function primary(project: Project, rig: Rig, clip: Clip, t: number): Acc {
+  const acc = new Acc(rig, project);
+  let heights = heightCache.get(rig);
+  if (!heights) heightCache.set(rig, (heights = restHeights(rig, project)));
   for (const layer of clip.layers) {
+    if (isSecondary(layer)) continue;
     if (layer.type === "recipe") {
       const def = RECIPES[layer.recipe];
       const chain = project.chains[layer.target.chain];
       if (!def || !chain) continue;
       const p = withDefaults(def, layer.params);
-      const axes = chainAxes(rig, project, chain);
+      let axes: Record<SemanticAxis, Vec3> | undefined;
+      const getAxes = () => (axes ??= chainAxes(rig, project, chain));
       const w = layer.weight ?? 1;
       chain.forEach((bone, i) => {
-        const angles = def.evaluate(p, i, chain.length, t);
-        for (const [ax, deg] of Object.entries(angles)) apply(bone, axes[ax as SemanticAxis], (deg as number) * w);
+        const out = def.evaluate(p, i, chain.length, t, { height: heights!.get(bone) ?? 0 });
+        for (const [ch, v] of Object.entries(out)) {
+          // вес слоя: для углов и сдвигов — множитель, для масштаба — доля пути от 1 до значения
+          const val = ch.startsWith("scale_") ? 1 + ((v as number) - 1) * w : (v as number) * w;
+          acc.add(bone, ch as Channel, val, getAxes);
+        }
       });
     } else {
       for (const tr of layer.tracks) {
         const chain = chainOf(project, tr.bone) ?? [tr.bone];
-        const axes = chainAxes(rig, project, chain.length > 1 ? chain : [chain[0], chain[0]]);
-        apply(tr.bone, axes[tr.axis], evalKeys(tr.keys, t, clip.loop, clip.duration));
+        const v = evalKeys(tr.keys, t, clip.loop, clip.duration);
+        acc.add(tr.bone, tr.axis, tr.axis.startsWith("scale_") ? 1 + v : v, () => chainAxes(rig, project, chain.length > 1 ? chain : [tr.bone]));
       }
     }
   }
-  // итог: rest * delta
-  const out = new Map<string, Quat>();
-  for (const [bone, d] of pose) out.set(bone, qnorm(qmul(rig.skel.nodes[rig.index.get(bone)!].restR, d)));
-  return out;
+  const g = clip.ground;
+  if (g?.bones.length) {
+    // contact: сначала опустить тело до касания, потом IK поднимает провалившиеся ступни; floor: наоборот
+    if (g.mode === "contact") ground(acc, rig, project, g);
+    if (g.ik) for (const b of g.bones) footIK(acc, rig, project, b);
+    if (g.mode === "floor") ground(acc, rig, project, g);
+  }
+  return acc;
+}
+
+/** Поворот, переводящий направление a в направление b (кратчайший). */
+function qbetween(a: Vec3, b: Vec3): Quat {
+  const u = vnorm(a), v = vnorm(b);
+  const c = vdot(u, v);
+  if (c > 1 - 1e-12) return QI;
+  if (c < -1 + 1e-12) {
+    const ax = Math.abs(u[0]) < 0.9 ? vnorm(vcross(u, [1, 0, 0])) : vnorm(vcross(u, [0, 1, 0]));
+    return [ax[0], ax[1], ax[2], 0];
+  }
+  const x = vcross(u, v);
+  return qnorm([x[0], x[1], x[2], 1 + c]);
+}
+
+/** Двухзвенная IK: ступня (её родитель — голень, дед — бедро) не уходит под пол — колено сгибается ровно настолько,
+ * чтобы ступня встала на высоту покоя. Плоскость сгиба сохраняется; у прямой ноги колено идёт вперёд по телу. */
+function footIK(acc: Acc, rig: Rig, project: Project, foot: string) {
+  const fi = rig.index.get(foot);
+  if (fi == null) return;
+  const si = rig.parent[fi], ti = si >= 0 ? rig.parent[si] : -1;
+  if (si < 0 || ti < 0) return;
+  const { up, forward } = bodyFrame(project);
+  const w = worldPose(rig, acc.parts());
+  const H = w.T[ti], K = w.T[si], F = w.T[fi];
+  const floor = vdot(rig.worldT[fi], up);
+  const h = vdot(F, up);
+  if (h >= floor - 1e-9) return;
+  const P = vadd(F, vscale(up, floor - h));
+  const a = Math.hypot(...vsub(K, H)), b = Math.hypot(...vsub(F, K));
+  const d = Math.min(a + b - 1e-6, Math.max(Math.abs(a - b) + 1e-6, Math.hypot(...vsub(P, H))));
+  const angle = (x: Vec3, y: Vec3) => Math.acos(Math.max(-1, Math.min(1, vdot(vnorm(x), vnorm(y)))));
+  const cur = angle(vsub(H, K), vsub(F, K));
+  const want = Math.acos(Math.max(-1, Math.min(1, (a * a + b * b - d * d) / (2 * a * b))));
+  let n = vcross(vsub(H, K), vsub(F, K));
+  const straight = Math.hypot(...n) < 1e-6 * a * b;
+  // у прямой ноги ось сгиба — бок тела; знак выбираем так, чтобы колено ушло вперёд
+  if (straight) n = vcross(forward, vsub(H, K));
+  n = vnorm(n);
+  const q1 = qaxis(n, want - cur); // голень вокруг колена: угол в колене cur → want
+  const F1 = vadd(K, qrot(q1, vsub(F, K)));
+  const q2 = qbetween(vsub(F1, H), vsub(P, H)); // бедро вокруг таза: ступня в цель
+  const pt = rig.parent[ti];
+  const Rp = pt >= 0 ? w.R[pt] : QI;
+  acc.setLocal(rig.skel.nodes[ti].name, qnorm(qmul(qinv(Rp), qmul(q2, w.R[ti]))));
+  acc.setLocal(rig.skel.nodes[si].name, qnorm(qmul(qinv(w.R[ti]), qmul(q1, w.R[si]))));
+}
+
+function ground(acc: Acc, rig: Rig, project: Project, g: NonNullable<Clip["ground"]>) {
+  const idx = g.bones.map((b) => rig.index.get(b)).filter((i): i is number => i != null);
+  if (!idx.length) return;
+  const up = bodyFrame(project).up;
+  const w = worldPose(rig, acc.parts());
+  const rest = Math.min(...idx.map((i) => vdot(rig.worldT[i], up)));
+  const now = Math.min(...idx.map((i) => vdot(w.T[i], up)));
+  let d = rest - now;
+  if (g.mode === "floor") d = Math.max(0, d);
+  if (Math.abs(d) < 1e-9) return;
+  const root = rig.skel.nodes[skeletonRoot(rig, idx[0])].name;
+  acc.add(root, "move_up", d, () => ({ lateral: up, vertical: up, roll: up }));
+}
+
+// ── вторичная динамика ──────────────────────────────────────────────────────────────────────────────────────────
+// Цепочка — маятник с пружиной к позе покоя. Её раскачивают ускорение основания и вращение родителя:
+//   θ'' = (1 − inert)·(−α_родителя − (d × A)/L) − 2ζω₀θ' − ω₀²θ,   по осям lateral и vertical цепочки.
+// Всё считается в осях родителя (в rest-ориентации), поэтому поворот самого родителя не «уносит» ответ.
+const DT = 1 / 240;
+const secCache = new WeakMap<Rig, Map<string, { lat: Float64Array; ver: Float64Array; dur: number }>>();
+
+function secondaryCurve(project: Project, rig: Rig, clip: Clip, layer: RecipeLayer, chain: string[], p: Record<string, any>) {
+  let cache = secCache.get(rig);
+  if (!cache) secCache.set(rig, (cache = new Map()));
+  const base = { ...clip, layers: clip.layers.filter((l) => !isSecondary(l)) };
+  const key = JSON.stringify([base, project.chains, project.up, project.forward, chain, p]);
+  const hit = cache.get(key);
+  if (hit) return hit;
+
+  const i0 = rig.index.get(chain[0])!;
+  const par = rig.parent[i0];
+  const axes = chainAxes(rig, project, chain);
+  const last = rig.index.get(chain[chain.length - 1])!;
+  const L = Math.max(0.03, Math.hypot(...vsub(rig.worldT[last], rig.worldT[i0])) + (chain.length === 1 ? 0.1 : 0)) * p.length;
+  const d = axes.roll;
+  const restPar = par >= 0 ? rig.worldR[par] : QI;
+  const w0 = 2 * Math.PI * p.hz;
+
+  // движение основания и родителя, в осях родителя
+  const steps = Math.max(2, Math.round(clip.duration / DT));
+  const h = clip.duration / steps;
+  const sample = (t: number) => {
+    const tt = clip.loop ? ((t % clip.duration) + clip.duration) % clip.duration : Math.min(Math.max(t, 0), clip.duration);
+    const w = worldPose(rig, primary(project, rig, base, tt).parts());
+    const R = par >= 0 ? qmul(w.R[par], qinv(restPar)) : QI; // поворот родителя относительно rest
+    return { R, T: w.T[i0] };
+  };
+  const frames = Array.from({ length: steps + 3 }, (_, k) => sample((k - 1) * h)); // с запасом по кадру с каждой стороны
+  const drive = (k: number): { lat: number; ver: number } => {
+    const f0 = frames[k], f1 = frames[k + 1], f2 = frames[k + 2];
+    const inv = qinv(f1.R);
+    const om0 = qrot(inv, angVel(f0.R, f1.R, h));
+    const om1 = qrot(inv, angVel(f1.R, f2.R, h));
+    const alpha = vscale(vsub(om1, om0), 1 / h);
+    const A = qrot(inv, vscale(vadd(vsub(f2.T, vscale(f1.T, 2)), f0.T), 1 / (h * h)));
+    const torque = vadd(vscale(alpha, -1), vscale(vcross(d, A), -1 / L));
+    const g = (1 - p.inert) * p.gain;
+    return { lat: g * vdot(torque, axes.lateral), ver: g * vdot(torque, axes.vertical) };
+  };
+  const lat = new Float64Array(steps + 1), ver = new Float64Array(steps + 1);
+  let x = [0, 0], v = [0, 0];
+  const cycles = clip.loop ? 5 : 1;
+  for (let c = 0; c < cycles; c++) {
+    for (let k = 0; k <= steps; k++) {
+      if (c === cycles - 1) { lat[k] = x[0]; ver[k] = x[1]; }
+      if (k === steps) break;
+      const dr = drive(k);
+      [dr.lat, dr.ver].forEach((a, j) => {
+        v[j] += (a - 2 * p.damping * w0 * v[j] - w0 * w0 * x[j]) * h; // полунеявный Эйлер
+        x[j] += v[j] * h;
+      });
+    }
+  }
+  const res = { lat, ver, dur: clip.duration };
+  if (cache.size > 64) cache.clear();
+  cache.set(key, res);
+  return res;
+}
+
+function addSecondary(acc: Acc, project: Project, rig: Rig, clip: Clip, t: number) {
+  for (const layer of clip.layers) {
+    if (!isSecondary(layer) || layer.type !== "recipe") continue;
+    const chain = project.chains[layer.target.chain];
+    if (!chain) continue;
+    const p = withDefaults(RECIPES[layer.recipe], layer.params);
+    const c = secondaryCurve(project, rig, clip, layer, chain, p);
+    const n = c.lat.length - 1;
+    const tt = clip.loop ? ((t % c.dur) + c.dur) % c.dur : Math.min(Math.max(t, 0), c.dur);
+    const f = (tt / c.dur) * n, k = Math.min(n - 1, Math.floor(f)), u = f - k;
+    const lat = (c.lat[k] + (c.lat[k + 1] - c.lat[k]) * u) / DEG;
+    const ver = (c.ver[k] + (c.ver[k + 1] - c.ver[k]) * u) / DEG;
+    // отклонение распределяется по цепочке с ростом к кончику, сумма = θ
+    let sum = 0;
+    for (let j = 0; j < chain.length; j++) sum += (j + 1) / chain.length;
+    const axes = chainAxes(rig, project, chain);
+    const w = layer.weight ?? 1;
+    chain.forEach((bone, j) => {
+      const share = ((j + 1) / chain.length / sum) * w;
+      acc.add(bone, "lateral", lat * share, () => axes);
+      acc.add(bone, "vertical", ver * share, () => axes);
+    });
+  }
+}
+
+/** Полная поза в момент t: повороты, сдвиги и масштабы затронутых костей (в локальных осях, как в glTF). */
+export function posePartsAt(project: Project, rig: Rig, clip: Clip, t: number): PoseParts {
+  const acc = primary(project, rig, clip, t);
+  if (clip.layers.some(isSecondary)) addSecondary(acc, project, rig, clip, t);
+  return acc.parts();
+}
+
+/** Только повороты — для старого кода и проверок. */
+export function poseAt(project: Project, rig: Rig, clip: Clip, t: number): Map<string, Quat> {
+  return posePartsAt(project, rig, clip, t).rot;
 }
 
 export interface Baked {
   times: number[];
   rotations: Map<string, Quat[]>;
+  translations: Map<string, Vec3[]>;
+  scales: Map<string, Vec3[]>;
+}
+
+/** Моменты кадров: строго через 1/fps (так пересэмплирует импорт Godot), последний — ровно в конце клипа. */
+export function frameTimes(clip: Clip): number[] {
+  const full = Math.floor(clip.duration * clip.fps + 1e-6);
+  const times = Array.from({ length: full + 1 }, (_, k) => k / clip.fps);
+  if (clip.duration - times[full] > 1e-6) times.push(clip.duration);
+  return times;
 }
 
 /** Запекание клипа в ключи с частотой fps. Для цикла последний кадр совпадает с первым. */
 export function bakeClip(project: Project, rig: Rig, clip: Clip): Baked {
-  const n = Math.max(1, Math.round(clip.duration * clip.fps));
-  const times = Array.from({ length: n + 1 }, (_, k) => (k * clip.duration) / n);
-  const rotations = new Map<string, Quat[]>();
+  const times = frameTimes(clip);
+  const n = times.length - 1;
+  const out: Baked = { times, rotations: new Map(), translations: new Map(), scales: new Map() };
+  const put = <T>(m: Map<string, T[]>, bone: string, k: number, v: T) => {
+    if (!m.has(bone)) m.set(bone, []);
+    m.get(bone)![k] = v;
+  };
   times.forEach((t, k) => {
-    const pose = poseAt(project, rig, clip, clip.loop && k === n ? 0 : t);
-    for (const [bone, q] of pose) {
-      if (!rotations.has(bone)) rotations.set(bone, []);
-      rotations.get(bone)![k] = q;
-    }
+    const pose = posePartsAt(project, rig, clip, clip.loop && k === n ? 0 : t);
+    for (const [b, q] of pose.rot) put(out.rotations, b, k, q);
+    for (const [b, v] of pose.pos) put(out.translations, b, k, v);
+    for (const [b, v] of pose.scl) put(out.scales, b, k, v);
   });
   // кость могла быть неподвижной в части кадров — дозаполняем rest-позой
-  for (const [bone, arr] of rotations) {
-    const rest = rig.skel.nodes[rig.index.get(bone)!].restR;
-    for (let k = 0; k <= n; k++) arr[k] ??= rest;
-  }
-  return { times, rotations };
+  const fill = <T>(m: Map<string, T[]>, rest: (i: number) => T) => {
+    for (const [bone, arr] of m) {
+      const r = rest(rig.index.get(bone)!);
+      for (let k = 0; k <= n; k++) arr[k] ??= r;
+    }
+  };
+  fill(out.rotations, (i) => rig.skel.nodes[i].restR);
+  fill(out.translations, (i) => rig.skel.nodes[i].restT);
+  fill(out.scales, (i) => rig.skel.nodes[i].restS);
+  return out;
 }

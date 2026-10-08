@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { poseAt, type Clip, type Project, type Rig } from "../../../packages/core/src/index.ts";
+import { posePartsAt, type Clip, type Project, type Rig } from "../../../packages/core/src/index.ts";
 
 interface Props {
   modelUrl: string;
@@ -19,7 +19,7 @@ interface Props {
 
 interface Loaded {
   root: THREE.Object3D;
-  bones: Map<string, { obj: THREE.Object3D; rest: THREE.Quaternion }>;
+  bones: Map<string, { obj: THREE.Object3D; rest: THREE.Quaternion; restPos: THREE.Vector3; restScale: THREE.Vector3 }>;
   helper: THREE.SkeletonHelper;
   size: number;
 }
@@ -82,11 +82,15 @@ export function Viewport(props: Props) {
       const m = loaded.current;
       if (m) {
         // поза из ядра; кости, которых нет в позе, возвращаем в rest
-        const pose = p.clip ? poseAt(p.project, p.rig, p.clip, p.t) : new Map();
-        for (const [name, { obj, rest }] of m.bones) {
-          const q = pose.get(name);
+        const pose = p.clip ? posePartsAt(p.project, p.rig, p.clip, p.t) : { rot: new Map(), pos: new Map(), scl: new Map() };
+        for (const [name, { obj, rest, restPos, restScale }] of m.bones) {
+          const q = pose.rot.get(name), v = pose.pos.get(name), s = pose.scl.get(name);
           if (q) obj.quaternion.set(q[0], q[1], q[2], q[3]);
           else obj.quaternion.copy(rest);
+          if (v) obj.position.set(v[0], v[1], v[2]);
+          else obj.position.copy(restPos);
+          if (s) obj.scale.set(s[0], s[1], s[2]);
+          else obj.scale.copy(restScale);
         }
         m.root.updateMatrixWorld(true);
         m.helper.visible = p.showSkeleton;
@@ -134,10 +138,10 @@ export function Viewport(props: Props) {
         root.traverse((o) => {
           if ((o as THREE.SkinnedMesh).isSkinnedMesh) o.frustumCulled = false;
         });
-        const bones = new Map<string, { obj: THREE.Object3D; rest: THREE.Quaternion }>();
+        const bones = new Map<string, { obj: THREE.Object3D; rest: THREE.Quaternion; restPos: THREE.Vector3; restScale: THREE.Vector3 }>();
         for (const n of live.current.rig.skel.nodes) {
           const obj = root.getObjectByName(THREE.PropertyBinding.sanitizeNodeName(n.name));
-          if (obj) bones.set(n.name, { obj, rest: obj.quaternion.clone() });
+          if (obj) bones.set(n.name, { obj, rest: obj.quaternion.clone(), restPos: obj.position.clone(), restScale: obj.scale.clone() });
         }
         const helper = new THREE.SkeletonHelper(root);
         (helper.material as THREE.LineBasicMaterial).depthTest = false;

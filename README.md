@@ -54,3 +54,17 @@ pnpm af tweens.verify      # синхронизирует пресеты в ад
 Чтобы подключить в свою игру, скопируй `godot/sandbox/addons/animforge` в проект и включи плагин. Дальше:
 `AnimForge.play($Panel, "window_in")`, `AnimForge.play($Camera3D, "shake_explosion")`,
 `AnimForge.play(btn, "button_cascade_item", {"delay": 0.1 * i})`.
+
+## Каналы, пол и вторичная динамика
+
+Рецепты и ручные ключи выдают не только повороты (`lateral | vertical | roll`). Есть ещё сдвиги `move_up | move_forward | move_side`
+(в метрах, по осям тела: up = `project.up`, forward = `project.forward`, по умолчанию +Z) и масштаб `scale_up | scale_forward | scale_side`.
+Масштаб попадает на ту ось кости, что ближе к нужному направлению. Всё это экспортируется в glTF и сверяется в Godot (`af verify`).
+
+- `af clip.ground --clip walk --bones foot_l,foot_r --mode floor --ik true` ставит ступни на пол после всех слоёв.
+  Режим `contact` прижимает тело к полу, режим `floor` не даёт провалиться, `ik` сгибает колено (двухзвенная IK), а не двигает тело.
+- Рецепт `jiggle` — уши, усы, хвосты по движению родителя: маятник с пружиной, у пресетов параметры DynamicBone из Tools Up!.
+- Рецепт `waddle-walk` — ходьба вразвалку Tools Up! (подскок таза взят покадрово), `blink` — моргание масштабом,
+  `compass-step` — шаг-циркуль Biped.
+- `af video --clip walk1 --out out/walk.mp4 --view front_3q` — видео клипа; `sheet --view front|profile|front_3q` — виды для персонажей.
+- Шаблоны тел: `fish | snake | tentacle | quadruped | biped | worker`.

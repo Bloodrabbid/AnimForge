@@ -1,9 +1,13 @@
 // Ручные ключи клипа: треки (кость, ось), ключи, график кривой. Изменения — команды key.set и key.clear.
 import { useEffect, useState } from "react";
-import { evalKeys, type Clip, type Interp, type KeyLayer, type KeyTrack, type SemanticAxis } from "../../../packages/core/src/index.ts";
+import { evalKeys, type Clip, type Interp, type KeyLayer, type KeyTrack, type Channel, CHANNELS } from "../../../packages/core/src/index.ts";
 
-const AXES: SemanticAxis[] = ["lateral", "vertical", "roll"];
-const AXIS_RU: Record<SemanticAxis, string> = { lateral: "вбок", vertical: "вверх-вниз", roll: "крен" };
+const AXES: Channel[] = CHANNELS;
+const AXIS_RU: Record<Channel, string> = {
+  lateral: "вбок", vertical: "вверх-вниз", roll: "крен",
+  move_up: "сдвиг вверх, м", move_forward: "сдвиг вперёд, м", move_side: "сдвиг вбок, м",
+  scale_up: "масштаб по вертикали, +доля", scale_forward: "масштаб вперёд, +доля", scale_side: "масштаб вбок, +доля",
+};
 
 interface Props {
   clip: Clip;
@@ -16,7 +20,7 @@ interface Props {
 
 export function KeysPanel({ clip, t, selectedBone, onSelectBone, onTime, run }: Props) {
   const tracks: KeyTrack[] = clip.layers.filter((l): l is KeyLayer => l.type === "keys").flatMap((l) => l.tracks);
-  const [axis, setAxis] = useState<SemanticAxis>("lateral");
+  const [axis, setAxis] = useState<Channel>("lateral");
   const [value, setValue] = useState("0");
   const [interp, setInterp] = useState<Interp | "">("");
 
@@ -66,7 +70,7 @@ export function KeysPanel({ clip, t, selectedBone, onSelectBone, onTime, run }: 
           кость <b>{selectedBone ?? "— не выбрана —"}</b>
         </div>
         <div className="row">
-          <select value={axis} onChange={(e) => setAxis(e.target.value as SemanticAxis)} title="ось тела">
+          <select value={axis} onChange={(e) => setAxis(e.target.value as Channel)} title="ось тела">
             {AXES.map((a) => (
               <option key={a} value={a}>
                 {a} ({AXIS_RU[a]})
