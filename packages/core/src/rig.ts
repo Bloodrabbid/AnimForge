@@ -365,6 +365,31 @@ export function detectMultiLeg(skel: Skeleton, up: Vec3 = [0, 1, 0]): (RigDetect
   return det;
 }
 
+/** Крылья: «руки», размах которых больше 1.6 роста (у человека в T-позе размах ≈ рост). Крыло — вся ветка от плеча
+ * до самого дальнего конца (плечо → предплечье → кисть → перья). null — не крылатое. */
+export function detectWings(skel: Skeleton, up: Vec3, det: RigDetection): { wing_l: string[]; wing_r: string[]; span: number } | null {
+  if (!det.chains.arm_l || !det.chains.arm_r) return null;
+  const rig = buildRig(skel);
+  const U = vnorm(up);
+  const H = (i: number) => vdot(rig.worldT[i], U);
+  const flat = (v: Vec3) => vsub(v, vscale(U, vdot(v, U)));
+  const joints = skel.nodes.map((_, i) => i).filter((i) => skel.nodes[i].isJoint);
+  const height = Math.max(...joints.map(H)) - Math.min(...joints.map(H)) || 1;
+  const branch = (root: number) => {
+    // самый дальний от корня потомок; путь до него — крыло
+    let best = root, bd = 0;
+    const walk = (i: number) => { for (const j of joints) if (rig.parent[j] === i) { const d = Math.hypot(...vsub(rig.worldT[j], rig.worldT[root])); if (d > bd) { bd = d; best = j; } walk(j); } };
+    walk(root);
+    const p: number[] = [];
+    for (let q = best; q >= 0 && q !== rig.parent[root]; q = rig.parent[q]) p.unshift(q);
+    return p;
+  };
+  const l = branch(rig.index.get(det.chains.arm_l[0])!), r = branch(rig.index.get(det.chains.arm_r[0])!);
+  const span = Math.hypot(...flat(vsub(rig.worldT[l[l.length - 1]], rig.worldT[r[r.length - 1]])));
+  if (span < 1.6 * height) return null;
+  return { wing_l: l.map((i) => skel.nodes[i].name), wing_r: r.map((i) => skel.nodes[i].name), span };
+}
+
 function depth(rig: Rig, i: number) { let d = 0; for (let p = rig.parent[i]; p >= 0; p = rig.parent[p]) d++; return d; }
 
 export type { Vec3 };

@@ -586,9 +586,65 @@ const multilegGait: RecipeDef = {
   },
 };
 
-export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait };
+// ── крылья: машущий полёт ─────────────────────────────────────────────────────────────────────────────────────────
+/** Профиль взмаха: +1 — крыло вверху (u = 0), −1 — внизу (u = down). Вниз — рабочий ход (дольше), вверх — возврат. */
+function flapProfile(u: number, down: number): number {
+  u = ((u % 1) + 1) % 1;
+  return u < down ? Math.cos((Math.PI * u) / down) : -Math.cos((Math.PI * (u - down)) / (1 - down));
+}
+const wingFlap: RecipeDef = {
+  name: "wing-flap",
+  roles: {
+    wing_l: { chain: "wing_l" }, wing_r: { chain: "wing_r" }, body: { chain: "pelvis", optional: true },
+    tail: { chain: "tail", optional: true }, leg_l: { chain: "leg_l", optional: true }, leg_r: { chain: "leg_r", optional: true },
+  },
+  help:
+    "Машущий полёт: крыло ходит вверх-вниз вокруг поперечной оси (вниз — рабочий ход, дольше подъёма), на подъёме складывается " +
+    "в локте и запястье, кончик отстаёт по фазе; корпус подскакивает на рабочем ходе, хвост отвечает, ноги поджаты. " +
+    "Цепочки wing_l/wing_r — из rig.detect (размах больше 1.6 роста).",
+  params: {
+    role: { type: "enum", default: "wing_l", options: ["wing_l", "wing_r", "body", "tail", "leg_l", "leg_r"], help: "крыло, корпус (таз), хвост или нога" },
+    period: { type: "number", default: 0.35, min: 0.05, max: 3, unit: "с", help: "один взмах" },
+    amp: { type: "number", default: 45, min: 0, max: 90, unit: "°", help: "размах: от середины до верха и до низа" },
+    mean: { type: "number", default: 5, min: -45, max: 45, unit: "°", help: "середина взмаха: + — крылья выше горизонта" },
+    down: { type: "number", default: 0.55, min: 0.3, max: 0.8, help: "доля цикла на рабочий ход вниз" },
+    lag: { type: "number", default: 0.08, min: 0, max: 0.3, help: "отставание фазы на кость к кончику, доля цикла" },
+    fold: { type: "number", default: 25, min: 0, max: 90, unit: "°", help: "складывание локтя на подъёме (кисть — встречно, вполовину)" },
+    bob: { type: "number", default: 0.04, min: 0, max: 0.3, help: "подскок корпуса за взмах — доля высоты таза" },
+    tailPitch: { type: "number", default: 6, min: 0, max: 30, unit: "°", help: "ответ хвоста за взмах" },
+    tuck: { type: "number", default: 50, min: 0, max: 120, unit: "°", help: "ноги поджаты назад в полёте" },
+  },
+  evaluate(p, i, n, t, info) {
+    const u = t / p.period;
+    switch (p.role) {
+      case "body": {
+        if (i > 0) return {};
+        // корпус поднимается на рабочем ходе: ниже всего — в начале взмаха вниз, выше — к его концу
+        return { move_up: p.bob * (info?.height ?? 0) * -flapProfile(u - 0.1, p.down) * 0.5 };
+      }
+      case "tail":
+        return { pitch: (p.tailPitch / n) * flapProfile(u - 0.2, p.down) };
+      case "leg_l":
+      case "leg_r":
+        return i === 0 ? { pitch: p.tuck } : i === 1 ? { pitch: -p.tuck * 0.8 } : {};
+      default: {
+        const s = p.role === "wing_l" ? 1 : -1;
+        const f = flapProfile(u - i * p.lag, p.down);
+        // складывание — на подъёме (вторая часть цикла), плавный горб
+        const uu = (((u - i * p.lag) % 1) + 1) % 1;
+        const up = uu < p.down ? 0 : Math.sin((Math.PI * (uu - p.down)) / (1 - p.down));
+        // vertical цепочки крыла: + поднимает и левое, и правое; вокруг вертикали + уводит левую кисть назад
+        if (i === 0) return { vertical: p.mean + p.amp * f };
+        if (i === 1) return { vertical: 0.3 * p.amp * (f - flapProfile(u, p.down)), yaw: s * p.fold * up };
+        return { yaw: -s * 0.5 * p.fold * up };
+      }
+    }
+  },
+};
 
-export { QUAD, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
+export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap };
+
+export { QUAD, flapProfile, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
 
 export function withDefaults(def: RecipeDef, params: Record<string, unknown>): Record<string, any> {
   const out: Record<string, any> = {};

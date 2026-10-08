@@ -131,7 +131,10 @@ def restrict_weights(body, parts):
         for i, _ in bones:
             body.vertex_groups[names[i]].remove([v.index])
         if not keep:  # деталь целиком ушла чужим костям — жёстко на первую свою
-            first = next(n for n in names.values() if not n.startswith("part:") and ok(n))
+            first = next((n for n in names.values() if not n.startswith("part:") and ok(n)), None)
+            if first is None:
+                own = sorted(n for n in names.values() if not n.startswith("part:"))
+                raise RuntimeError("у детали %s нет своих костей %s; группы: %s" % (part, parts[part], own))
             keep = [(body.vertex_groups[first].index, 1.0)]
         total = sum(w for _, w in keep)
         for i, w in keep:
@@ -147,6 +150,10 @@ def bind_and_export(body, arm, out, tag, parts=None):
     arm.select_set(True)
     bpy.context.view_layer.objects.active = arm
     bpy.ops.object.parent_set(type="ARMATURE_AUTO")
+    # автовеса не заводят группу кости, которой не досталось ни одной вершины, — заводим пустую, чтобы деталь можно было отдать ей
+    for b in arm.data.bones:
+        if b.name not in body.vertex_groups:
+            body.vertex_groups.new(name=b.name)
     if parts:
         print(f"{tag}_PARTS вершин с чужими костями исправлено:", restrict_weights(body, parts))
     else:

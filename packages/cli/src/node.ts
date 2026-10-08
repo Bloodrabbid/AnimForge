@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { COMMANDS, Clip, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectForward, detectMultiLeg, detectQuadruped, detectRig, emptyProject, frameTimes, posePartsAt, readSkeleton, runCommand, samplePreset, suggestAlign, writeClips } from "../../core/src/index.ts";
+import { COMMANDS, Clip, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectForward, detectMultiLeg, detectWings, detectQuadruped, detectRig, emptyProject, frameTimes, posePartsAt, readSkeleton, runCommand, samplePreset, suggestAlign, writeClips } from "../../core/src/index.ts";
 import { loadSkinScene, skinFrame, skinTopology } from "./skin.ts";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -287,6 +287,16 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
       const fw = quad ? { forward: quad.forward, by: "head" as const } : detectForward(ctx.skeleton, ctx.project.up);
       ctx.project.forward = fw.forward.map((x) => +x.toFixed(4)) as [number, number, number];
       const det = { ...(quad ?? detectRig(ctx.skeleton, ctx.project)), body: quad ? ("legCount" in quad ? "multileg" : "quadruped") : ctx.project.chains.leg_l || detectRig(ctx.skeleton, ctx.project).chains.leg_l ? "biped" : "other", forward: ctx.project.forward, forwardBy: fw.by };
+      // крылья: длинные «руки» — цепочки wing_l/wing_r на всю длину, руки не выравниваем
+      const wings = quad ? null : detectWings(ctx.skeleton, ctx.project.up, det);
+      if (wings) {
+        det.chains = { ...det.chains, wing_l: wings.wing_l, wing_r: wings.wing_r } as typeof det.chains;
+        delete det.chains.arm_l; delete det.chains.arm_r;
+        (det as { body: string }).body = "winged";
+        det.notes.push(`крылатое: размах ${wings.span.toFixed(2)}, крылья — wing_l/wing_r`);
+        delete ctx.project.chains.arm_l; delete ctx.project.chains.arm_r;
+        if (ctx.project.align) { delete ctx.project.align.arm_l; delete ctx.project.align.arm_r; }
+      }
       for (const [k, v] of Object.entries(det.chains)) if (v) ctx.project.chains[k] = v;
       // руки в T/A-позе сначала опускаются вниз — от этой позы считаются все махи рецептов
       const al = suggestAlign(buildRig(ctx.skeleton), ctx.project);

@@ -655,3 +655,47 @@ test("multileg-gait: трипод при lag 0.5; опора — доля duty; 
   assert.ok(paw(0.8)[1] > paw(0.3)[1] + 0.03, `в переносе стопа выше: ${paw(0.8)[1]} против ${paw(0.3)[1]}`);
   assert.ok(Math.abs(paw(0.3)[1] - paw(0.1)[1]) < 0.02, "в опоре высота почти постоянна");
 });
+
+// ── крылья ──
+import { detectWings } from "./rig.ts";
+import { flapProfile } from "./recipes.ts";
+
+test("крылья: размах больше 1.6 роста — крылья на всю длину, человек в T-позе — не крылатый", () => {
+  // человек: руки в стороны, размах ≈ рост
+  const hs = humanSkel(null), det = detectRig(hs, { up: [0, 1, 0] });
+  assert.equal(detectWings(hs, [0, 1, 0], det), null, "T-поза — не крылья");
+  // тот же скелет, но кисти отнесены втрое дальше в стороны: размах больше 1.6 роста
+  const big: Skeleton = { nodes: hs.nodes.map((n) => { const i = HUMAN.findIndex((h) => `bone${HUMAN.indexOf(h)}` === n.name); const nm = i >= 0 ? HUMAN[i][0] : ""; return /^(farm|hand|finger)_/.test(nm) ? { ...n, restT: [n.restT[0] * 4, n.restT[1], n.restT[2]] as Vec3 } : n; }) };
+  const w = detectWings(big, [0, 1, 0], detectRig(big, { up: [0, 1, 0] }));
+  assert.ok(w, "крылатое");
+  const nm = (n: string) => `bone${HUMAN.findIndex((h) => h[0] === n)}`;
+  assert.equal(w!.wing_l[0], detectRig(big, { up: [0, 1, 0] }).chains.arm_l![0], "крыло от плеча");
+  assert.equal(w!.wing_l[w!.wing_l.length - 1], nm("finger_l"), "до самого дальнего конца");
+});
+
+test("wing-flap: рабочий ход вниз — доля down; подъём поднимает оба крыла; кончик отстаёт", () => {
+  close(flapProfile(0, 0.6), 1); close(flapProfile(0.6, 0.6), -1); close(flapProfile(0.3, 0.6), 0, 1e-9, "середина рабочего хода");
+  let dn = 0;
+  for (let k = 0; k < 1000; k++) if (flapProfile((k + 1) / 1000, 0.6) < flapProfile(k / 1000, 0.6)) dn++;
+  close(dn / 1000, 0.6, 0.003, "доля хода вниз");
+  // сквозь ядро: птица с крыльями вдоль ±Z (смотрит на +X); в верхней точке кончики выше плеч, внизу — ниже
+  const nodes: Skeleton["nodes"] = [{ name: "body", parent: null, restT: [0, 1, 0], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: true }];
+  for (const [s, z] of [["l", -1], ["r", 1]] as const) {
+    nodes.push({ name: `w${s}0`, parent: "body", restT: [0, 0, 0.1 * z], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: true },
+      { name: `w${s}1`, parent: `w${s}0`, restT: [0, 0, 0.4 * z], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: true },
+      { name: `w${s}2`, parent: `w${s}1`, restT: [0, 0, 0.4 * z], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: true });
+  }
+  const sk: Skeleton = { nodes }, rig = buildRig(sk);
+  const mk = (role: string, chain: string) => ({ id: role, type: "recipe", recipe: "wing-flap", target: { chain }, params: { role, period: 1, amp: 40, mean: 0, lag: 0.1 } }) as any;
+  const project: Project = { version: 1, name: "b", model: "", up: [0, 1, 0], forward: [1, 0, 0], chains: { wing_l: ["wl0", "wl1", "wl2"], wing_r: ["wr0", "wr1", "wr2"] },
+    clips: [{ name: "f", duration: 1, fps: 30, loop: true, layers: [mk("wing_l", "wing_l"), mk("wing_r", "wing_r")] }] };
+  const tip = (s: string, t: number) => worldPose(rig, posePartsAt(project, rig, project.clips[0], t)).T[rig.index.get(`w${s}2`)!][1];
+  for (const s of ["l", "r"]) {
+    assert.ok(tip(s, 0.05) > 1.3, `${s}: вверху ${tip(s, 0.05)}`);
+    assert.ok(tip(s, 0.6) < 0.7, `${s}: внизу ${tip(s, 0.6)}`);
+  }
+  // кончик отстаёт: в нижней точке плеча (u = down) кончик ещё идёт вниз
+  const p = withDefaults(RECIPES["wing-flap"], { role: "wing_l", lag: 0.1 });
+  const v = (i: number, t: number) => RECIPES["wing-flap"].evaluate(p, i, 3, t).vertical ?? 0;
+  assert.ok(v(1, p.down * p.period + 0.01) < v(1, p.down * p.period - 0.01), "кончик ещё опускается");
+});
