@@ -4,6 +4,7 @@ import { evalKeys } from "./curves.ts";
 import { DEG, QI, Quat, Vec3, angVel, qaxis, qinv, qmul, qnorm, qrot, vadd, vcross, vdot, vmul, vnorm, vscale, vsub } from "./math.ts";
 import type { Channel, Clip, Project, RecipeLayer, SemanticAxis, Skeleton } from "./project.ts";
 import { RECIPES, withDefaults, type ClipEvent } from "./recipes.ts";
+import { clampRotation } from "./limits.ts";
 
 export interface Rig {
   skel: Skeleton;
@@ -97,6 +98,8 @@ export interface PoseParts {
   rot: Map<string, Quat>;
   pos: Map<string, Vec3>;
   scl: Map<string, Vec3>;
+  /** кости, упёршиеся в ограничение в этот момент */
+  limited?: Set<string>;
 }
 
 const vdiv = (a: Vec3, b: Vec3): Vec3 => [a[0] / b[0], a[1] / b[1], a[2] / b[2]];
@@ -106,7 +109,22 @@ class Acc {
   rot = new Map<string, Quat>(); // дельта в локальном пространстве кости
   move = new Map<string, Vec3>(); // мировой сдвиг, м
   scale = new Map<string, Vec3>(); // множители по up / forward / side
+  base = new Map<string, Quat>(); // повороты после выравнивания позы покоя — от них меряются ограничения
+  limited = new Set<string>();
   constructor(readonly rig: Rig, readonly project: Project) {}
+
+  /** Ограничения проекта: каждый поворот — в свой диапазон (поверх выравнивания позы покоя). */
+  applyLimits() {
+    for (const [bone, lim] of Object.entries(this.project.limits ?? {})) {
+      const d = this.rot.get(bone);
+      if (!d || !this.rig.index.has(bone)) continue;
+      const r = clampRotation(this.rig, this.project, bone, lim, d, this.base.get(bone));
+      if (r.hit) {
+        this.rot.set(bone, r.d);
+        this.limited.add(bone);
+      }
+    }
+  }
 
   add(bone: string, ch: Channel, v: number, axes: () => Record<SemanticAxis, Vec3>) {
     const i = this.rig.index.get(bone);
@@ -213,6 +231,7 @@ function primary(project: Project, rig: Rig, clip: Clip, t: number): Acc {
   let heights = heightCache.get(rig);
   if (!heights) heightCache.set(rig, (heights = restHeights(rig, project)));
   if (project.align) alignRest(acc, rig, project);
+  for (const [b, q] of acc.rot) acc.base.set(b, q);
   for (const layer of clip.layers) {
     if (isSecondary(layer)) continue;
     if (layer.type === "recipe") {
@@ -239,6 +258,8 @@ function primary(project: Project, rig: Rig, clip: Clip, t: number): Acc {
       }
     }
   }
+  // ограничения — до постановки на пол: ноги встают на пол уже в разрешённой позе
+  if (project.limits) acc.applyLimits();
   const g = clip.ground;
   if (g?.bones.length) {
     // contact: сначала опустить тело до касания, потом IK поднимает провалившиеся ступни; floor: наоборот
@@ -422,8 +443,23 @@ function addSecondary(acc: Acc, project: Project, rig: Rig, clip: Clip, t: numbe
 /** Полная поза в момент t: повороты, сдвиги и масштабы затронутых костей (в локальных осях, как в glTF). */
 export function posePartsAt(project: Project, rig: Rig, clip: Clip, t: number): PoseParts {
   const acc = primary(project, rig, clip, t);
-  if (clip.layers.some(isSecondary)) addSecondary(acc, project, rig, clip, t);
-  return acc.parts();
+  if (clip.layers.some(isSecondary)) {
+    addSecondary(acc, project, rig, clip, t);
+    if (project.limits) acc.applyLimits(); // хвост и уши после пружины — тоже в своих пределах
+  }
+  const parts = acc.parts();
+  if (acc.limited.size) parts.limited = acc.limited;
+  return parts;
+}
+
+/** Повороты костей как дельты к позе покоя и база выравнивания — для ограничений (limit.fit, подсказки редактора). */
+export function motionAt(project: Project, rig: Rig, clip: Clip, t: number): { rot: Map<string, Quat>; base: Map<string, Quat>; limited: Set<string> } {
+  const acc = primary(project, rig, clip, t);
+  if (clip.layers.some(isSecondary)) {
+    addSecondary(acc, project, rig, clip, t);
+    if (project.limits) acc.applyLimits();
+  }
+  return { rot: acc.rot, base: acc.base, limited: acc.limited };
 }
 
 /** Только повороты — для старого кода и проверок. */

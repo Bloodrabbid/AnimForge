@@ -84,6 +84,8 @@ export interface Project {
    * to — куда смотрит цепочка: down; abduct — отвести от тела вбок на столько градусов (A-поза). */
   align?: Record<string, { to: "down"; abduct?: number }>;
   chains: Record<string, string[]>; // имя цепочки → кости от основания к кончику
+  /** Ограничения: диапазон движения кости по осям, градусы [от, до] (limits.ts). Действуют на все клипы. */
+  limits?: Record<string, Partial<Record<"lateral" | "vertical" | "roll" | "pitch" | "yaw" | "bank", [number, number]>>>;
   clips: Clip[];
 }
 

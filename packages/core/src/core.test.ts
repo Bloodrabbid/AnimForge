@@ -875,3 +875,108 @@ test("веса: правка кости делит остаток между о�
   setBoneWeight(i, w, 5, 0.6, 9);
   close(boneWeight(i, w, 5), 0.6); close(sum(w), 1);
 });
+
+// ── ограничения ──
+import { boneAngles } from "./limits.ts";
+import { motionAt } from "./evaluate.ts";
+
+test("ограничения: углы кости по осям совпадают с каналами; обрезка по одной оси не трогает другие; кость отмечена", () => {
+  const rig = buildRig(skel);
+  const key = (bone: string, axis: string, v: number) => ({ bone, axis, keys: [{ t: 0, v }] });
+  const ang = (pr: Project, bone: string) => {
+    const m = motionAt(pr, rig, pr.clips[0], 0);
+    return { a: boneAngles(rig, pr, bone, m.rot.get(bone)!, m.base.get(bone)), limited: m.limited };
+  };
+  // у кости a поворот в rest (roll): каналы всё равно читаются как поставлены
+  for (const [axis, v] of [["lateral", 30], ["vertical", -25], ["roll", 40]] as const) {
+    const pr = project([{ id: "k", type: "keys", tracks: [key("a", axis, v)] }]);
+    close(ang(pr, "a").a[axis]!, v, 1e-6, `${axis}`);
+  }
+  // изгиб вбок 50 при пределе ±20 → 20; изгиб по vertical 10 остаётся 10
+  const pr = project([{ id: "k", type: "keys", tracks: [key("b", "lateral", 50), key("b", "vertical", 10)] }]);
+  const free = ang(pr, "b").a;
+  pr.limits = { b: { lateral: [-20, 20] } };
+  const r = ang(pr, "b");
+  close(r.a.lateral!, 20, 1e-3, "упёрлось в предел");
+  close(r.a.vertical!, free.vertical!, 1e-6, "другая ось — как была до обрезки");
+  assert.ok(r.limited.has("b"), "кость отмечена");
+  // в пределах — поворот не меняется вовсе
+  pr.limits = { b: { lateral: [-60, 60] } };
+  assert.equal(ang(pr, "b").limited.size, 0);
+  // корпус: наклон 40 при пределе pitch ±10
+  const body = project([{ id: "k", type: "keys", tracks: [key("a", "pitch", 40)] }]);
+  body.limits = { a: { pitch: [-10, 10] } };
+  close(boneAngles(rig, body, "a", motionAt(body, rig, body.clips[0], 0).rot.get("a")!, undefined, true).pitch!, 10, 1e-3, "pitch");
+});
+
+test("ограничения меряются от выровненной позы покоя: опускание руки из T-позы — не движение, его не обрезает", () => {
+  const rig = buildRig(skel);
+  const tip = (pr: Project) => worldPose(rig, posePartsAt(pr, rig, pr.clips[0], 0)).T[rig.index.get("c")!];
+  const pr = project([{ id: "k", type: "keys", tracks: [{ bone: "a", axis: "roll", keys: [{ t: 0, v: 1 }] }] }]);
+  pr.align = { body: { to: "down" } };
+  const free = tip(pr);
+  pr.limits = { a: { lateral: [-5, 5], vertical: [-5, 5], roll: [-5, 5] } };
+  const lim = tip(pr);
+  for (let k = 0; k < 3; k++) close(lim[k], free[k], 1e-6, `кончик там же, ось ${k}`);
+  assert.ok(free[1] < 0.5, `цепочка опущена вниз: ${free}`);
+});
+
+test("limit.fit охватывает размах клипа с запасом, limit.set сужает; limit.auto: колено гнётся только назад", () => {
+  const ctx = { project: project([{ id: "w", type: "recipe", recipe: "wave", target: { chain: "body" }, params: { tipAmp: 30, growth: 0, period: 1 } }]), skeleton: skel };
+  const r = runCommand(ctx, "limit.fit", { margin: 2 }) as any;
+  const lat = ctx.project.limits!.c.lateral!;
+  assert.ok(lat[0] <= -30 && lat[1] >= 30 && lat[1] <= 33, `размах ±30 с запасом 2: ${lat}`);
+  assert.ok(r.bones >= 3);
+  runCommand(ctx, "limit.set", { chain: "body", axis: "lateral", min: -5, max: 5 });
+  const rig = buildRig(skel);
+  let worst = 0;
+  for (let k = 0; k < 10; k++) {
+    const m = motionAt(ctx.project, rig, ctx.project.clips[0], k / 10);
+    worst = Math.max(worst, Math.abs(boneAngles(rig, ctx.project, "c", m.rot.get("c")!).lateral!));
+  }
+  close(worst, 5, 1e-3, "волна не выходит за ±5");
+  runCommand(ctx, "limit.clear", {});
+  assert.equal(ctx.project.limits, undefined);
+
+  // человек без имён: колено назад можно, вперёд — нет
+  const hs = humanSkel(null), det = detectRig(hs, { up: [0, 1, 0] });
+  const hp: Project = { version: 1, name: "h", model: "", up: [0, 1, 0], forward: [0, 0, 1], chains: det.chains as Record<string, string[]>, clips: [] };
+  const hctx = { project: hp, skeleton: hs };
+  runCommand(hctx, "limit.auto", {});
+  const shin = det.chains.leg_l![1], hr = buildRig(hs);
+  const foot = (v: number) => {
+    hp.clips = [{ name: "c", duration: 1, fps: 10, loop: true, layers: [{ id: "k", type: "keys", tracks: [{ bone: shin, axis: "vertical", keys: [{ t: 0, v }] }] }] }];
+    return worldPose(hr, posePartsAt(hp, hr, hp.clips[0], 0)).T[hr.index.get(det.feet.l!)!][2];
+  };
+  const rest = foot(0);
+  const [lo, hi] = hp.limits![shin].vertical!;
+  const bendWay = hi > 0 ? 60 : -60;
+  assert.ok(foot(bendWay) < rest - 0.05, `разрешённый сгиб уводит стопу назад: ${foot(bendWay)} < ${rest}`);
+  close(foot(-bendWay), rest, 1e-6, "сгиб вперёд обрезан в ноль");
+  assert.ok(Math.abs(hi - lo) === 150);
+
+  // локоть без кисти (рука-варежка): конец — продолжение плеча; разрешённый сгиб уводит предплечье вперёд
+  const fa = det.chains.arm_l![1];
+  const gone = new Set<string>([fa]);
+  for (const n of hs.nodes) if (n.parent && gone.has(n.parent)) gone.add(n.name); // узлы идут от родителя к детям
+  gone.delete(fa);
+  const mitten: Skeleton = { nodes: hs.nodes.filter((n) => !gone.has(n.name)) };
+  const mp: Project = { ...hp, limits: undefined, clips: [] };
+  runCommand({ project: mp, skeleton: mitten }, "limit.auto", {});
+  const fl = mp.limits![fa]!;
+  assert.ok(fl, "локоть получил предел");
+  const hax = (["lateral", "vertical"] as const).find((k) => fl[k] && Math.abs(fl[k]![1] - fl[k]![0]) === 145)!;
+  assert.equal(hax, "lateral", "рука в T-позе гнётся вокруг вертикали");
+  const el = fl[hax];
+  const mr = buildRig(mitten), up = det.chains.arm_l![0];
+  const handDir = (v: number) => {
+    mp.clips = [{ name: "c", duration: 1, fps: 10, loop: true, layers: [{ id: "k", type: "keys", tracks: [{ bone: fa, axis: hax, keys: [{ t: 0, v }] }] }] }];
+    const w = worldPose(mr, posePartsAt(mp, mr, mp.clips[0], 0));
+    const i = mr.index.get(fa)!, p0 = mr.index.get(up)!;
+    const along = vsub(mr.worldT[i], mr.worldT[p0]);
+    return qrot(w.R[i], qrot(qinv(mr.worldR[i]), along))[2];
+  };
+  const allowed = el![1] > 0 ? 60 : -60;
+  assert.ok(handDir(allowed) > 0.05, `разрешённый сгиб — вперёд: ${handDir(allowed)}`);
+  assert.ok(Math.abs(handDir(-allowed)) < 1e-6, `сгиб назад обрезан: ${handDir(-allowed)}`);
+});

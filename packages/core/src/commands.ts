@@ -3,6 +3,10 @@
 import { CHANNELS } from "./project.ts";
 import type { Channel, Clip, Interp, KeyLayer, Project, RecipeLayer, Skeleton } from "./project.ts";
 import { RECIPES } from "./recipes.ts";
+import { buildRig, frameTimes, motionAt } from "./evaluate.ts";
+import { LIMIT_AXES, boneAngles, limitFrame, type BoneLimit, type LimitAxis } from "./limits.ts";
+import { DEG, qaxis, qrot, vdot, vsub } from "./math.ts";
+import { bodyFrame } from "./evaluate.ts";
 
 export interface Ctx {
   project: Project;
@@ -25,6 +29,17 @@ function clipOf(ctx: Ctx, name: string): Clip {
   const c = ctx.project.clips.find((c) => c.name === name);
   need(c, `нет клипа «${name}». Есть: ${ctx.project.clips.map((c) => c.name).join(", ") || "—"}`);
   return c!;
+}
+
+function limitTargets(ctx: Ctx, a: Record<string, any>): string[] {
+  if (a.chain) {
+    const c = ctx.project.chains[a.chain];
+    need(c, `нет цепочки «${a.chain}»`);
+    return c!;
+  }
+  need(a.bone, "нужна кость (bone) или цепочка (chain)");
+  need(ctx.skeleton.nodes.some((n) => n.name === a.bone), `нет кости «${a.bone}»`);
+  return [a.bone];
 }
 
 function keyLayer(clip: Clip): KeyLayer {
@@ -213,6 +228,143 @@ const defs: CommandDef[] = [
       const before = layer.tracks.length;
       layer.tracks = layer.tracks.filter((t) => !(t.bone === a.bone && (!a.axis || t.axis === a.axis)));
       return { removed: before - layer.tracks.length };
+    },
+  },
+  {
+    name: "limit.set",
+    help: "Ограничение — диапазон движения кости по оси, градусы. Оси как у каналов: lateral, vertical, roll (кости цепочки), pitch, yaw, bank (корпус). Для цепочки — на каждую её кость.",
+    args: {
+      bone: { type: "string", help: "кость" },
+      chain: { type: "string", help: "или цепочка — каждой кости" },
+      axis: { type: "string", required: true, help: LIMIT_AXES.join(" | ") },
+      min: { type: "number", required: true, help: "от, °" },
+      max: { type: "number", required: true, help: "до, °" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      need(LIMIT_AXES.includes(a.axis), `axis: ${LIMIT_AXES.join(" | ")}`);
+      need(Number.isFinite(+a.min) && Number.isFinite(+a.max) && +a.min <= +a.max, "нужно min ≤ max");
+      const bones = limitTargets(ctx, a);
+      ctx.project.limits ??= {};
+      for (const b of bones) {
+        const l = (ctx.project.limits[b] ??= {});
+        // оси тела и оси цепочки в одной кости не смешиваем: разложение поворота у них разное
+        const body = ["pitch", "yaw", "bank"].includes(a.axis);
+        for (const k of Object.keys(l) as LimitAxis[]) if (["pitch", "yaw", "bank"].includes(k) !== body) delete l[k];
+        l[a.axis as LimitAxis] = [+a.min, +a.max];
+      }
+      return { bones, axis: a.axis, range: [+a.min, +a.max] };
+    },
+  },
+  {
+    name: "limit.clear",
+    help: "Снять ограничение с кости или цепочки (по оси или все). Без bone и chain — все ограничения проекта.",
+    args: {
+      bone: { type: "string", help: "кость" },
+      chain: { type: "string", help: "или цепочка" },
+      axis: { type: "string", help: "ось; без неё — все" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      if (!a.bone && !a.chain) {
+        const n = Object.keys(ctx.project.limits ?? {}).length;
+        delete ctx.project.limits;
+        return { cleared: n };
+      }
+      const bones = limitTargets(ctx, a);
+      for (const b of bones) {
+        const l = ctx.project.limits?.[b];
+        if (!l) continue;
+        if (a.axis) delete l[a.axis as LimitAxis];
+        if (!a.axis || !Object.keys(l).length) delete ctx.project.limits![b];
+      }
+      if (ctx.project.limits && !Object.keys(ctx.project.limits).length) delete ctx.project.limits;
+      return { bones };
+    },
+  },
+  {
+    name: "limit.fit",
+    help: "Снять диапазоны с готовых клипов: по каждой кости — от наименьшего до наибольшего угла за все кадры, плюс запас. Удобно зафиксировать «как в хорошей анимации» и не дать новым слоям выйти за это.",
+    args: {
+      bone: { type: "string", help: "кость" },
+      chain: { type: "string", help: "или цепочка; без обоих — все кости, которые двигаются" },
+      margin: { type: "number", help: "запас, °, по умолчанию 5" },
+      clips: { type: "string", help: "клипы через запятую; по умолчанию все" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const rig = buildRig(ctx.skeleton);
+      const free = { ...ctx.project, limits: undefined };
+      const names = a.clips ? String(a.clips).split(",").map((s) => s.trim()) : ctx.project.clips.map((c) => c.name);
+      const clips = names.map((n) => clipOf(ctx, n));
+      const want = a.bone || a.chain ? new Set(limitTargets(ctx, a)) : null;
+      const margin = a.margin ?? 5;
+      const range = new Map<string, Record<string, [number, number]>>();
+      for (const clip of clips)
+        for (const t of frameTimes(clip)) {
+          const m = motionAt(free, rig, clip, t);
+          for (const [bone, d] of m.rot) {
+            if (want && !want.has(bone)) continue;
+            const body = !Object.values(ctx.project.chains).some((c) => c.includes(bone) && c.length > 1);
+            const ang = boneAngles(rig, ctx.project, bone, d, m.base.get(bone), body);
+            const r = range.get(bone) ?? {};
+            for (const [k, v] of Object.entries(ang)) {
+              const cur = r[k] ?? [v!, v!];
+              r[k] = [Math.min(cur[0], v!), Math.max(cur[1], v!)];
+            }
+            range.set(bone, r);
+          }
+        }
+      ctx.project.limits ??= {};
+      const out: Record<string, BoneLimit> = {};
+      for (const [bone, r] of range) {
+        const l: BoneLimit = {};
+        for (const [k, [lo, hi]] of Object.entries(r)) l[k as LimitAxis] = [Math.floor(lo - margin), Math.ceil(hi + margin)];
+        ctx.project.limits[bone] = out[bone] = l;
+      }
+      return { bones: Object.keys(out).length, limits: out };
+    },
+  },
+  {
+    name: "limit.auto",
+    help: "Анатомические ограничения по стандартным цепочкам: колено и локоть гнутся только в свою сторону (0…150° и 0…145°, ось сгиба — vertical или lateral, смотря по позе покоя), почти не гнутся вбок; голова и шея — в пределах человека. Сторону сгиба находит по геометрии.",
+    args: {},
+    mutates: true,
+    run(ctx) {
+      const rig = buildRig(ctx.skeleton);
+      const ch = ctx.project.chains;
+      const f = bodyFrame(ctx.project);
+      ctx.project.limits ??= {};
+      const done: string[] = [];
+      // в какую сторону сгиб: поворот средней кости на +20° должен увести конец цепочки в нужную сторону
+      const hinge = (chain: string[] | undefined, toward: number[], bend: number, label: string) => {
+        if (!chain || chain.length < 2) return;
+        const mid = chain[1], i = rig.index.get(mid)!;
+        const tipName = chain.length > 2 ? chain[2] : undefined;
+        const tipI = tipName ? rig.index.get(tipName)! : ctx.skeleton.nodes.findIndex((n) => n.parent === mid && n.isJoint);
+        // у кисти-варежки нет дочерней кости — конец берём продолжением предыдущей кости
+        const arm = tipI != null && tipI >= 0 ? vsub(rig.worldT[tipI], rig.worldT[i]) : vsub(rig.worldT[i], rig.worldT[rig.index.get(chain[0])!]);
+        if (Math.hypot(...arm) < 1e-9) return;
+        // ось сгиба — та из двух поперечных, что сильнее уводит конец в нужную сторону: у висящей ноги это
+        // vertical, у руки в T-позе — lateral (поворот вокруг вертикали тела)
+        const { names, axes } = limitFrame(rig, ctx.project, mid, false);
+        const pick = ([1, 2] as const).map((k) => {
+          const moved = vsub(qrot(qaxis(qrot(rig.worldR[i], axes[k]), 20 * DEG), arm), arm);
+          return { k, d: vdot(moved, toward as [number, number, number]) };
+        }).sort((a, b) => Math.abs(b.d) - Math.abs(a.d))[0];
+        const hingeAxis = names[pick.k], other = names[pick.k === 1 ? 2 : 1];
+        ctx.project.limits![mid] = { [hingeAxis]: pick.d >= 0 ? [0, bend] : [-bend, 0], [other]: [-8, 8], roll: [-15, 15] };
+        done.push(`${label}: ${mid}`);
+      };
+      const back = f.forward.map((x) => -x);
+      hinge(ch.leg_l, back, 150, "колено л");
+      hinge(ch.leg_r, back, 150, "колено п");
+      hinge(ch.arm_l, f.forward, 145, "локоть л");
+      hinge(ch.arm_r, f.forward, 145, "локоть п");
+      for (const b of ch.neck ?? []) { ctx.project.limits[b] = { pitch: [-40, 40], yaw: [-50, 50], bank: [-30, 30] }; done.push(`шея: ${b}`); }
+      for (const b of ch.head ?? []) { ctx.project.limits[b] = { pitch: [-45, 45], yaw: [-70, 70], bank: [-35, 35] }; done.push(`голова: ${b}`); }
+      if (!done.length) throw new Error("нет стандартных цепочек leg_l/arm_l/neck/head — сначала rig.detect");
+      return { set: done };
     },
   },
   {

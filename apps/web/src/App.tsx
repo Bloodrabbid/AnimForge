@@ -20,6 +20,7 @@ import {
   saveWeights,
 } from "./api.ts";
 import { WeightsPanel } from "./WeightsPanel.tsx";
+import { LimitsPanel } from "./LimitsPanel.tsx";
 import type { Brush, WeightPainter } from "./weightPaint.ts";
 import { BoneTree } from "./BoneTree.tsx";
 import { Icon } from "./Icon.tsx";
@@ -64,7 +65,7 @@ export function App() {
   const [showFloor, setShowFloor] = useState(true);
   const [view, setView] = useState<ViewCmd>({ kind: "fit", n: 0 });
   const [leftTab, setLeftTab] = useState<"library" | "bones">((query.get("left") as "bones") ?? "library");
-  const [rightTab, setRightTab] = useState<"layers" | "keys" | "weights">((query.get("right") as "weights") ?? "layers");
+  const [rightTab, setRightTab] = useState<"layers" | "keys" | "weights" | "limits">((query.get("right") as "weights") ?? "layers");
   const [brush, setBrush] = useState<Brush>({ mode: "add", radius: 0.06, strength: 0.25 });
   const [strokes, setStrokes] = useState(0);
   const [modelVer, setModelVer] = useState(0);
@@ -514,6 +515,9 @@ export function App() {
           <button className={rightTab === "keys" ? "on" : ""} onClick={() => setRightTab("keys")}>
             Ключи
           </button>
+          <button className={rightTab === "limits" ? "on" : ""} onClick={() => setRightTab("limits")} title="ограничения: диапазон движения костей">
+            Пределы {shown.limits && <span className="n">{Object.keys(shown.limits).length}</span>}
+          </button>
           <button className={rightTab === "weights" ? "on" : ""} onClick={() => setRightTab("weights")} title="веса кожи: кисть по модели">
             Веса {strokes > 0 && <span className="n dirty-dot">●</span>}
           </button>
@@ -534,6 +538,17 @@ export function App() {
               <p>В проекте нет клипов.</p>
               <p className="muted">Выберите движение в библиотеке — клип создастся сам.</p>
             </div>
+          ) : rightTab === "limits" ? (
+            <LimitsPanel
+              project={shown}
+              rig={rig}
+              clip={clip}
+              t={t}
+              bone={selectedBone}
+              readOnly={!!trial}
+              onSelectBone={setSelectedBone}
+              runMany={runMany}
+            />
           ) : rightTab === "weights" ? (
             trial ? (
               <p className="muted pad">Веса правятся после «Применить» или «Отмена» примерки.</p>

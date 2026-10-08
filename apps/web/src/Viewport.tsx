@@ -173,6 +173,10 @@ export function Viewport(props: Props) {
     const segment = new THREE.Line(segGeom, new THREE.LineBasicMaterial({ color: 0xffb547, depthTest: false }));
     segment.renderOrder = 10;
     scene.add(marker, segment);
+    // кости, упёршиеся в ограничение в этом кадре, — красные точки поверх меша
+    const limGeo = new THREE.SphereGeometry(1, 12, 8);
+    const limMat = new THREE.MeshBasicMaterial({ color: 0xff4d4d, depthTest: false, transparent: true, opacity: 0.9 });
+    const limPool: THREE.Mesh[] = [];
 
     const resize = () => {
       const w = el.clientWidth, h = el.clientHeight;
@@ -194,7 +198,7 @@ export function Viewport(props: Props) {
       const m = loaded.current;
       if (m) {
         // поза из ядра; кости, которых нет в позе, возвращаем в rest
-        const pose = p.clip ? posePartsAt(p.project, p.rig, p.clip, p.t) : { rot: new Map(), pos: new Map(), scl: new Map() };
+        const pose: ReturnType<typeof posePartsAt> = p.clip ? posePartsAt(p.project, p.rig, p.clip, p.t) : { rot: new Map(), pos: new Map(), scl: new Map() };
         for (const [name, { obj, rest, restPos, restScale }] of m.bones) {
           const q = pose.rot.get(name), v = pose.pos.get(name), s = pose.scl.get(name);
           if (q) obj.quaternion.set(q[0], q[1], q[2], q[3]);
@@ -213,12 +217,27 @@ export function Viewport(props: Props) {
         lastSel = selKey;
         ground.visible = grid.visible = p.showFloor;
 
+        const lim = [...(pose.limited ?? [])].map((b) => m.bones.get(b)).filter((x) => !!x);
+        while (limPool.length < lim.length) {
+          const s = new THREE.Mesh(limGeo, limMat);
+          s.renderOrder = 11;
+          scene.add(s);
+          limPool.push(s);
+        }
+        limPool.forEach((s, k) => {
+          s.visible = k < lim.length;
+          if (s.visible) {
+            lim[k]!.obj.getWorldPosition(s.position);
+            s.scale.setScalar(m.size * 0.011);
+          }
+        });
         const sel = p.selectedBone ? m.bones.get(p.selectedBone) : undefined;
         marker.visible = segment.visible = !!sel;
         if (sel) {
           sel.obj.getWorldPosition(a);
           marker.position.copy(a);
           marker.scale.setScalar(m.size * 0.014);
+          (marker.material as THREE.MeshBasicMaterial).color.set(pose.limited?.has(p.selectedBone!) ? 0xff4d4d : 0xffb547);
           const child = sel.obj.children.find((c) => (c as THREE.Bone).isBone);
           if (child) child.getWorldPosition(b);
           else b.copy(a);

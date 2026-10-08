@@ -8,3 +8,4 @@ export * from "./commands.ts";
 export * from "./tweens.ts";
 export * from "./rig.ts";
 export * from "./weights.ts";
+export * from "./limits.ts";
