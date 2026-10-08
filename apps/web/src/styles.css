@@ -1623,3 +1623,6 @@ table.keys tbody tr:hover {
 .toolbar button.small {
   align-self: center;
 }
+.target-row {
+  flex-wrap: wrap;
+}

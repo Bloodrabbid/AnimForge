@@ -188,6 +188,15 @@ export function ConstraintsPanel({ project, skeleton, rig, clip, t, active, read
                 </button>
               )}
               {c.type === "ik" && (
+                <select disabled={readOnly} value={c.length ?? 2} title="сколько костей сгибать от кончика вверх: 2 — рука или нога, больше — с ключицей и корпусом" onChange={(e) => set(c, { length: Number(e.target.value) }, "длина IK")}>
+                  {[1, 2, 3, 4, 5, 6, 8].map((n) => (
+                    <option key={n} value={n}>
+                      {n} {n === 1 ? "кость" : n < 5 ? "кости" : "костей"}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {c.type === "ik" && (
                 <select
                   disabled={readOnly}
                   value={c.pole ? "set" : "auto"}
