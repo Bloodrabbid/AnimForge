@@ -16,6 +16,7 @@ import {
   type LibRecipe,
   type Loaded,
   type Step,
+  uploadModel,
 } from "./api.ts";
 import { BoneTree } from "./BoneTree.tsx";
 import { Icon } from "./Icon.tsx";
@@ -70,6 +71,9 @@ export function App() {
   const [live, setLive] = useState(false);
   // тип тела из rig.detect (без записи): какие движения предлагать первыми и какие кости ставить на пол
   const [body, setBody] = useState<{ body: string; paws: string[] } | null>(null);
+  const [drag, setDrag] = useState(false);
+  const [upload, setUpload] = useState<{ name: string; error?: string } | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const ownWriteAt = useRef(0); // когда интерфейс сам последний раз писал на диск
 
   const say = useCallback((text: string, error = false) => setStatus({ text, error, at: Date.now() }), []);
@@ -201,6 +205,53 @@ export function App() {
     say("примерка отменена");
   }, [trial, say]);
 
+  /** Своя модель: сервер импортирует её через Blender, распознаёт скелет и создаёт проект — открываем его. */
+  const startUpload = useCallback(async (file: File) => {
+    if (!/\.(glb|gltf|fbx|dae)$/i.test(file.name)) {
+      setUpload({ name: file.name, error: "Нужен файл .glb, .gltf (одним файлом), .fbx или .dae" });
+      return;
+    }
+    setUpload({ name: file.name });
+    try {
+      const r = await uploadModel(file);
+      location.search = `?dir=${encodeURIComponent(r.dir)}&left=library`;
+    } catch (e) {
+      setUpload({ name: file.name, error: (e as Error).message });
+    }
+  }, []);
+
+  // перетаскивание файла в любое место окна
+  useEffect(() => {
+    let depth = 0;
+    const hasFile = (e: DragEvent) => [...(e.dataTransfer?.types ?? [])].includes("Files");
+    const enter = (e: DragEvent) => {
+      if (!hasFile(e)) return;
+      depth++;
+      setDrag(true);
+    };
+    const leave = () => {
+      if (--depth <= 0) (depth = 0), setDrag(false);
+    };
+    const over = (e: DragEvent) => hasFile(e) && e.preventDefault();
+    const drop = (e: DragEvent) => {
+      e.preventDefault();
+      depth = 0;
+      setDrag(false);
+      const f = e.dataTransfer?.files[0];
+      if (f) startUpload(f);
+    };
+    window.addEventListener("dragenter", enter);
+    window.addEventListener("dragleave", leave);
+    window.addEventListener("dragover", over);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.removeEventListener("dragenter", enter);
+      window.removeEventListener("dragleave", leave);
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("drop", drop);
+    };
+  }, [startUpload]);
+
   const shown = trial?.project ?? project;
   const rig = useMemo(() => (data ? buildRig(data.skeleton) : null), [data?.skeleton]);
   const clip = shown?.clips.find((c) => c.name === clipName) ?? shown?.clips[0];
@@ -302,6 +353,16 @@ export function App() {
             <span className="led" />
             {live ? "синхронно с диском" : "нет связи с диском"}
           </span>
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".glb,.gltf,.fbx,.dae"
+            hidden
+            onChange={(e) => e.target.files?.[0] && startUpload(e.target.files[0])}
+          />
+          <button className="btn outline" onClick={() => fileInput.current?.click()} title="или просто перетащите файл в окно">
+            <Icon name="upload" /> Загрузить модель
+          </button>
           <button className="ghost" onClick={() => setHelp((v) => !v)} title="горячие клавиши (?)">
             <Icon name="keyboard" />
           </button>
@@ -367,6 +428,12 @@ export function App() {
               <ToolBtn icon="floor" title="пол и тень (G)" on={showFloor} onClick={() => setShowFloor((v) => !v)} />
             </div>
           </div>
+          {!clip && !trial && (
+            <div className="empty-viewport">
+              <b>Модель готова.</b>
+              Выберите движение в библиотеке слева — оно сразу заиграет на ней.
+            </div>
+          )}
           {trial && (
             <div className="trybar">
               <div className="try-info">
@@ -469,6 +536,34 @@ export function App() {
           )}
         </div>
       </aside>
+
+      {(drag || upload) && (
+        <div className={`dropzone ${drag ? "drag" : ""}`} onClick={() => upload?.error && setUpload(null)}>
+          <div className="dz-card">
+            <Icon name="upload" size={34} />
+            {drag ? (
+              <>
+                <h3>Отпустите, чтобы загрузить модель</h3>
+                <p className="muted">FBX, GLB, glTF или DAE со скелетом — любое тело: человек, зверь, паук, рыба</p>
+              </>
+            ) : upload?.error ? (
+              <>
+                <h3>Не получилось: {upload.name}</h3>
+                <p className="err">{upload.error}</p>
+                <button className="btn accent" onClick={() => setUpload(null)}>
+                  Понятно
+                </button>
+              </>
+            ) : (
+              <>
+                <h3>{upload?.name}</h3>
+                <p className="muted">Импорт через Blender и распознавание скелета…</p>
+                <div className="dz-bar" />
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <footer className={`status ${status.error ? "error" : ""}`} title={status.text}>
         <span className="time">{new Date(status.at).toLocaleTimeString("ru-RU")}</span> {status.text}

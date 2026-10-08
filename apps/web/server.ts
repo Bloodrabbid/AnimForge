@@ -1,6 +1,6 @@
 // Dev-сервер веб-интерфейса AnimForge: Vite (страница) + маленький API поверх тех же адаптеров, что у CLI.
 // Логики анимации здесь нет: проект читается через loadCtx, любое действие — call() из packages/cli/src/node.ts.
-import { createReadStream, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, watch, type FSWatcher } from "node:fs";
+import { createReadStream, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, watch, writeFileSync, type FSWatcher } from "node:fs";
 import { tmpdir } from "node:os";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -118,6 +118,33 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
       return sendJson(res, 400, { ok: false, error: String(e?.message ?? e) });
     }
   }
+  if (req.method === "POST" && path === "/api/upload") {
+    // своя модель перетаскиванием: файл телом запроса, имя в заголовке → новый проект в out/uploads (в git не попадает)
+    const raw = decodeURIComponent(String(req.headers["x-filename"] ?? ""));
+    const ext = raw.match(/\.(glb|gltf|fbx|dae)$/i)?.[0].toLowerCase();
+    if (!ext) throw new HttpError(400, "нужен файл .glb, .gltf (одним файлом), .fbx или .dae");
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const c of req) {
+      size += (c as Buffer).length;
+      if (size > 300 << 20) throw new HttpError(413, "файл больше 300 МБ");
+      chunks.push(c as Buffer);
+    }
+    const base = raw.replace(/\.[^.]+$/, "").replace(/[^\p{L}\p{N}_-]+/gu, "_").replace(/^_+|_+$/g, "").slice(0, 40) || "model";
+    let rel = `out/uploads/${base}`;
+    for (let i = 2; existsSync(join(ROOT, rel)); i++) rel = `out/uploads/${base}-${i}`;
+    const tmp = mkdtempSync(join(tmpdir(), "af-up-"));
+    try {
+      const file = join(tmp, `source${ext}`);
+      writeFileSync(file, Buffer.concat(chunks));
+      const r = (await serial(() => call(join(ROOT, rel), "project.new", { file, name: base }))) as { detect: { body?: string } };
+      return sendJson(res, 200, { ok: true, dir: rel, body: r.detect?.body });
+    } catch (e: any) {
+      return sendJson(res, 400, { ok: false, error: String(e?.message ?? e).split("\n").slice(0, 6).join("\n") });
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  }
   if (req.method === "GET" && path === "/api/library") {
     // пресеты с происхождением и что нужно рецепту от скелета: роли → цепочки
     const lib = loadPresets().map((l) => {
@@ -144,6 +171,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     };
     scan("projects", 1);
     scan("out", 2);
+    found.sort((a, b) => Number(b.startsWith("out/uploads/")) - Number(a.startsWith("out/uploads/"))); // свои модели — первыми
     return sendJson(res, 200, found);
   }
   if (req.method === "GET" && path === "/api/download") {

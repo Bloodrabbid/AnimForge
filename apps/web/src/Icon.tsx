@@ -14,6 +14,7 @@ const PATHS: Record<string, string> = {
   front: "M8 4h8v16H8zM8 9h8",
   side: "M5 8h14v8H5zM15 8v8",
   top: "M5 5h14v14H5zM12 5v14M5 12h14",
+  upload: "M12 16V5m-5 5 5-5 5 5M5 20h14",
   download: "M12 4v11m-5-5 5 5 5-5M5 20h14",
   search: "M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM20 20l-4.8-4.8",
   library: "M4 5h4v14H4zM10 5h4v14h-4zM16.5 5.5l3.5-1 3 13.5-3.5 1z",

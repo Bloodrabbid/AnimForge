@@ -208,6 +208,25 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
       return p;
     },
   },
+  "project.new": {
+    help: "Новый проект из чужой модели одним шагом: импорт через Blender (FBX, glTF/GLB, DAE) → assets/model.glb, проект, rig.detect.",
+    args: { file: { type: "string", required: true, help: "исходный файл модели" }, name: { type: "string", help: "имя проекта" } },
+    async run(dir, a) {
+      if (existsSync(projectFile(dir))) throw new Error(`проект уже есть: ${dir}`);
+      mkdirSync(dir, { recursive: true });
+      try {
+        await NODE_COMMANDS["model.import"].run(dir, { file: a.file, out: "assets/model.glb" });
+        await NODE_COMMANDS.init.run(dir, { model: "assets/model.glb", name: a.name });
+        const ctx = await loadCtx(dir);
+        if (!ctx.skeleton.nodes.some((n) => n.isJoint)) throw new Error("в модели нет скелета со скином — нужна заскиненная модель (авториг пока не умеем)");
+        const detect = await NODE_COMMANDS["rig.detect"].run(dir, {});
+        return { dir, detect };
+      } catch (e) {
+        rmSync(dir, { recursive: true, force: true }); // полупроект не оставляем
+        throw e;
+      }
+    },
+  },
   "template.make": {
     help: "Собрать модель по шаблону тела в Blender: fish, snake, tentacle, quadruped, biped, worker.",
     args: { type: { type: "string", required: true, help: "fish | snake | tentacle | quadruped | biped | worker" }, out: { type: "string", required: true, help: "куда положить glb" }, bones: { type: "number", help: "число костей тела (по умолчанию — своё у каждого шаблона)" } },

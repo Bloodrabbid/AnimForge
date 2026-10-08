@@ -91,7 +91,8 @@ try {
   }
   if (process.env.AF_EVAL) {
     // произвольный JS на странице перед снимком (клик по карточке и т.п.), потом пауза AF_WAIT_MS
-    await send("Runtime.evaluate", { expression: process.env.AF_EVAL, awaitPromise: true }, sessionId);
+    // скрипт может увести страницу на другой адрес (загрузка модели) — тогда ответа не будет, это не ошибка
+    await send("Runtime.evaluate", { expression: process.env.AF_EVAL, awaitPromise: true }, sessionId).catch(() => {});
     await new Promise((r) => setTimeout(r, Number(process.env.AF_WAIT_MS ?? 3000)));
   }
   if (process.env.AF_CLICK) {

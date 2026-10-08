@@ -74,3 +74,11 @@ export interface LibRecipe {
 export const fetchLibrary = (): Promise<LibRecipe[]> => fetch("/api/library").then((r) => r.json());
 export const fetchProjects = (): Promise<string[]> => fetch("/api/projects").then((r) => r.json());
 export const downloadUrl = (dir: string) => `/api/download?dir=${encodeURIComponent(dir)}`;
+
+/** Своя модель → новый проект в out/uploads (импорт через Blender и rig.detect на сервере). */
+export async function uploadModel(file: File): Promise<{ dir: string; body?: string }> {
+  const r = await fetch("/api/upload", { method: "POST", headers: { "x-filename": encodeURIComponent(file.name) }, body: file });
+  const body = await r.json();
+  if (!body.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+  return body;
+}

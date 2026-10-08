@@ -43,7 +43,15 @@ export function chainsFor(recipe: string, chains: Record<string, string[]>): str
 /** Подходит ли рецепт скелету: у рецепта с ролями должны быть все обязательные цепочки. */
 export function missingChains(lib: LibRecipe, chains: Record<string, string[]>): string[] {
   if (!lib.roles) return Object.keys(chains).length ? [] : ["любая цепочка"];
-  return [...new Set(Object.values(lib.roles).filter((r) => !r.optional && !chains[r.chain]).map((r) => r.chain))];
+  const roles = Object.values(lib.roles);
+  const missing = [...new Set(roles.filter((r) => !r.optional && !chains[r.chain]).map((r) => r.chain))];
+  // обязательных ролей нет (лапы многоногого: leg_l0…leg_r11) — нужна хотя бы одна главная, той же породы, что первая роль;
+  // таз или позвоночник сами по себе походку не делают
+  if (!missing.length && !roles.some((r) => !r.optional)) {
+    const kind = roles[0]?.chain.match(/^[a-z]+/)?.[0] ?? "";
+    if (!roles.some((r) => r.chain.startsWith(kind) && chains[r.chain])) return [`${roles[0]?.chain ?? "цепочки"}…`];
+  }
+  return missing;
 }
 
 export interface Entry {
