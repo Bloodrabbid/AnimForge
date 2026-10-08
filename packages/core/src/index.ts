@@ -7,3 +7,4 @@ export * from "./gltf.ts";
 export * from "./commands.ts";
 export * from "./tweens.ts";
 export * from "./rig.ts";
+export * from "./weights.ts";

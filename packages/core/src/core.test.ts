@@ -852,3 +852,26 @@ test("геометрия без имён: крылья из таза наход�
   assert.equal(fins.chains.leg_l, undefined, "ветки назад-вбок — не ноги");
   assert.ok(fins.notes.some((n) => n.includes("вбок")), "в заметках — почему");
 });
+
+// ── веса кожи ──
+import { boneWeight, setBoneWeight } from "./weights.ts";
+
+test("веса: правка кости делит остаток между остальными пропорционально, сумма 1; новая кость — в лёгкий слот; остаток без соседей — родителю", () => {
+  const sum = (w: number[]) => w.reduce((a, b) => a + b, 0);
+  // 0.6 у кости 1, 0.3 у 2, 0.1 у 3 → кость 1 до 0.2: 2 и 3 делят 0.8 как 3:1
+  let i = [1, 2, 3, 0], w = [0.6, 0.3, 0.1, 0];
+  setBoneWeight(i, w, 1, 0.2, 9);
+  close(boneWeight(i, w, 1), 0.2); close(boneWeight(i, w, 2), 0.6); close(boneWeight(i, w, 3), 0.2); close(sum(w), 1);
+  // новой кости 7 нет в слотах — занимает самый лёгкий (пустой) слот
+  i = [1, 2, 3, 0]; w = [0.5, 0.3, 0.2, 0];
+  setBoneWeight(i, w, 7, 0.5, 9);
+  close(boneWeight(i, w, 7), 0.5); close(boneWeight(i, w, 1), 0.25); close(sum(w), 1);
+  // вершина целиком на кости 4: убираем вес — остаток уходит родителю 9, а не теряется
+  i = [4, 0, 0, 0]; w = [1, 0, 0, 0];
+  setBoneWeight(i, w, 4, 0.3, 9);
+  close(boneWeight(i, w, 4), 0.3); close(boneWeight(i, w, 9), 0.7); close(sum(w), 1);
+  // дубли одной кости в двух слотах сводятся
+  i = [5, 5, 2, 0]; w = [0.3, 0.3, 0.4, 0];
+  setBoneWeight(i, w, 5, 0.6, 9);
+  close(boneWeight(i, w, 5), 0.6); close(sum(w), 1);
+});

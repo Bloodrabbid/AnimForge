@@ -82,3 +82,14 @@ export async function uploadModel(file: File): Promise<{ dir: string; body?: str
   if (!body.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
   return body;
 }
+
+/** Веса кожи из редактора → в glb модели (первый раз сервер сохранит исходник рядом). restore — вернуть исходные. */
+export async function saveWeights(dir: string, parts: unknown[] | null): Promise<void> {
+  const r = await fetch("/api/weights", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(parts ? { dir, parts } : { dir, restore: true }),
+  });
+  const body = await r.json();
+  if (!body.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+}

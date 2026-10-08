@@ -17,7 +17,10 @@ import {
   type Loaded,
   type Step,
   uploadModel,
+  saveWeights,
 } from "./api.ts";
+import { WeightsPanel } from "./WeightsPanel.tsx";
+import type { Brush, WeightPainter } from "./weightPaint.ts";
 import { BoneTree } from "./BoneTree.tsx";
 import { Icon } from "./Icon.tsx";
 import { KeysPanel } from "./KeysPanel.tsx";
@@ -61,7 +64,11 @@ export function App() {
   const [showFloor, setShowFloor] = useState(true);
   const [view, setView] = useState<ViewCmd>({ kind: "fit", n: 0 });
   const [leftTab, setLeftTab] = useState<"library" | "bones">((query.get("left") as "bones") ?? "library");
-  const [rightTab, setRightTab] = useState<"layers" | "keys">("layers");
+  const [rightTab, setRightTab] = useState<"layers" | "keys" | "weights">((query.get("right") as "weights") ?? "layers");
+  const [brush, setBrush] = useState<Brush>({ mode: "add", radius: 0.06, strength: 0.25 });
+  const [strokes, setStrokes] = useState(0);
+  const [modelVer, setModelVer] = useState(0);
+  const painter = useRef<WeightPainter | null>(null);
   const [status, setStatus] = useState<Status>({ text: "загрузка проекта…", error: false, at: Date.now() });
   const [library, setLibrary] = useState<LibRecipe[]>([]);
   const [projects, setProjects] = useState<string[]>([]);
@@ -305,6 +312,11 @@ export function App() {
         Enter: () => trial && applyTrial(),
         "?": () => setHelp((v) => !v),
       };
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z" && painter.current?.active) {
+        e.preventDefault();
+        if (painter.current.undo()) setStrokes(painter.current.strokes);
+        return;
+      }
       const fn = keys[e.key] ?? keys[e.key.toLowerCase()];
       if (fn) {
         e.preventDefault();
@@ -393,7 +405,7 @@ export function App() {
       <main className="center">
         <div className="stage">
           <Viewport
-            modelUrl={modelUrl(DIR, shown.model)}
+            modelUrl={`${modelUrl(DIR, shown.model)}&v=${modelVer}`}
             project={shown}
             rig={rig}
             clip={clip}
@@ -403,6 +415,14 @@ export function App() {
             wireframe={wireframe}
             showFloor={showFloor}
             view={view}
+            weightMode={rightTab === "weights" && !trial}
+            brush={brush}
+            onPainter={(p) => {
+              painter.current = p;
+              setStrokes(0);
+            }}
+            onStroke={setStrokes}
+            onPickBone={setSelectedBone}
             onStatus={say}
           />
           <div className="overlay tl">
@@ -494,6 +514,9 @@ export function App() {
           <button className={rightTab === "keys" ? "on" : ""} onClick={() => setRightTab("keys")}>
             Ключи
           </button>
+          <button className={rightTab === "weights" ? "on" : ""} onClick={() => setRightTab("weights")} title="веса кожи: кисть по модели">
+            Веса {strokes > 0 && <span className="n dirty-dot">●</span>}
+          </button>
           {clip && !trial && (
             <button
               className="icon sm danger push"
@@ -511,6 +534,42 @@ export function App() {
               <p>В проекте нет клипов.</p>
               <p className="muted">Выберите движение в библиотеке — клип создастся сам.</p>
             </div>
+          ) : rightTab === "weights" ? (
+            trial ? (
+              <p className="muted pad">Веса правятся после «Применить» или «Отмена» примерки.</p>
+            ) : (
+              <WeightsPanel
+                bone={selectedBone}
+                brush={brush}
+                strokes={strokes}
+                busy={busy}
+                onBrush={setBrush}
+                onUndo={() => painter.current?.undo() && setStrokes(painter.current.strokes)}
+                onSave={async () => {
+                  if (!painter.current) return;
+                  setBusy(true);
+                  try {
+                    await saveWeights(DIR, painter.current.collect());
+                    say(`веса сохранены в ${shown.model} (исходник — рядом, .orig.glb)`);
+                    setModelVer((v) => v + 1);
+                  } catch (e) {
+                    say(`веса: ${(e as Error).message}`, true);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+                onRestore={async () => {
+                  if (!confirm("Вернуть веса, какие были до первой правки?")) return;
+                  try {
+                    await saveWeights(DIR, null);
+                    say("исходные веса возвращены");
+                    setModelVer((v) => v + 1);
+                  } catch (e) {
+                    say(`веса: ${(e as Error).message}`, true);
+                  }
+                }}
+              />
+            )
           ) : rightTab === "layers" ? (
             <LayersPanel
               clip={clip}

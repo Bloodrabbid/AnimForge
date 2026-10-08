@@ -6,6 +6,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { ViewHelper } from "three/examples/jsm/helpers/ViewHelper.js";
 import { posePartsAt, type Clip, type Project, type Rig } from "../../../packages/core/src/index.ts";
+import { WeightPainter, type Brush, type SkinPart } from "./weightPaint.ts";
 
 export type ViewCmd = { kind: "fit" | "front" | "side" | "top"; n: number };
 
@@ -20,6 +21,12 @@ interface Props {
   wireframe: boolean;
   showFloor: boolean;
   view: ViewCmd;
+  /** режим весов: тепловая карта выбранной кости и кисть (Alt или правая кнопка — камера) */
+  weightMode?: boolean;
+  brush?: Brush;
+  onPainter?(p: WeightPainter | null): void;
+  onStroke?(strokes: number): void;
+  onPickBone?(bone: string): void;
   onStatus(msg: string, error?: boolean): void;
 }
 
@@ -31,6 +38,8 @@ interface Loaded {
   size: number;
   center: THREE.Vector3;
   minY: number;
+  painter: WeightPainter;
+  nameOf: Map<THREE.Object3D, string>;
 }
 
 export function Viewport(props: Props) {
@@ -47,6 +56,7 @@ export function Viewport(props: Props) {
     grid: THREE.GridHelper;
   } | null>(null);
   const loaded = useRef<Loaded | null>(null);
+  const recolor = useRef(true); // новая модель — тепловую карту пересчитать
 
   // сцена, камера, цикл отрисовки — один раз
   useEffect(() => {
@@ -97,6 +107,62 @@ export function Viewport(props: Props) {
     };
     renderer.domElement.addEventListener("pointerup", onPointerUp);
 
+    // кисть весов: перехватываем левую кнопку раньше OrbitControls (захват у цели срабатывает первым)
+    const ray = new THREE.Raycaster();
+    const ndc = new THREE.Vector2();
+    let painting = false;
+    const hitAt = (e: PointerEvent) => {
+      const m = loaded.current;
+      if (!m) return undefined;
+      const r = renderer.domElement.getBoundingClientRect();
+      ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+      ray.setFromCamera(ndc, camera);
+      return ray.intersectObjects(m.painter.parts.map((p) => p.mesh), false)[0];
+    };
+    const dab = (e: PointerEvent) => {
+      const m = loaded.current, p = live.current;
+      const bone = p.selectedBone ? m?.bones.get(p.selectedBone)?.obj : undefined;
+      const h = hitAt(e);
+      if (!m || !bone || !h || !p.brush) return;
+      const parent = (bone.parent as THREE.Bone)?.isBone ? bone.parent! : undefined;
+      m.painter.dab(h.point, bone, parent, p.brush, m.size);
+    };
+    const down = (e: PointerEvent) => {
+      const p = live.current, m = loaded.current;
+      if (!p.weightMode || !m || e.button !== 0 || e.altKey) return;
+      const h = hitAt(e);
+      if (!h) return; // мимо модели — крутим камеру
+      e.stopImmediatePropagation();
+      if (e.metaKey || e.ctrlKey || e.shiftKey || !p.selectedBone) {
+        const b = m.painter.boneAt(h);
+        const name = b ? m.nameOf.get(b) : undefined;
+        if (name) p.onPickBone?.(name);
+        return;
+      }
+      painting = true;
+      try {
+        renderer.domElement.setPointerCapture(e.pointerId);
+      } catch {
+        /* синтетическое событие без настоящего указателя */
+      }
+      m.painter.beginStroke();
+      dab(e);
+    };
+    let pending: PointerEvent | null = null;
+    const move = (e: PointerEvent) => {
+      if (!painting) return;
+      if (!pending) requestAnimationFrame(() => pending && (dab(pending), (pending = null)));
+      pending = e;
+    };
+    const up = () => {
+      if (!painting) return;
+      painting = false;
+      live.current.onStroke?.(loaded.current?.painter.strokes ?? 0);
+    };
+    renderer.domElement.addEventListener("pointerdown", down, { capture: true });
+    renderer.domElement.addEventListener("pointermove", move);
+    renderer.domElement.addEventListener("pointerup", up);
+
     // маркер выбранной кости: шарик в суставе и отрезок до дочерней кости, поверх меша
     const marker = new THREE.Mesh(
       new THREE.SphereGeometry(1, 16, 12),
@@ -120,6 +186,7 @@ export function Viewport(props: Props) {
 
     const a = new THREE.Vector3(), b = new THREE.Vector3();
     const clock = new THREE.Clock();
+    let lastSel = "";
     let raf = 0;
     const frame = () => {
       raf = requestAnimationFrame(frame);
@@ -140,6 +207,10 @@ export function Viewport(props: Props) {
         m.root.updateMatrixWorld(true);
         m.helper.visible = p.showSkeleton;
         for (const mat of m.materials) (mat as THREE.MeshStandardMaterial).wireframe = p.wireframe;
+        m.painter.setActive(!!p.weightMode);
+        const selKey = p.weightMode ? `${p.selectedBone}` : "";
+        if (p.weightMode && (selKey !== lastSel || recolor.current)) (recolor.current = false), m.painter.recolor(p.selectedBone ? m.bones.get(p.selectedBone)?.obj : undefined);
+        lastSel = selKey;
         ground.visible = grid.visible = p.showFloor;
 
         const sel = p.selectedBone ? m.bones.get(p.selectedBone) : undefined;
@@ -169,6 +240,9 @@ export function Viewport(props: Props) {
       cancelAnimationFrame(raf);
       ro.disconnect();
       renderer.domElement.removeEventListener("pointerup", onPointerUp);
+      renderer.domElement.removeEventListener("pointerdown", down, { capture: true });
+      renderer.domElement.removeEventListener("pointermove", move);
+      renderer.domElement.removeEventListener("pointerup", up);
       gizmo.dispose();
       controls.dispose();
       renderer.dispose();
@@ -201,6 +275,17 @@ export function Viewport(props: Props) {
           const obj = root.getObjectByName(THREE.PropertyBinding.sanitizeNodeName(n.name));
           if (obj) bones.set(n.name, { obj, rest: obj.quaternion.clone(), restPos: obj.position.clone(), restScale: obj.scale.clone() });
         }
+        // части кожи для весов: какой меш и примитив glb за каким SkinnedMesh (GLTFLoader помнит в associations)
+        const parts: SkinPart[] = [];
+        root.traverse((o) => {
+          const sm = o as THREE.SkinnedMesh;
+          if (!sm.isSkinnedMesh) return;
+          const a = gltf.parser.associations.get(sm) as { meshes?: number; primitives?: number } | undefined;
+          if (a?.meshes == null) return;
+          parts.push({ mesh: sm, meshIndex: a.meshes, primitive: a.primitives ?? 0, material: sm.material });
+        });
+        const painter = new WeightPainter(parts);
+        const nameOf = new Map<THREE.Object3D, string>([...bones].map(([n, b]) => [b.obj, n]));
         const helper = new THREE.SkeletonHelper(root);
         (helper.material as THREE.LineBasicMaterial).depthTest = false;
         helper.renderOrder = 5;
@@ -222,7 +307,9 @@ export function Viewport(props: Props) {
         s.sun.position.copy(center).add(new THREE.Vector3(0.5, 1, 0.6).multiplyScalar(size * 2));
         s.sun.target.position.copy(center);
         s.scene.add(root, helper);
-        loaded.current = { root, bones, helper, materials, size, center, minY: box.min.y };
+        loaded.current = { root, bones, helper, materials, size, center, minY: box.min.y, painter, nameOf };
+        recolor.current = true;
+        live.current.onPainter?.(painter);
         aim("fit");
         document.body.dataset.modelLoaded = "1";
       },
@@ -234,6 +321,7 @@ export function Viewport(props: Props) {
       const m = loaded.current;
       if (m) s.scene.remove(m.root, m.helper);
       loaded.current = null;
+      live.current.onPainter?.(null);
     };
   }, [props.modelUrl]);
 

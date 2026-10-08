@@ -1,6 +1,7 @@
 // Dev-сервер веб-интерфейса AnimForge: Vite (страница) + маленький API поверх тех же адаптеров, что у CLI.
 // Логики анимации здесь нет: проект читается через loadCtx, любое действие — call() из packages/cli/src/node.ts.
-import { createReadStream, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, watch, writeFileSync, type FSWatcher } from "node:fs";
+import { copyFileSync, createReadStream, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, watch, writeFileSync, type FSWatcher } from "node:fs";
+import { NodeIO } from "@gltf-transform/core";
 import { tmpdir } from "node:os";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -144,6 +145,42 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
+  }
+  if (req.method === "POST" && path === "/api/weights") {
+    // веса кожи из редактора: для каждого примитива — индексы костей и веса по 4 на вершину (порядок вершин и
+    // костей — как в glb: GLTFLoader их не переставляет). Первая запись сохраняет исходник рядом: <модель>.orig.glb
+    const body = await readBody(req);
+    const dir = projectDir(body.dir);
+    const project = JSON.parse(readFileSync(projectFile(dir), "utf8"));
+    const file = resolve(dir, project.model);
+    const orig = file.replace(/\.glb$/i, ".orig.glb");
+    if (body.restore) {
+      if (!existsSync(orig)) throw new HttpError(400, "исходных весов нет — модель ещё не правили");
+      await serial(async () => copyFileSync(orig, file));
+      return sendJson(res, 200, { ok: true, restored: true });
+    }
+    const io = new NodeIO();
+    const result = await serial(async () => {
+      const doc = await io.read(file);
+      const meshes = doc.getRoot().listMeshes();
+      const buf = doc.getRoot().listBuffers()[0];
+      let changed = 0;
+      for (const part of body.parts ?? []) {
+        const prim = meshes[part.mesh]?.listPrimitives()[part.primitive];
+        if (!prim) throw new HttpError(400, `нет примитива ${part.mesh}/${part.primitive}`);
+        const n = prim.getAttribute("POSITION")!.getCount();
+        if (part.joints.length !== n * 4 || part.weights.length !== n * 4) throw new HttpError(400, `${part.mesh}/${part.primitive}: ждали ${n * 4} значений`);
+        const old = [prim.getAttribute("JOINTS_0"), prim.getAttribute("WEIGHTS_0")];
+        prim.setAttribute("JOINTS_0", doc.createAccessor().setType("VEC4").setBuffer(buf).setArray(new Uint16Array(part.joints)));
+        prim.setAttribute("WEIGHTS_0", doc.createAccessor().setType("VEC4").setBuffer(buf).setArray(new Float32Array(part.weights)));
+        for (const a of old) if (a && a.listParents().every((x) => x === doc.getRoot())) a.dispose(); // старые веса больше никому не нужны
+        changed++;
+      }
+      if (!existsSync(orig)) copyFileSync(file, orig);
+      await io.write(file, doc);
+      return changed;
+    });
+    return sendJson(res, 200, { ok: true, parts: result });
   }
   if (req.method === "GET" && path === "/api/library") {
     // пресеты с происхождением и что нужно рецепту от скелета: роли → цепочки
