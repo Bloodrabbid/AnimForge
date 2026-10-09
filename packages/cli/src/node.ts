@@ -7,6 +7,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { COMMANDS, Clip, type LibPreset, smoothJointWeights, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectFins, detectForward, detectMultiLeg, detectWings, detectQuadruped, detectRig, emptyProject, frameTimes, posePartsAt, readSkeleton, runCommand, samplePreset, suggestAlign, writeClips } from "../../core/src/index.ts";
 import { loadSkinScene, restVerts, skinFrame, skinTopology } from "./skin.ts";
+import { recipeVectors } from "./recipe-vectors.ts";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 export const GODOT = process.env.GODOT ?? "/Applications/Godot.app/Contents/MacOS/Godot";
@@ -66,6 +67,8 @@ export async function exportGlb(ctx: Ctx & { dir: string }, out: string) {
       return { t, rotations: Object.fromEntries(pose.rot), positions: Object.fromEntries(pose.pos), scales: Object.fromEntries(pose.scl) };
     }),
   }));
+  // живые рецепты: аддон Godot считает позу сам (AnimForgeLive) — ему нужны скелет, цепочки, пределы и слои клипов
+  writeFileSync(out.replace(/\.glb$/, ".af.json"), JSON.stringify((await import("./live.ts")).liveData(ctx)));
   writeFileSync(out.replace(/\.glb$/, ".samples.json"), JSON.stringify(samples.filter((s) => report.find((r) => r.clip === s.clip)!.bones > 0), null, 1));
   // события — отдельным файлом рядом с glb: аддон Godot превращает их в вызовы методов (AnimForge.attach_events)
   const events = Object.fromEntries(ctx.project.clips.map((c) => [c.name, clipEvents(c).map(({ t, name }) => ({ t, name }))]).filter(([, e]) => (e as unknown[]).length));
@@ -549,6 +552,25 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
       return { ok: lines.some((l) => l.includes("TWEENS_OK")), presets: Object.keys(samples).length, synced: sync.copied, godot: lines };
     },
   },
+  "recipes.verify": {
+    help: "Сверка рецептов аддона Godot (live/af_recipes.gd) с ядром без окна: evaluate, events и length по всем рецептам, пресетам и вариантам enum.",
+    args: {},
+    async run() {
+      const tmp = mkdtempSync(join(tmpdir(), "af-rc-"));
+      const file = join(tmp, "vectors.json");
+      writeFileSync(file, JSON.stringify(recipeVectors()));
+      let log = "";
+      try {
+        log = execFileSync(GODOT, ["--headless", "--path", join(ROOT, "godot/sandbox"), "--script", "res://tests/recipes_verify.gd", "--", file], { encoding: "utf8", timeout: 180_000, maxBuffer: 64 << 20, stdio: ["ignore", "pipe", "pipe"] });
+      } catch (e: any) {
+        log = String(e.stdout ?? "") + String(e.stderr ?? "");
+      }
+      rmSync(tmp, { recursive: true, force: true });
+      const lines = log.split("\n").filter((l) => /RECIPE|ERROR|error/.test(l));
+      const recipes = Object.fromEntries(lines.flatMap((l) => { const m = /^RECIPE (\S+) (\S+)/.exec(l); return m ? [[m[1], Number(m[2])]] : []; }));
+      return { ok: lines.some((l) => l.includes("RECIPES_OK")), recipes, godot: lines };
+    },
+  },
   sheet: {
     help: "Глаза агента: отрендерить клип в лист кадров PNG через Blender.",
     args: {
@@ -590,6 +612,12 @@ NODE_COMMANDS.make = {
     send: { type: "boolean", help: "прислать видео и glb в Telegram (harbor-send)" },
   },
   run: async (dir, a) => (await import("./make.ts")).make(dir, a),
+};
+
+NODE_COMMANDS["live.verify"] = {
+  help: "Сверка живого вычисления позы в Godot (addons/animforge/live/af_core.gd) с ядром: все клипы демо-проектов (или --dirs), кость в кость.",
+  args: { dirs: { type: "string", help: "папки проектов через запятую (по умолчанию все projects/*)" } },
+  run: async (_dir, a) => (await import("./live.ts")).liveVerify(a.dirs ? String(a.dirs).split(",").map((d: string) => resolve(d.trim())) : undefined),
 };
 
 NODE_COMMANDS["weights.smooth"] = {

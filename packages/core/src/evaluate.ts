@@ -484,7 +484,10 @@ function hingeIK(acc: Acc, rig: Rig, project: Project, chain: number[], eff: (w:
   const ax = vnorm(vsub(P, H));
   const flat = (v: Vec3) => vsub(v, vscale(ax, vdot(v, ax)));
   const kNow = flat(qrot(q2, vsub(K, H))), kWas = flat(vsub(K, H));
-  if (Math.hypot(...kNow) > 1e-9 && Math.hypot(...kWas) > 1e-9) {
+  // локоть почти на линии (рука вытянута к недостижимой цели, сгиб меньше ≈0.6°) — направления у него нет,
+  // кручение не трогаем: иначе его задают последние разряды, и в ядре и в Godot (float32) плечо крутится по-разному
+  const off = 1e-2 * Math.hypot(...vsub(K, H));
+  if (Math.hypot(...kNow) > off && Math.hypot(...kWas) > off) {
     const ang = Math.acos(Math.max(-1, Math.min(1, vdot(vnorm(kNow), vnorm(kWas)))));
     const s = Math.sign(vdot(vcross(kNow, kWas), ax)) || 1;
     q2 = qmul(qaxis(ax, s * ang), q2);
@@ -532,14 +535,17 @@ function solveLimited(acc: Acc, rig: Rig, project: Project, chain: number[], fi:
     if (hingeSeed) seeds.unshift(HINGE);
   }
   let best: Quat[] | null = null, bestErr = Infinity;
+  // ничья — с допуском от длины цепочки: недостижимую цель все начала дают с одной ошибкой (рука вытянута,
+  // отличается лишь кручение), и выбор по шуму последних разрядов давал бы разную позу в ядре и в Godot (float32)
+  const span = Math.max(1e-9, Math.hypot(...vsub(rig.worldT[fi], rig.worldT[chain[0]])));
   for (const sd of seeds) {
     names.forEach((n, k) => acc.rot.set(n, start[k]));
     if (sd === HINGE) hingeIK(acc, rig, project, chain, eff, P, hingeSeed!);
     else if (sd !== null) twoBoneIK(acc, rig, project, tip, P, sd, 1, end);
     ccd(acc, rig, project, chain, eff, P);
     const e = err();
-    if (e < bestErr - 1e-9) (bestErr = e), (best = names.map((n) => acc.rot.get(n) ?? QI));
-    if (bestErr < 1e-5 * Math.max(1e-9, Math.hypot(...vsub(rig.worldT[fi], rig.worldT[chain[0]])))) break;
+    if (e < bestErr - 1e-6 * span) (bestErr = e), (best = names.map((n) => acc.rot.get(n) ?? QI));
+    if (bestErr < 1e-5 * span) break;
   }
   names.forEach((n, k) => acc.rot.set(n, best![k]));
 }
@@ -622,7 +628,8 @@ function twoBoneIK(acc: Acc, rig: Rig, project: Project, tip: string, P: Vec3, p
     const K2 = vadd(H, qrot(q2, vsub(K, H)));
     const flat = (v: Vec3) => vsub(v, vscale(ax, vdot(v, ax)));
     const kv = flat(vsub(K2, H)), pv = flat(vsub(pole, H));
-    if (Math.hypot(...kv) > 1e-9 && Math.hypot(...pv) > 1e-9) {
+    // колено на линии (нога вытянута) — сгиб никуда не смотрит, полюс не крутит
+    if (Math.hypot(...kv) > 1e-2 * a && Math.hypot(...pv) > 1e-9) {
       const s = Math.sign(vdot(vcross(kv, pv), ax)) || 1;
       q2 = qmul(qaxis(ax, s * angle(kv, pv)), q2);
     }

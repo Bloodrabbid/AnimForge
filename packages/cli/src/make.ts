@@ -170,8 +170,10 @@ export async function publish(dir: string, out?: string) {
     mkdirSync(ctx.project.godot, { recursive: true });
     godot = join(ctx.project.godot, basename(glb));
     copyFileSync(glb, godot);
-    const ev = glb.replace(/\.glb$/, ".events.json");
-    if (existsSync(ev)) copyFileSync(ev, join(ctx.project.godot, basename(ev)));
+    for (const ext of [".events.json", ".af.json"]) {
+      const f = glb.replace(/\.glb$/, ext);
+      if (existsSync(f)) copyFileSync(f, join(ctx.project.godot, basename(f)));
+    }
     if (!godotRoot(ctx.project.godot)) notes.push(`${ctx.project.godot} не внутри проекта Godot (нет project.godot выше) — файл положен, но игра его не увидит`);
   }
   return { glb, godot, notes };
