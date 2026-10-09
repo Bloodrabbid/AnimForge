@@ -7,7 +7,8 @@
 # Игровые связки:
 #   match_speed + body (CharacterBody3D или любой Node3D) — шаг под настоящую скорость, ноги не скользят;
 #   terrain — стопы на рельеф лучами вниз, тело опускается к нижней опоре;
-#   look_target — взгляд (aim клипа или шея с головой) на узел; set_target(id, точка) — цель любого констрейна.
+#   look_target — взгляд (aim клипа или шея с головой) на узел; set_target(id, точка) — цель любого констрейна;
+#   live_secondary — уши, хвост, колпак раскачивает настоящее движение персонажа (разворот, остановка), а не запись клипа.
 @tool
 class_name AnimForgeLive
 extends SkeletonModifier3D
@@ -48,6 +49,8 @@ var clip := "":
 	set(v):
 		look_target = v
 		_rebuild()
+## Вторичная динамика от настоящего движения в мире (иначе — записанная по клипу, как в glb).
+@export var live_secondary := true
 @export_range(0.0, 1.0, 0.05) var look_weight := 0.8:
 	set(v):
 		look_weight = v
@@ -65,6 +68,9 @@ var _K := Transform3D()  # координаты модели (ядра) → ло
 var _speed := -1.0  # естественная скорость клипа, ед. модели/с; −1 — не посчитана
 var _last_body_pos = null
 var _warned := {}
+var _sec := {}  # пружины вторичной динамики по цепочкам
+var _dt := 0.0
+var _sec_frame := -1
 
 
 func _ready() -> void:
@@ -220,6 +226,7 @@ func _body_speed(delta: float) -> float:
 
 
 func _process(delta: float) -> void:
+	_dt = delta
 	if not playing or _clip_eff.is_empty():
 		return
 	var dur: float = _clip_eff["duration"]
@@ -294,6 +301,12 @@ func _live_opts() -> Dictionary:
 				tg[c["id"]] = p
 	if not tg.is_empty():
 		o["targets"] = tg
+	if live_secondary:
+		# пружина шагает раз в кадр, даже если скелет обновился дважды
+		var frame := Engine.get_process_frames()
+		var dt := _dt if frame != _sec_frame else 0.0
+		_sec_frame = frame
+		o["secondary"] = func(acc, r, c): AFCore.live_secondary(acc, r, c, G, dt, _sec)
 	if terrain and is_inside_tree():
 		var space := get_world_3d().direct_space_state
 		var f := AFCore.body_frame(rig)

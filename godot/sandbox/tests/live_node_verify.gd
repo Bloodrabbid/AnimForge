@@ -101,6 +101,7 @@ func _run() -> void:
 	var after: Vector3 = (snap[sk2]["head"].basis * rest_b.inverse() * f_rest).normalized()
 	var want := (target.global_position - hp).normalized()
 	_check("взгляд: до цели %.0f°, было %.0f°" % [rad_to_deg(after.angle_to(want)), rad_to_deg(before.angle_to(want))], after.angle_to(want) < before.angle_to(want) - deg_to_rad(10))
+	_secondary()
 	print("LIVE_NODE_OK" if bad.is_empty() else "LIVE_NODE_FAIL " + ", ".join(bad))
 	quit()
 
@@ -109,3 +110,61 @@ func _check(what: String, ok: bool) -> void:
 	print("NODE %s %s" % ["ok" if ok else "BAD", what])
 	if not ok:
 		bad.append(what)
+
+
+## Вторичная динамика вживую (уши рабочего): на месте — сходится с записанной по клипу; разворот — уши отклоняются
+## и затухают; без движения — в покое.
+func _secondary() -> void:
+	var data = JSON.parse_string(FileAccess.get_file_as_string("res://demo/worker.af.json"))
+	var rig := AFCore.build_rig(data)
+	var walk: Dictionary = {}
+	for c in data["clips"]:
+		if c["name"] == "walk":
+			walk = c
+	var ear := "ear_l_1"
+	var dt := 1.0 / 120.0
+	var dur: float = walk["duration"]
+	var st := {}
+	var G := Transform3D.IDENTITY
+	var worst := 0.0
+	var amp := 0.0
+	var n := roundi(dur / dt)
+	for cyc in 6:
+		for k in n:
+			var t := k * dt
+			var live := AFCore.pose_parts_at(rig, walk, t, {"secondary": func(acc, r, c): AFCore.live_secondary(acc, r, c, G, dt, st)})
+			if cyc == 5 and k % 4 == 0:
+				var rec := AFCore.pose_parts_at(rig, walk, t)
+				var none := AFCore.pose_parts_at(rig, walk, t, {"secondary": func(acc, r, c): pass})
+				var a: Quaternion = live.rot.get(ear, rig.rest_r[rig.index[ear]])
+				var b: Quaternion = rec.rot.get(ear, rig.rest_r[rig.index[ear]])
+				var z: Quaternion = none.rot.get(ear, rig.rest_r[rig.index[ear]])
+				worst = maxf(worst, rad_to_deg(a.angle_to(b)))
+				amp = maxf(amp, rad_to_deg(b.angle_to(z)))
+	# у записи — центральные разности по клипу, у игры — назад по трём кадрам: совпадение до четверти размаха
+	_check("уши на месте как в записи: расхождение %.1f° при размахе %.1f°" % [worst, amp], amp > 3.0 and worst < amp * 0.25)
+
+	# неподвижная поза, персонаж разворачивается на месте 180°/с за 0.4 с и встаёт
+	var frozen := walk.duplicate(true)
+	var t0 := 0.0
+	var st2 := {}
+	var defl := func(Gx: Transform3D, step: float) -> float:
+		var live := AFCore.pose_parts_at(rig, frozen, t0, {"secondary": func(acc, r, c): AFCore.live_secondary(acc, r, c, Gx, step, st2)})
+		var none := AFCore.pose_parts_at(rig, frozen, t0, {"secondary": func(acc, r, c): pass})
+		var i: int = rig.index[ear]
+		return rad_to_deg(live.rot.get(ear, rig.rest_r[i]).angle_to(none.rot.get(ear, rig.rest_r[i])))
+	var yaw := 0.0
+	var calm := 0.0
+	for k in 240:
+		calm = defl.call(G, dt)
+	var peak := 0.0
+	for k in 300:
+		if k < 48:
+			yaw += deg_to_rad(180.0) * dt
+		var Gk := Transform3D(Basis(Vector3.UP, yaw), Vector3.ZERO)
+		var e: float = defl.call(Gk, dt)
+		if k < 120:
+			peak = maxf(peak, e)
+		calm = e
+	_check("разворот: уши отклонились на %.1f°" % peak, peak > 5.0)
+	_check("после разворота затухли: %.2f°" % calm, calm < 0.5)

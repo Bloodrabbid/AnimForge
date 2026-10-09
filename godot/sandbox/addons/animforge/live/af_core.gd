@@ -1137,11 +1137,81 @@ static func secondary_bones(rig: Rig, clip: Dictionary) -> Dictionary:
 	return out
 
 
+## Вторичная динамика вживую: та же пружина, что в secondary_curve, но раскачивает её настоящее движение в игре —
+## поворот и сдвиг персонажа в мире вместе с позой клипа. G — координаты модели → мир; dt — шаг кадра (0 — кадр
+## уже посчитан, только приложить); states — состояние пружин по цепочкам (переживает смену клипа).
+## Ускорения — по трём последним кадрам назад во времени (вперёд игра не знает), оси — родителя в последнем кадре.
+static func live_secondary(acc: Acc, rig: Rig, clip: Dictionary, G: Transform3D, dt: float, states: Dictionary) -> void:
+	var w := world_pose(rig, acc.parts())
+	var s := G.basis.get_scale().x
+	var Gq := G.basis.orthonormalized().get_rotation_quaternion()
+	for layer in clip["layers"]:
+		if not is_secondary(layer):
+			continue
+		var chain = rig.chains.get(layer["target"]["chain"])
+		if chain == null:
+			continue
+		var p := with_defaults(rig, layer["recipe"], layer.get("params", {}))
+		var i0: int = rig.index[chain[0]]
+		var par := rig.parent[i0]
+		var axes := chain_axes(rig, chain)
+		var last: int = rig.index[chain[chain.size() - 1]]
+		var L: float = maxf(0.03, (rig.world_t[last] - rig.world_t[i0]).length() + (0.1 if chain.size() == 1 else 0.0)) * p["length"]
+		var d: Vector3 = axes["roll"]
+		var w0: float = 2 * PI * p["hz"]
+		var key: String = layer["target"]["chain"]
+		if not states.has(key):
+			states[key] = {"x": [0.0, 0.0], "v": [0.0, 0.0], "h": []}
+		var st: Dictionary = states[key]
+		if dt > 0:
+			var Rm := w.R[par] * qinv(rig.world_r[par]) if par >= 0 else QI
+			var h: Array = st["h"]
+			h.append([Gq * Rm, (G * w.T[i0]) / s, dt])
+			if h.size() > 3:
+				h.pop_front()
+			var dr := [0.0, 0.0]
+			if h.size() == 3:
+				var f0 = h[0]
+				var f1 = h[1]
+				var f2 = h[2]
+				var da: float = f1[2]
+				var db: float = f2[2]
+				var inv := qinv(f2[0])
+				var om0 := qrot(inv, ang_vel(f0[0], f1[0], da))
+				var om1 := qrot(inv, ang_vel(f1[0], f2[0], db))
+				var alpha := (om1 - om0) / db
+				var A := qrot(inv, ((f2[1] - f1[1]) / db - (f1[1] - f0[1]) / da) / db)
+				var torque := -alpha - d.cross(A) / L
+				var g: float = (1 - p["inert"]) * p["gain"]
+				dr = [g * torque.dot(axes["lateral"]), g * torque.dot(axes["vertical"])]
+			# мелкими шагами, как в записи (1/240 с): полунеявный Эйлер устойчив и на 30 кадрах в секунду
+			var n := maxi(1, ceili(dt / DT))
+			var hh := dt / n
+			for k in n:
+				for j in 2:
+					st["v"][j] += (dr[j] - 2 * p["damping"] * w0 * st["v"][j] - w0 * w0 * st["x"][j]) * hh
+					st["x"][j] += st["v"][j] * hh
+		var lat: float = st["x"][0] / DEG
+		var ver: float = st["x"][1] / DEG
+		var sum := 0.0
+		for j in chain.size():
+			sum += float(j + 1) / chain.size()
+		var wl: float = layer.get("weight", 1.0) if layer.get("weight") != null else 1.0
+		for j in chain.size():
+			var share: float = (float(j + 1) / chain.size() / sum) * wl
+			acc.add(chain[j], "lateral", lat * share, func(): return axes)
+			acc.add(chain[j], "vertical", ver * share, func(): return axes)
+
+
 ## Полная поза в момент t (posePartsAt): локальные повороты, сдвиги и масштабы затронутых костей.
+## opts.secondary — Callable(acc, rig, clip): вторичная динамика из игры (live_secondary) вместо записанной по клипу.
 static func pose_parts_at(rig: Rig, clip: Dictionary, t: float, opts := {}) -> Parts:
 	var acc := primary(rig, clip, t, opts)
 	if clip["layers"].any(func(l): return is_secondary(l)):
-		add_secondary(acc, rig, clip, t)
+		if opts.has("secondary"):
+			opts["secondary"].call(acc, rig, clip)
+		else:
+			add_secondary(acc, rig, clip, t)
 		if not rig.limits.is_empty():
 			acc.apply_limits(secondary_bones(rig, clip))
 	var parts := acc.parts()
