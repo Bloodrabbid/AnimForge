@@ -4,6 +4,10 @@
 #   var live := AnimForgeLive.new(); live.data_file = "res://chars/baker.af.json"; skeleton.add_child(live)
 #   live.play("walk")
 # События рецептов (hit, whoosh, window_open…) — сигнал animforge_event(name, clip) и вызов того же метода у event_target.
+# Игровые связки:
+#   match_speed + body (CharacterBody3D или любой Node3D) — шаг под настоящую скорость, ноги не скользят;
+#   terrain — стопы на рельеф лучами вниз, тело опускается к нижней опоре;
+#   look_target — взгляд (aim клипа или шея с головой) на узел; set_target(id, точка) — цель любого констрейна.
 @tool
 class_name AnimForgeLive
 extends SkeletonModifier3D
@@ -27,6 +31,28 @@ var clip := "":
 ## Узел, у которого вызывается animforge_event(name, clip) (как у AnimForge.attach_events).
 @export var event_target: Node
 
+@export_group("Игра")
+## Шаг под скорость: клип идёт быстрее или медленнее так, чтобы опорная стопа стояла на месте.
+@export var match_speed := false
+## Чья скорость: velocity у CharacterBody3D, у остального — сдвиг за кадр. Без узла — move_speed из кода.
+@export var body: Node3D
+## Скорость персонажа, м/с (если body не задан).
+@export var move_speed := 0.0
+## Стопы на рельеф: лучи вниз от каждой стопы.
+@export var terrain := false
+@export_flags_3d_physics var terrain_mask := 1
+## Насколько выше и ниже покоя искать пол, доля роста.
+@export_range(0.05, 2.0, 0.05) var terrain_reach := 0.5
+## Куда смотреть: aim-констрейны клипа, а если их нет — шея и голова.
+@export var look_target: Node3D:
+	set(v):
+		look_target = v
+		_rebuild()
+@export_range(0.0, 1.0, 0.05) var look_weight := 0.8:
+	set(v):
+		look_weight = v
+		_rebuild()
+
 var rig: AFCore.Rig
 var _data := {}
 var _clips := {}
@@ -34,7 +60,11 @@ var _clip_eff := {}
 var _events := []
 var _bones := {}  # имя кости ядра → индекс в Skeleton3D
 var _knobs := {}  # рецепт → {параметр: значение}: правка поверх слоёв клипа
-var _opts := {}
+var _targets := {}  # id констрейна → глобальная точка
+var _K := Transform3D()  # координаты модели (ядра) → локальные Skeleton3D
+var _speed := -1.0  # естественная скорость клипа, ед. модели/с; −1 — не посчитана
+var _last_body_pos = null
+var _warned := {}
 
 
 func _ready() -> void:
@@ -67,6 +97,7 @@ func _map_bones() -> void:
 	var sk := get_skeleton()
 	if sk == null or rig == null:
 		return
+	var anchor := -1
 	for i in rig.names.size():
 		if not rig.is_joint[i] and sk.find_bone(rig.names[i]) < 0:
 			continue
@@ -76,6 +107,12 @@ func _map_bones() -> void:
 			b = sk.find_bone(rig.names[i].validate_node_name())
 		if b >= 0:
 			_bones[rig.names[i]] = b
+			if anchor < 0:
+				anchor = i
+	# связь координат: кость в покое у ядра (мир модели) и у Godot (скелет) — одна и та же
+	if anchor >= 0:
+		var rt := Transform3D(Basis(rig.world_r[anchor]) * Basis.from_scale(rig.world_s[anchor]), rig.world_t[anchor])
+		_K = sk.get_bone_global_rest(_bones[rig.names[anchor]]) * rt.affine_inverse()
 
 
 func _notification(what: int) -> void:
@@ -85,7 +122,7 @@ func _notification(what: int) -> void:
 
 ## Клип с правками ручек: те же слои, параметры рецептов — с подставленными значениями.
 func _rebuild() -> void:
-	if not _clips.has(clip):
+	if rig == null or not _clips.has(clip):
 		_clip_eff = {}
 		_events = []
 		return
@@ -96,7 +133,22 @@ func _rebuild() -> void:
 			for k in _knobs[l["recipe"]]:
 				p[k] = _knobs[l["recipe"]][k]
 			l["params"] = p
+	# взгляд без aim в клипе — свой констрейн на шею и голову (цель придёт из look_target)
+	if look_target != null and not _clip_eff.get("constraints", []).any(func(c): return c["type"] == "aim"):
+		var bones := []
+		for ch in ["neck", "head"]:
+			for b in rig.chains.get(ch, []):
+				if not bones.has(b):
+					bones.append(b)
+		if not bones.is_empty():
+			var cons: Array = _clip_eff.get("constraints", []) if _clip_eff.get("constraints") != null else []
+			cons.append({"id": "_look", "type": "aim", "bones": bones, "weight": look_weight, "target": {"pos": [0, 0, 0]}})
+			_clip_eff["constraints"] = cons
+	for c in _clip_eff.get("constraints", []) if _clip_eff.get("constraints") != null else []:
+		if c["type"] == "aim" and look_target != null:
+			c["weight"] = look_weight
 	_events = AFCore.clip_events(rig, _clip_eff)
+	_speed = -1.0
 
 
 func play(name: String, from := 0.0) -> void:
@@ -126,12 +178,61 @@ func get_knob(recipe: String, param: String):
 	return null
 
 
+## Цель констрейна id (IK руки, взгляд) — глобальная точка; null — снова цель из клипа.
+func set_target(id: String, point) -> void:
+	if point == null:
+		_targets.erase(id)
+	else:
+		_targets[id] = point
+
+
+## Естественная скорость клипа в мире, м/с (с какой надо идти, чтобы ноги не скользили); 0 — у клипа её нет.
+func natural_speed() -> float:
+	if _clip_eff.is_empty():
+		return 0.0
+	if _speed < 0:
+		_speed = AFCore.natural_speed(rig, _clip_eff)
+	return _speed * _model_scale()
+
+
+func _to_global() -> Transform3D:
+	var sk := get_skeleton()
+	return sk.global_transform * _K if sk else _K
+
+
+func _model_scale() -> float:
+	return (_to_global().basis * AFCore.body_frame(rig).forward).length() if rig else 1.0
+
+
+func _body_speed(delta: float) -> float:
+	if body == null:
+		return move_speed
+	if body is CharacterBody3D:
+		var v: Vector3 = body.velocity
+		return Vector3(v.x, 0, v.z).length()
+	var p := body.global_position
+	var s := 0.0
+	if _last_body_pos != null and delta > 0:
+		var d: Vector3 = p - _last_body_pos
+		s = Vector3(d.x, 0, d.z).length() / delta
+	_last_body_pos = p
+	return s
+
+
 func _process(delta: float) -> void:
 	if not playing or _clip_eff.is_empty():
 		return
 	var dur: float = _clip_eff["duration"]
 	var t0 := time
-	var t1 := time + delta * speed_scale
+	var rate := speed_scale
+	if match_speed and _clip_eff["loop"]:
+		var nat := natural_speed()
+		if nat > 0:
+			rate = speed_scale * _body_speed(delta) / nat
+		elif not _warned.has(clip) and _clip_eff.get("ground") != null:
+			_warned[clip] = true
+			push_warning("AnimForgeLive: у клипа «%s» опорная стопа не уезжает назад — подгонять шаг под скорость нечем (походку надо чинить)" % clip)
+	var t1 := time + delta * rate
 	_fire(t0, t1, dur)
 	if _clip_eff["loop"]:
 		time = fposmod(t1, dur) if dur > 0 else 0.0
@@ -169,13 +270,41 @@ func _process_modification() -> void:
 		return
 	if _bones.is_empty():
 		_map_bones()
-	var parts := AFCore.pose_parts_at(rig, _clip_eff, time, _opts)
+	var parts := AFCore.pose_parts_at(rig, _clip_eff, time, _live_opts())
 	for name in _bones:
 		var b: int = _bones[name]
 		var i: int = rig.index[name]
 		sk.set_bone_pose_rotation(b, parts.rot.get(name, rig.rest_r[i]))
 		sk.set_bone_pose_position(b, parts.pos.get(name, rig.rest_t[i]))
 		sk.set_bone_pose_scale(b, parts.scl.get(name, rig.rest_s[i]))
+
+
+## Связки для ядра — в координатах модели: рельеф лучами и цели констрейнов.
+func _live_opts() -> Dictionary:
+	var o := {}
+	var G := _to_global()
+	var inv := G.affine_inverse()
+	var tg := {}
+	for id in _targets:
+		tg[id] = inv * _targets[id]
+	if look_target != null:
+		var p := inv * look_target.global_position
+		for c in _clip_eff.get("constraints", []) if _clip_eff.get("constraints") != null else []:
+			if c["type"] == "aim":
+				tg[c["id"]] = p
+	if not tg.is_empty():
+		o["targets"] = tg
+	if terrain and is_inside_tree():
+		var space := get_world_3d().direct_space_state
+		var f := AFCore.body_frame(rig)
+		var reach: float = terrain_reach * rig.heights[AFCore.SIZE]
+		o["floor"] = func(_bone: String, F: Vector3, rest: float) -> float:
+			# луч вниз через стопу: от покоя + reach до покоя − reach (в мире)
+			var flat := F - f.up * (F.dot(f.up) - rest)
+			var q := PhysicsRayQueryParameters3D.create(G * (flat + f.up * reach), G * (flat - f.up * reach), terrain_mask)
+			var hit := space.intersect_ray(q)
+			return (inv * hit["position"]).dot(f.up) if not hit.is_empty() else rest
+	return o
 
 
 # ── ручки в инспекторе: main-параметры рецептов клипа ─────────────────────────────────────────────────────────

@@ -407,7 +407,8 @@ static func with_defaults(rig: Rig, recipe: String, params: Dictionary) -> Dicti
 
 
 # ── основные слои и пол (primary) ──────────────────────────────────────────────────────────────────────────────
-## opts: { "floor": Callable(bone: String, rest_height: float) -> float } — высота пола под стопой (рельеф в игре).
+## opts: { "floor": Callable(bone: String, F: Vector3, rest: float) -> float — высота пола под стопой (рельеф в игре),
+##         "targets": { id констрейна: Vector3 } — живые цели } — всё в координатах модели, как LiveOpts ядра.
 static func primary(rig: Rig, clip: Dictionary, t: float, opts := {}) -> Acc:
 	var acc := Acc.new(rig)
 	if not rig.align.is_empty():
@@ -453,16 +454,18 @@ static func primary(rig: Rig, clip: Dictionary, t: float, opts := {}) -> Acc:
 		acc.apply_limits()
 	var g = clip.get("ground")
 	if g != null and not g["bones"].is_empty():
+		# рельеф: пол под каждой стопой выше или ниже покоя на off; тело опускается к самой низкой опоре
+		var off = terrain(acc, rig, g, opts["floor"]) if opts.has("floor") else null
 		if g["mode"] == "contact":
-			ground(acc, rig, g)
+			ground(acc, rig, g, off)
 		if g.get("ik", false):
 			for b in g["bones"]:
-				foot_ik(acc, rig, b, opts)
+				foot_ik(acc, rig, b, off.get(b, 0.0) if off != null else 0.0)
 		if g["mode"] == "floor":
-			ground(acc, rig, g)
+			ground(acc, rig, g, off)
 		if g.get("flat", false):
 			for b in g["bones"]:
-				flat_foot(acc, rig, b)
+				flat_foot(acc, rig, b, off.get(b, 0.0) if off != null else 0.0)
 	var cons = clip.get("constraints")
 	if cons != null and cons.any(func(c): return not c.get("muted", false)):
 		for c in cons:
@@ -548,7 +551,7 @@ static func align_rest(acc: Acc, rig: Rig) -> void:
 		acc.turn(chain[0], qinv(w) * q * w)
 
 
-static func ground(acc: Acc, rig: Rig, g: Dictionary) -> void:
+static func ground(acc: Acc, rig: Rig, g: Dictionary, off = null) -> void:
 	var idx := []
 	for b in g["bones"]:
 		if rig.index.has(b):
@@ -561,7 +564,7 @@ static func ground(acc: Acc, rig: Rig, g: Dictionary) -> void:
 	var now := INF
 	for i in idx:
 		rest = minf(rest, rig.world_t[i].dot(upv))
-		now = minf(now, w.T[i].dot(upv))
+		now = minf(now, w.T[i].dot(upv) - (off.get(rig.names[i], 0.0) if off != null else 0.0))
 	var d := rest - now
 	if g["mode"] == "floor":
 		d = maxf(0.0, d)
@@ -575,8 +578,8 @@ static func _angle(x: Vector3, y: Vector3) -> float:
 	return acos(clampf(vnorm(x).dot(vnorm(y)), -1.0, 1.0))
 
 
-## Ступня не уходит под пол. opts.floor — высота пола под ней в игре (рельеф); без него — высота покоя.
-static func foot_ik(acc: Acc, rig: Rig, foot: String, opts := {}) -> void:
+## Ступня не уходит под пол; off — насколько пол под ней выше покоя (рельеф).
+static func foot_ik(acc: Acc, rig: Rig, foot: String, off := 0.0) -> void:
 	if not rig.index.has(foot):
 		return
 	var fi: int = rig.index[foot]
@@ -589,9 +592,7 @@ static func foot_ik(acc: Acc, rig: Rig, foot: String, opts := {}) -> void:
 	var H := w.T[ti]
 	var K := w.T[si]
 	var F := w.T[fi]
-	var floor_h := rig.world_t[fi].dot(f.up)
-	if opts.has("floor"):
-		floor_h = opts["floor"].call(foot, floor_h)
+	var floor_h := rig.world_t[fi].dot(f.up) + off
 	var h := F.dot(f.up)
 	if h >= floor_h - 1e-9:
 		return
@@ -614,7 +615,7 @@ static func foot_ik(acc: Acc, rig: Rig, foot: String, opts := {}) -> void:
 	acc.set_local(rig.names[si], qnorm(qinv(w.R[ti]) * (q1 * w.R[si])))
 
 
-static func flat_foot(acc: Acc, rig: Rig, foot: String) -> void:
+static func flat_foot(acc: Acc, rig: Rig, foot: String, off := 0.0) -> void:
 	if not rig.index.has(foot):
 		return
 	var fi: int = rig.index[foot]
@@ -623,13 +624,73 @@ static func flat_foot(acc: Acc, rig: Rig, foot: String) -> void:
 	var pf := rig.parent[fi]
 	var hip := rig.parent[pf] if pf >= 0 else -1
 	var leg := maxf(1e-6, rig.world_t[hip].dot(upv) - rig.world_t[fi].dot(upv)) if hip >= 0 else 1.0
-	var lift := (w.T[fi].dot(upv) - rig.world_t[fi].dot(upv)) / leg
+	var lift := (w.T[fi].dot(upv) - rig.world_t[fi].dot(upv) - off) / leg
 	var k := 1.0 if lift <= 0.02 else (0.5 if lift >= 0.06 else 1.0 - (0.5 * (lift - 0.02)) / 0.04)
 	var local_up := qrot(qinv(rig.world_r[fi]), upv)
 	var now_up := qrot(w.R[fi], local_up)
 	var fix_q := qscale(qbetween(now_up, upv), k)
 	var Rp := w.R[pf] if pf >= 0 else QI
 	acc.set_local(rig.names[fi], qnorm(qinv(Rp) * (fix_q * w.R[fi])))
+
+
+## Рельеф: насколько пол под каждой стопой выше покоя; тело сразу сдвигается к самой низкой опоре.
+static func terrain(acc: Acc, rig: Rig, g: Dictionary, floor_fn: Callable) -> Dictionary:
+	var upv := body_frame(rig).up
+	var w := world_pose(rig, acc.parts())
+	var off := {}
+	var first := -1
+	for b in g["bones"]:
+		if not rig.index.has(b):
+			continue
+		var i: int = rig.index[b]
+		if first < 0:
+			first = i
+		var rest := rig.world_t[i].dot(upv)
+		off[b] = float(floor_fn.call(b, w.T[i], rest)) - rest
+	if off.is_empty():
+		return off
+	var d: float = off.values().min()
+	if absf(d) > 1e-9:
+		acc.add(rig.names[skeleton_root(rig, first)], "move_up", d, func(): return {"lateral": upv, "vertical": upv, "roll": upv})
+	return off
+
+
+## Естественная скорость походки (naturalSpeed ядра), единиц модели в секунду; 0 — подгонять нечего.
+static func natural_speed(rig: Rig, clip: Dictionary, steps := 96) -> float:
+	var g = clip.get("ground")
+	if not clip["loop"] or g == null or g["bones"].is_empty() or clip["duration"] <= 0:
+		return 0.0
+	var f := body_frame(rig)
+	var idx := []
+	for b in g["bones"]:
+		if rig.index.has(b):
+			idx.append(rig.index[b])
+	if idx.is_empty():
+		return 0.0
+	var size: float = rig.heights.get(SIZE, 1.0)
+	var dt: float = clip["duration"] / steps
+	var P := []
+	var hmin := INF
+	for k in steps + 1:
+		var w := world_pose(rig, pose_parts_at(rig, clip, k * dt))
+		var row := []
+		for i in idx:
+			row.append(w.T[i])
+			hmin = minf(hmin, w.T[i].dot(f.up))
+		P.append(row)
+	var v := []
+	for k in steps:
+		var j := 0
+		for jj in idx.size():
+			if P[k][jj].dot(f.up) < P[k][j].dot(f.up):
+				j = jj
+		if P[k][j].dot(f.up) - hmin > 0.02 * size:
+			continue
+		v.append(-(P[k + 1][j] - P[k][j]).dot(f.forward) / dt)
+	if v.is_empty():
+		return 0.0
+	v.sort()
+	return maxf(0.0, v[v.size() / 2])
 
 
 # ── констрейны: IK, взгляд, копия поворота ────────────────────────────────────────────────────────────────────

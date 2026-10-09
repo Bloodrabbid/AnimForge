@@ -227,8 +227,17 @@ function restHeights(rig: Rig, project: Project): Map<string, number> {
 }
 const heightCache = new WeakMap<Rig, Map<string, number>>();
 
+/** Живые связки из игры (аддон Godot): рельеф под стопами и цели констрейнов. Ядро считает с ними так же, как аддон,
+ * поэтому сверка с Godot проверяет и их. */
+export interface LiveOpts {
+  /** высота пола (по up, в координатах модели) под стопой bone, стоящей сейчас в F; rest — её высота в позе покоя */
+  floor?: (bone: string, F: Vec3, rest: number) => number;
+  /** цели констрейнов по id — точка в координатах модели (взгляд на игрока, рука к рычагу) */
+  targets?: Record<string, Vec3>;
+}
+
 /** Основные слои (без вторичной динамики) и постановка на пол. */
-function primary(project: Project, rig: Rig, clip: Clip, t: number): Acc {
+function primary(project: Project, rig: Rig, clip: Clip, t: number, opts: LiveOpts = {}): Acc {
   const acc = new Acc(rig, project);
   let heights = heightCache.get(rig);
   if (!heights) heightCache.set(rig, (heights = restHeights(rig, project)));
@@ -266,14 +275,17 @@ function primary(project: Project, rig: Rig, clip: Clip, t: number): Acc {
   if (project.limits) acc.applyLimits();
   const g = clip.ground;
   if (g?.bones.length) {
+    // рельеф: пол под каждой стопой выше или ниже покоя на off; тело опускается к самой низкой опоре,
+    // остальные стопы поднимает IK — как в играх (Unreal foot placement)
+    const off = opts.floor ? terrain(acc, rig, project, g, opts.floor) : undefined;
     // contact: сначала опустить тело до касания, потом IK поднимает провалившиеся ступни; floor: наоборот
-    if (g.mode === "contact") ground(acc, rig, project, g);
-    if (g.ik) for (const b of g.bones) footIK(acc, rig, project, b);
-    if (g.mode === "floor") ground(acc, rig, project, g);
-    if (g.flat) for (const b of g.bones) flatFoot(acc, rig, project, b);
+    if (g.mode === "contact") ground(acc, rig, project, g, off);
+    if (g.ik) for (const b of g.bones) footIK(acc, rig, project, b, off?.get(b) ?? 0);
+    if (g.mode === "floor") ground(acc, rig, project, g, off);
+    if (g.flat) for (const b of g.bones) flatFoot(acc, rig, project, b, off?.get(b) ?? 0);
   }
   if (clip.constraints?.some((c) => !c.muted)) {
-    for (const c of clip.constraints) if (!c.muted) solveConstraint(acc, rig, project, clip, c, t);
+    for (const c of clip.constraints) if (!c.muted) solveConstraint(acc, rig, project, clip, c, t, opts.targets);
     if (project.limits) acc.applyLimits(); // взгляд и IK — тоже в анатомических пределах
   }
   return acc;
@@ -400,9 +412,9 @@ export function targetAt(rig: Rig, parts: PoseParts | null, clip: Clip, tg: Cons
   return tg.offset ? vadd(p, tg.offset) : p;
 }
 
-function solveConstraint(acc: Acc, rig: Rig, project: Project, clip: Clip, c: Constraint, t: number) {
+function solveConstraint(acc: Acc, rig: Rig, project: Project, clip: Clip, c: Constraint, t: number, targets?: Record<string, Vec3>) {
   if (c.type === "copy") return copyRotation(acc, rig, project, c.bones, c.source, c.weight ?? 1, !!c.mirror);
-  const P = targetAt(rig, c.target.bone ? acc.parts() : null, clip, c.target, t);
+  const P = targets?.[c.id] ?? targetAt(rig, c.target.bone ? acc.parts() : null, clip, c.target, t);
   if (!P) return;
   const w = Math.max(0, Math.min(1, c.weight ?? 1));
   if (w === 0) return;
@@ -662,7 +674,7 @@ export function qbetween(a: Vec3, b: Vec3): Quat {
 
 /** Двухзвенная IK: ступня (её родитель — голень, дед — бедро) не уходит под пол — колено сгибается ровно настолько,
  * чтобы ступня встала на высоту покоя. Плоскость сгиба сохраняется; у прямой ноги колено идёт вперёд по телу. */
-function footIK(acc: Acc, rig: Rig, project: Project, foot: string) {
+function footIK(acc: Acc, rig: Rig, project: Project, foot: string, off = 0) {
   const fi = rig.index.get(foot);
   if (fi == null) return;
   const si = rig.parent[fi], ti = si >= 0 ? rig.parent[si] : -1;
@@ -670,7 +682,7 @@ function footIK(acc: Acc, rig: Rig, project: Project, foot: string) {
   const { up, forward } = bodyFrame(project);
   const w = worldPose(rig, acc.parts());
   const H = w.T[ti], K = w.T[si], F = w.T[fi];
-  const floor = vdot(rig.worldT[fi], up);
+  const floor = vdot(rig.worldT[fi], up) + off;
   const h = vdot(F, up);
   if (h >= floor - 1e-9) return;
   const P = vadd(F, vscale(up, floor - h));
@@ -696,14 +708,14 @@ function footIK(acc: Acc, rig: Rig, project: Project, foot: string) {
 /** Опорная стопа плоско: у пола (не выше 2 % роста бедра над своей высотой покоя) наклон стопы относительно пола
  * снимается — её «верх» из позы покоя снова смотрит вверх, разворот вокруг вертикали остаётся. Выше — плавно
  * отпускается до половины к 6 %: в переносе стопа гнётся вдвое меньше, чем по рецепту. */
-function flatFoot(acc: Acc, rig: Rig, project: Project, foot: string) {
+function flatFoot(acc: Acc, rig: Rig, project: Project, foot: string, off = 0) {
   const fi = rig.index.get(foot);
   if (fi == null) return;
   const { up } = bodyFrame(project);
   const w = worldPose(rig, acc.parts());
   const hip = rig.parent[rig.parent[fi] ?? -1] ?? -1;
   const leg = hip >= 0 ? Math.max(1e-6, vdot(rig.worldT[hip], up) - vdot(rig.worldT[fi], up)) : 1;
-  const lift = (vdot(w.T[fi], up) - vdot(rig.worldT[fi], up)) / leg;
+  const lift = (vdot(w.T[fi], up) - vdot(rig.worldT[fi], up) - off) / leg;
   // в переносе — наполовину: носок, опущенный на 40–60° маха ноги, иначе чиркает по полу
   const k = lift <= 0.02 ? 1 : lift >= 0.06 ? 0.5 : 1 - (0.5 * (lift - 0.02)) / 0.04;
   // «верх» стопы — то её направление, что в позе покоя смотрело вверх мира
@@ -735,18 +747,67 @@ function alignRest(acc: Acc, rig: Rig, project: Project) {
   }
 }
 
-function ground(acc: Acc, rig: Rig, project: Project, g: NonNullable<Clip["ground"]>) {
+function ground(acc: Acc, rig: Rig, project: Project, g: NonNullable<Clip["ground"]>, off?: Map<string, number>) {
   const idx = g.bones.map((b) => rig.index.get(b)).filter((i): i is number => i != null);
   if (!idx.length) return;
   const up = bodyFrame(project).up;
   const w = worldPose(rig, acc.parts());
   const rest = Math.min(...idx.map((i) => vdot(rig.worldT[i], up)));
-  const now = Math.min(...idx.map((i) => vdot(w.T[i], up)));
+  // на рельефе высота стопы меряется от пола под ней
+  const now = Math.min(...idx.map((i) => vdot(w.T[i], up) - (off?.get(rig.skel.nodes[i].name) ?? 0)));
   let d = rest - now;
   if (g.mode === "floor") d = Math.max(0, d);
   if (Math.abs(d) < 1e-9) return;
   const root = rig.skel.nodes[skeletonRoot(rig, idx[0])].name;
   acc.add(root, "move_up", d, () => ({ lateral: up, vertical: up, roll: up }));
+}
+
+/** Рельеф: насколько пол под каждой стопой выше покоя; тело сразу сдвигается к самой низкой опоре. */
+function terrain(acc: Acc, rig: Rig, project: Project, g: NonNullable<Clip["ground"]>, floor: NonNullable<LiveOpts["floor"]>): Map<string, number> {
+  const up = bodyFrame(project).up;
+  const w = worldPose(rig, acc.parts());
+  const off = new Map<string, number>();
+  for (const b of g.bones) {
+    const i = rig.index.get(b);
+    if (i == null) continue;
+    const rest = vdot(rig.worldT[i], up);
+    off.set(b, floor(b, w.T[i], rest) - rest);
+  }
+  if (!off.size) return off;
+  const d = Math.min(...off.values());
+  const i0 = rig.index.get(g.bones.find((b) => off.has(b))!)!;
+  if (Math.abs(d) > 1e-9) acc.add(rig.skel.nodes[skeletonRoot(rig, i0)].name, "move_up", d, () => ({ lateral: up, vertical: up, roll: up }));
+  return off;
+}
+
+/** Естественная скорость походки, единиц модели в секунду: с какой скоростью опорная стопа уезжает назад
+ * относительно тела. Если персонаж в игре идёт с этой скоростью, ноги не скользят; иначе клип ускоряют
+ * (AnimForgeLive.move_speed). Опора в кадре — самая низкая стопа (если она на полу: не выше 2 % роста над самой
+ * низкой точкой клипа); скорость — медиана по кадрам. 0 — у клипа нет пола, он не цикл или опора едет вперёд
+ * (походка «лунная» — подгонять нечего, её надо чинить). */
+export function naturalSpeed(project: Project, rig: Rig, clip: Clip, steps = 96): number {
+  const g = clip.ground;
+  if (!clip.loop || !g?.bones.length || clip.duration <= 0) return 0;
+  const f = bodyFrame(project);
+  const idx = g.bones.map((b) => rig.index.get(b)).filter((i): i is number => i != null);
+  if (!idx.length) return 0;
+  const size = (heightCache.get(rig) ?? restHeights(rig, project)).get(SIZE) ?? 1;
+  const dt = clip.duration / steps;
+  const P = Array.from({ length: steps + 1 }, (_, k) => {
+    const w = worldPose(rig, posePartsAt(project, rig, clip, k * dt));
+    return idx.map((i) => w.T[i]);
+  });
+  const hmin = Math.min(...P.flatMap((row) => row.map((p) => vdot(p, f.up))));
+  const v: number[] = [];
+  for (let k = 0; k < steps; k++) {
+    const hs = P[k].map((p) => vdot(p, f.up));
+    const j = hs.indexOf(Math.min(...hs));
+    if (hs[j] - hmin > 0.02 * size) continue;
+    v.push(-vdot(vsub(P[k + 1][j], P[k][j]), f.forward) / dt);
+  }
+  if (!v.length) return 0;
+  v.sort((x, y) => x - y);
+  return Math.max(0, v[Math.floor(v.length / 2)]);
 }
 
 // ── вторичная динамика ──────────────────────────────────────────────────────────────────────────────────────────
@@ -845,8 +906,8 @@ function secondaryBones(project: Project, clip: Clip): Set<string> {
 }
 
 /** Полная поза в момент t: повороты, сдвиги и масштабы затронутых костей (в локальных осях, как в glTF). */
-export function posePartsAt(project: Project, rig: Rig, clip: Clip, t: number): PoseParts {
-  const acc = primary(project, rig, clip, t);
+export function posePartsAt(project: Project, rig: Rig, clip: Clip, t: number, opts?: LiveOpts): PoseParts {
+  const acc = primary(project, rig, clip, t, opts);
   if (clip.layers.some(isSecondary)) {
     addSecondary(acc, project, rig, clip, t);
     if (project.limits) acc.applyLimits(secondaryBones(project, clip)); // хвост и уши после пружины — тоже в своих пределах

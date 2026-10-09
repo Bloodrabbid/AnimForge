@@ -1,0 +1,144 @@
+{
+ "combo": [
+  {
+   "t": 0.13,
+   "name": "effort"
+  },
+  {
+   "t": 0.185,
+   "name": "whoosh"
+  },
+  {
+   "t": 0.234,
+   "name": "trail_on"
+  },
+  {
+   "t": 0.3,
+   "name": "hit"
+  },
+  {
+   "t": 0.31,
+   "name": "trail_off"
+  },
+  {
+   "t": 0.42,
+   "name": "effort"
+  },
+  {
+   "t": 0.475,
+   "name": "whoosh"
+  },
+  {
+   "t": 0.524,
+   "name": "trail_on"
+  },
+  {
+   "t": 0.59,
+   "name": "hit"
+  },
+  {
+   "t": 0.6,
+   "name": "trail_off"
+  },
+  {
+   "t": 0.71,
+   "name": "effort"
+  },
+  {
+   "t": 0.765,
+   "name": "whoosh"
+  },
+  {
+   "t": 0.814,
+   "name": "trail_on"
+  },
+  {
+   "t": 0.88,
+   "name": "hit"
+  },
+  {
+   "t": 0.89,
+   "name": "trail_off"
+  },
+  {
+   "t": 1,
+   "name": "effort"
+  },
+  {
+   "t": 1.055,
+   "name": "whoosh"
+  },
+  {
+   "t": 1.104,
+   "name": "trail_on"
+  },
+  {
+   "t": 1.17,
+   "name": "hit"
+  },
+  {
+   "t": 1.18,
+   "name": "trail_off"
+  },
+  {
+   "t": 1.6638,
+   "name": "window_open"
+  },
+  {
+   "t": 2.5638,
+   "name": "window_close"
+  }
+ ],
+ "hammer": [
+  {
+   "t": 0.5,
+   "name": "effort"
+  },
+  {
+   "t": 0.54,
+   "name": "trail_on"
+  },
+  {
+   "t": 0.555,
+   "name": "whoosh"
+  },
+  {
+   "t": 0.67,
+   "name": "hit"
+  },
+  {
+   "t": 0.72,
+   "name": "trail_off"
+  },
+  {
+   "t": 1.165,
+   "name": "window_open"
+  },
+  {
+   "t": 1.165,
+   "name": "window_close"
+  }
+ ],
+ "power": [
+  {
+   "t": 0,
+   "name": "charge_start"
+  },
+  {
+   "t": 1.7,
+   "name": "charge_full"
+  },
+  {
+   "t": 2.9,
+   "name": "hit"
+  },
+  {
+   "t": 3.55,
+   "name": "hit"
+  },
+  {
+   "t": 4.4,
+   "name": "window_open"
+  }
+ ]
+}

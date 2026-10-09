@@ -25,7 +25,7 @@ func _init() -> void:
 		var n := 0
 		for s in c["samples"]:
 			var clip: Dictionary = clips[s["clip"]]
-			var parts := AFCore.pose_parts_at(rig, clip, s["t"])
+			var parts := AFCore.pose_parts_at(rig, clip, s["t"], _opts(rig, s))
 			n += 1
 			var w: Array = worst.get(s["clip"], [0.0, 0.0, 0.0, ""])
 			for bone in _union(s["rot"], parts.rot):
@@ -52,6 +52,14 @@ func _init() -> void:
 				var b: Vector3 = parts.scl.get(bone, rig.rest_s[i])
 				w[2] = maxf(w[2], (a - b).length())
 			worst[s["clip"]] = w
+		# естественная скорость походки — как в ядре (допуск 2 %: опора выбирается по порогу высоты, float32)
+		for clip in c.get("speeds", {}):
+			var want: float = c["speeds"][clip]
+			var got := AFCore.natural_speed(rig, clips[clip])
+			var ok := absf(got - want) <= 0.02 * maxf(want, 0.01 * c["size"])
+			print("CLIP %s/%s скорость %s ядро %.4f godot %.4f" % [c["name"], clip, "ok" if ok else "BAD", want, got])
+			if not ok:
+				bad.append("%s/%s скорость" % [c["name"], clip])
 		var ms := (Time.get_ticks_usec() - t0) / 1000.0 / maxi(1, n)
 		# в игре поза считается каждый кадр: время на позу после прогрева (кэши вторичной динамики уже есть)
 		var t1 := Time.get_ticks_usec()
@@ -67,6 +75,22 @@ func _init() -> void:
 		print("CLIP %s: %.2f мс на позу с прогревом, %.2f мс в игре" % [c["name"], ms, warm])
 	print("LIVE_OK" if bad.is_empty() else "LIVE_FAIL " + ", ".join(bad))
 	quit()
+
+
+## Живые связки сэмпла: рельеф (та же функция, что в live.ts) и цели констрейнов.
+func _opts(rig: AFCore.Rig, s: Dictionary) -> Dictionary:
+	var o := {}
+	if s.has("terrain"):
+		var tr: Dictionary = s["terrain"]
+		var f := AFCore.body_frame(rig)
+		o["floor"] = func(_b: String, F: Vector3, rest: float) -> float:
+			return rest + tr["a"] * F.dot(f.side) + tr["b"] * tr["size"] * sin((3.0 * F.dot(f.forward)) / tr["size"])
+	if s.has("targets"):
+		var tg := {}
+		for id in s["targets"]:
+			tg[id] = AFCore.v3(s["targets"][id])
+		o["targets"] = tg
+	return o
 
 
 func _qdist(a: Quaternion, b: Quaternion, k: float) -> float:

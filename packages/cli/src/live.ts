@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { RECIPES, buildRig, posePartsAt, type Clip, type Ctx } from "../../core/src/index.ts";
+import { RECIPES, bodyFrame, buildRig, naturalSpeed, posePartsAt, vadd, vdot, vscale, worldPose, type Clip, type Ctx, type LiveOpts, type Vec3 } from "../../core/src/index.ts";
 import { GODOT, ROOT, loadCtx } from "./node.ts";
 
 export function liveData(ctx: Ctx) {
@@ -73,13 +73,34 @@ export async function liveVerify(dirs?: string[]) {
   }
   for (const ctx of ctxs) {
     const rig = buildRig(ctx.skeleton);
-    const samples = ctx.project.clips.flatMap((clip) =>
-      checkTimes(clip.duration).map((t) => {
-        const pose = posePartsAt(ctx.project, rig, clip, t);
-        return { clip: clip.name, t, rot: Object.fromEntries(pose.rot), pos: Object.fromEntries(pose.pos), scl: Object.fromEntries(pose.scl) };
-      }),
-    );
-    cases.push({ name: ctx.project.name, data: liveData(ctx), samples });
+    const f = bodyFrame(ctx.project);
+    const size = Math.max(...ctx.skeleton.nodes.map((_, i) => vdot(rig.worldT[i], f.up))) - Math.min(...ctx.skeleton.nodes.map((n, i) => (n.isJoint ? vdot(rig.worldT[i], f.up) : Infinity)));
+    const sample = (clip: Clip, t: number, opts?: LiveOpts, live?: object) => {
+      const pose = posePartsAt(ctx.project, rig, clip, t, opts);
+      return { clip: clip.name, t, ...live, rot: Object.fromEntries(pose.rot), pos: Object.fromEntries(pose.pos), scl: Object.fromEntries(pose.scl) };
+    };
+    const samples = ctx.project.clips.flatMap((clip) => {
+      const out = checkTimes(clip.duration).map((t) => sample(clip, t));
+      // рельеф из игры: склон вбок и волна вперёд — та же функция и в Godot (live_verify.gd)
+      if (clip.ground?.ik) {
+        const terrain = { a: 0.06, b: 0.05, size };
+        const floor = (_b: string, F: Vec3, rest: number) => rest + terrain.a * vdot(F, f.side) + terrain.b * size * Math.sin((3 * vdot(F, f.forward)) / size);
+        for (const t of checkTimes(clip.duration).slice(1, 5)) out.push(sample(clip, t, { floor }, { terrain }));
+      }
+      // живые цели: взгляд и руки — к точкам из игры
+      // IK — к достижимой точке рядом с кончиком (у цепочки из 3+ костей к недостижимой цели много равных решений,
+      // и CCD дрейфует по ним от шума float32 — сверять там нечего), взгляд — на точку впереди сбоку
+      const cons = (clip.constraints ?? []).filter((c) => c.type !== "copy");
+      if (cons.length)
+        for (const t of checkTimes(clip.duration).slice(1, 5)) {
+          const w = worldPose(rig, posePartsAt(ctx.project, rig, clip, t));
+          const targets = Object.fromEntries(cons.map((c) => [c.id, c.type === "ik" ? vadd(w.T[rig.index.get(c.tip)!], vscale(f.forward, 0.08 * size)) : vadd(vscale(f.forward, size), vscale(f.side, 0.4 * size))]));
+          out.push(sample(clip, t, { targets }, { targets }));
+        }
+      return out;
+    });
+    const speeds = Object.fromEntries(ctx.project.clips.map((c) => [c.name, naturalSpeed(ctx.project, rig, c)]));
+    cases.push({ name: ctx.project.name, data: liveData(ctx), samples, speeds, size });
   }
   ensureImported();
   const tmp = mkdtempSync(join(tmpdir(), "af-live-"));
@@ -92,6 +113,15 @@ export async function liveVerify(dirs?: string[]) {
     log = String(e.stdout ?? "") + String(e.stderr ?? "");
   }
   rmSync(tmp, { recursive: true, force: true });
-  const lines = log.split("\n").filter((l) => /^(CLIP|LIVE_|ERROR|SCRIPT ERROR|Parse Error)|error/i.test(l.trim()));
-  return { ok: lines.some((l) => l.includes("LIVE_OK")), projects: cases.map((c) => c.name), godot: lines };
+  // узел в сцене: стопа на ступеньку лучом, темп под скорость, взгляд на цель (демо-рабочий из godot/sandbox/demo)
+  let node = "";
+  if (!dirs?.length)
+    try {
+      node = execFileSync(GODOT, ["--headless", "--path", join(ROOT, "godot/sandbox"), "--script", "res://tests/live_node_verify.gd"], { encoding: "utf8", timeout: 120_000, stdio: ["ignore", "pipe", "pipe"] });
+    } catch (e: any) {
+      node = String(e.stdout ?? "") + String(e.stderr ?? "");
+    }
+  const lines = (log + "\n" + node).split("\n").filter((l) => /^(CLIP|NODE|LIVE_|ERROR|SCRIPT ERROR|Parse Error)|error/i.test(l.trim()));
+  const nodeOk = !!dirs?.length || lines.some((l) => l.includes("LIVE_NODE_OK"));
+  return { ok: lines.some((l) => l.includes("LIVE_OK")) && nodeOk, projects: cases.map((c) => c.name), godot: lines };
 }
