@@ -244,10 +244,11 @@ static func _waddle_walk(p: Dictionary, i: int, _n: int, t: float, info: Diction
 			return {"pitch": -s * p["armSwing"] * sin(w - p.get("armLag", 0.0) * RAD)}  # − : свисающая рука вперёд
 	# нога: бедро — маятник в противофазе своей руке; колено гнётся в переносе
 	var s := -1.0 if p["role"] == "leg_l" else 1.0
+	var wl: float = w + p.get("legPhase", 0.0) * RAD
 	if i == 0:
-		return {"pitch": -s * p["legSwing"] * sw}
+		return {"pitch": -s * p["legSwing"] * sin(wl)}
 	if i == 1:
-		return {"pitch": p["knee"] * maxf(0.0, s * cos(w))}
+		return {"pitch": p["knee"] * maxf(0.0, s * cos(wl))}
 	return {}
 
 

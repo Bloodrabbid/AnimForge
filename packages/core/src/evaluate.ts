@@ -780,34 +780,63 @@ function terrain(acc: Acc, rig: Rig, project: Project, g: NonNullable<Clip["grou
   return off;
 }
 
-/** Естественная скорость походки, единиц модели в секунду: с какой скоростью опорная стопа уезжает назад
- * относительно тела. Если персонаж в игре идёт с этой скоростью, ноги не скользят; иначе клип ускоряют
- * (AnimForgeLive.move_speed). Опора в кадре — самая низкая стопа (если она на полу: не выше 2 % роста над самой
- * низкой точкой клипа); скорость — медиана по кадрам. 0 — у клипа нет пола, он не цикл или опора едет вперёд
- * (походка «лунная» — подгонять нечего, её надо чинить). */
-export function naturalSpeed(project: Project, rig: Rig, clip: Clip, steps = 96): number {
+/** Опора походки по кадрам: в каждом кадре опорная — самая низкая стопа (если она на полу: не выше 2 % роста над
+ * самой низкой точкой клипа). k — кадр, j — стопа, v — с какой скоростью она уезжает назад относительно тела,
+ * p — где она (координаты модели). */
+function stance(project: Project, rig: Rig, clip: Clip, steps: number) {
+  const out: { k: number; j: number; v: number; p: Vec3 }[] = [];
   const g = clip.ground;
-  if (!clip.loop || !g?.bones.length || clip.duration <= 0) return 0;
+  if (!clip.loop || !g?.bones.length || clip.duration <= 0) return { frames: out, dt: 0, size: 1 };
   const f = bodyFrame(project);
   const idx = g.bones.map((b) => rig.index.get(b)).filter((i): i is number => i != null);
-  if (!idx.length) return 0;
   const size = (heightCache.get(rig) ?? restHeights(rig, project)).get(SIZE) ?? 1;
   const dt = clip.duration / steps;
+  if (!idx.length) return { frames: out, dt, size };
   const P = Array.from({ length: steps + 1 }, (_, k) => {
     const w = worldPose(rig, posePartsAt(project, rig, clip, k * dt));
     return idx.map((i) => w.T[i]);
   });
   const hmin = Math.min(...P.flatMap((row) => row.map((p) => vdot(p, f.up))));
-  const v: number[] = [];
   for (let k = 0; k < steps; k++) {
     const hs = P[k].map((p) => vdot(p, f.up));
     const j = hs.indexOf(Math.min(...hs));
     if (hs[j] - hmin > 0.02 * size) continue;
-    v.push(-vdot(vsub(P[k + 1][j], P[k][j]), f.forward) / dt);
+    out.push({ k, j, v: -vdot(vsub(P[k + 1][j], P[k][j]), f.forward) / dt, p: P[k][j] });
   }
+  return { frames: out, dt, size };
+}
+
+/** Естественная скорость походки, единиц модели в секунду: с какой скоростью опорная стопа уезжает назад
+ * относительно тела (медиана по кадрам опоры). Если персонаж в игре идёт с этой скоростью, ноги не скользят; иначе
+ * клип ускоряют (AnimForgeLive.move_speed). 0 — у клипа нет пола, он не цикл или опора едет вперёд (походка
+ * «лунная» — подгонять нечего, её надо чинить). */
+export function naturalSpeed(project: Project, rig: Rig, clip: Clip, steps = 96): number {
+  const v = stance(project, rig, clip, steps).frames.map((s) => s.v);
   if (!v.length) return 0;
   v.sort((x, y) => x - y);
   return Math.max(0, v[Math.floor(v.length / 2)]);
+}
+
+/** Скольжение походки: персонаж идёт в игре с естественной скоростью — на сколько каждая опорная стопа проезжает
+ * по полу за свой шаг (наибольший разнос её точек на полу), в долях роста; mean — в среднем по шагам, max — худший.
+ * backward — доля кадров опоры, где стопа уезжает назад, как надо. null — у клипа нет походки. */
+export function gaitSlide(project: Project, rig: Rig, clip: Clip, steps = 96): { speed: number; mean: number; max: number; backward: number } | null {
+  const { frames, dt, size } = stance(project, rig, clip, steps);
+  if (!frames.length) return null;
+  const speed = naturalSpeed(project, rig, clip, steps);
+  const f = bodyFrame(project);
+  const backward = frames.filter((s) => s.v > 0).length / frames.length;
+  // шаги — подряд идущие кадры опоры одной стопы; на полу стопа там, где она в теле, плюс путь тела
+  const segs: Vec3[][] = [];
+  frames.forEach((s, n) => {
+    const onFloor = vadd(s.p, vscale(f.forward, speed * s.k * dt));
+    const flat = vsub(onFloor, vscale(f.up, vdot(onFloor, f.up)));
+    const prev = frames[n - 1];
+    if (prev && prev.j === s.j && prev.k === s.k - 1) segs[segs.length - 1].push(flat);
+    else segs.push([flat]);
+  });
+  const spread = segs.map((pts) => Math.max(0, ...pts.flatMap((a) => pts.map((b) => Math.hypot(...vsub(a, b))))) / size);
+  return { speed, mean: spread.reduce((a, x) => a + x, 0) / spread.length, max: Math.max(...spread), backward };
 }
 
 // ── вторичная динамика ──────────────────────────────────────────────────────────────────────────────────────────

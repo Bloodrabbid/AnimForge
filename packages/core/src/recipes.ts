@@ -198,6 +198,7 @@ const waddleWalk: RecipeDef = {
     headLag: { type: "number", default: 54, min: 0, max: 120, unit: "°", help: "отставание крена головы по фазе (≈0.07 с)" },
     bob: { type: "number", default: 0.248, min: 0, max: 0.4, help: "подскок таза — доля его высоты (24.8 %; спокойные 14.5–21 %)" },
     armSwing: { type: "number", default: 30, min: 0, max: 60, unit: "°", help: "маятник рук, в противофазе ногам (UpperArm ±30)" },
+    legPhase: { type: "number", default: 0, min: 0, max: 360, unit: "°", help: "сдвиг фазы ног к тазу: у разных пресетов и тел верная разная — подбирает проверка «стопа скользит» (af check --fix)" },
     armLag: { type: "number", default: 0, min: 0, max: 90, unit: "°", help: "руки отстают от шага по фазе — оверлап; нужен, когда мах маленький (колобок), иначе руки «приклеены»" },
     legSwing: { type: "number", default: 30, min: 0, max: 60, unit: "°", help: "мах бедра (Witcher: шаг ±24.7, бег ±31.8; TLJ ±14–17)" },
     knee: { type: "number", default: 45, min: 0, max: 120, unit: "°", help: "подгиб колена в переносе ноги (на глаз)" },
@@ -235,8 +236,9 @@ const waddleWalk: RecipeDef = {
       default: {
         // нога: бедро — маятник в противофазе своей руке; колено гнётся, пока нога идёт вперёд (перенос)
         const s = p.role === "leg_l" ? -1 : 1;
-        if (i === 0) return { pitch: -s * p.legSwing * sw };
-        if (i === 1) return { pitch: p.knee * Math.max(0, s * Math.cos(w)) }; // + : голень назад — колено сгибается
+        const wl = w + (p.legPhase ?? 0) * rad;
+        if (i === 0) return { pitch: -s * p.legSwing * Math.sin(wl) };
+        if (i === 1) return { pitch: p.knee * Math.max(0, s * Math.cos(wl)) }; // + : голень назад — колено сгибается
         return {};
       }
     }

@@ -4,13 +4,13 @@
 // Пороги — «на глаз», кроме помеченных источником; каждый записан рядом с проверкой.
 import { NodeIO } from "@gltf-transform/core";
 import { join } from "node:path";
-import { buildRig, clipEvents, motionAt, posePartsAt, RECIPES, withDefaults, type Clip, type Ctx, type Project } from "../../core/src/index.ts";
+import { buildRig, clipEvents, gaitSlide, motionAt, posePartsAt, RECIPES, withDefaults, type Clip, type Ctx, type Project } from "../../core/src/index.ts";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { call, findPreset, loadCtx, smoothWeights } from "./node.ts";
 import { heightOf, loadSkinScene, meshEdges, restVerts, skinFrame, stretchOf, type SkinScene } from "./skin.ts";
 
 export interface Finding {
-  check: "skin" | "floor" | "float" | "seam" | "pop" | "limits" | "timing" | "length";
+  check: "skin" | "floor" | "float" | "slide" | "seam" | "pop" | "limits" | "timing" | "length";
   level: "fail" | "warn";
   msg: string;
   t?: number;
@@ -35,7 +35,61 @@ export const LIMITS = {
   pop: 3, // скачок за кадр в 3 раза больше медианы клипа (3σ-правило, на глаз) …
   popMin: 0.02, // … и больше 2 % роста
   limits: 0.3, // кость упирается в предел больше трети клипа — анимация борется с анатомией (на глаз)
+  slide: 0.05, // опорная стопа проезжает по полу за шаг больше 5 % роста (на глаз: у лучших пресетов 2–4 %)
+  minSpeed: 0.15, // естественная скорость меньше 0,15 роста в секунду — топчется на месте (человек идёт ≈0,8, вразвалку у пресетов 0,3–0,8)
 };
+
+/** Скольжение стоп походки (gaitSlide ядра). Чинится у waddle-walk: фаза ног к тазу (legPhase) — у пресетов она
+ * разная, единой верной нет; если мало — меньше рыскание таза (у коротких ног-тумб пекаря поворот таза возит стопы
+ * по полу сильнее, чем мах ног) и шире мах ног. Перебор по сетке, мерка та же; шаг не должен выродиться в топтание
+ * (стопа почти не едет назад — и скользить нечему, но в игре так не пойдёшь), кожа не должна стать хуже. */
+function gaitCheck(project: Project, rig: ReturnType<typeof buildRig>, m: Mesh, work: Clip, name: string, fix: boolean, skin0: number, steps: { name: string; args: Record<string, unknown> }[], metrics: Record<string, number>): { finding: Finding; work: Clip } | null {
+  const g = gaitSlide(project, rig, work);
+  if (!g) return null;
+  metrics.slide = +(g.mean * 100).toFixed(1);
+  metrics.backward = +(g.backward * 100).toFixed(0);
+  metrics.speed = +(g.speed / m.H).toFixed(2);
+  const minSpeed = LIMITS.minSpeed * m.H;
+  // «лунная»: естественная скорость — медиана скорости опоры назад; ≤ 0 — значит, назад едет не больше половины кадров
+  const moon = g.speed <= 0;
+  const shuffle = !moon && g.speed < minSpeed;
+  if (!moon && !shuffle && g.mean <= LIMITS.slide) return null;
+  const finding: Finding = moon
+    ? { check: "slide", level: "fail", msg: `«лунная» походка: опорная стопа едет вперёд (назад — только ${metrics.backward} % кадров опоры); в игре ноги поедут по полу, подогнать шаг под скорость нечем`, value: metrics.backward }
+    : shuffle
+      ? { check: "slide", level: "warn", msg: `топчется на месте: опорная стопа почти не уезжает назад — шаг на ${metrics.speed} роста в секунду; в игре его придётся крутить в разы быстрее`, value: metrics.speed }
+      : { check: "slide", level: "warn", msg: `ноги скользят: опорная стопа проезжает по полу ${metrics.slide} % роста за шаг (худший шаг ${(g.max * 100).toFixed(1)} %)`, value: metrics.slide };
+  const layers = work.layers.filter((l) => l.type === "recipe" && l.recipe === "waddle-walk");
+  if (!fix || !layers.length) return { finding, work };
+  const p0 = withDefaults(RECIPES["waddle-walk"], (layers[0] as { params: Record<string, unknown> }).params);
+  const score = (x: ReturnType<typeof gaitSlide>) => (!x || x.speed < minSpeed ? Infinity : x.mean + (x.backward < 0.8 ? 0.1 : 0));
+  const variant = (phase: number, yawK: number, swingK: number) => {
+    const c = structuredClone(work);
+    for (const l of c.layers) if (l.type === "recipe" && l.recipe === "waddle-walk") l.params = { ...l.params, legPhase: phase, pelvisYaw: +(p0.pelvisYaw * yawK).toFixed(2), legSwing: +Math.min(60, p0.legSwing * swingK).toFixed(2) };
+    return c;
+  };
+  let best = { c: work, sc: score(g), phase: Number(p0.legPhase), k: 1, sw: 1 };
+  // сначала фаза (характер не меняется), потом меньше рыскания и шире мах — за каждую правку небольшая цена
+  for (const sw of [1, 1.4, 1.8])
+    for (const k of [1, 0.75, 0.5, 0.25])
+      for (let phase = 0; phase < 360; phase += 30) {
+        const c = variant(phase, k, sw);
+        const sc = score(gaitSlide(project, rig, c)) + (1 - k) * 0.02 + (sw - 1) * 0.02;
+        if (sc < best.sc - 1e-6 && skinBad(project, rig, m, c, 17).bad <= Math.max(skin0, LIMITS.skinBad)) best = { c, sc, phase, k, sw };
+      }
+  if (best.c === work) {
+    finding.fixed = "фазой ног, поворотом таза и махом не чинится — нужен другой пресет походки";
+    return { finding, work };
+  }
+  const params = { legPhase: best.phase, pelvisYaw: +(p0.pelvisYaw * best.k).toFixed(2), legSwing: +Math.min(60, p0.legSwing * best.sw).toFixed(2) };
+  for (const l of layers) steps.push({ name: "recipe.set", args: { clip: name, layer: l.id, params } });
+  const after = gaitSlide(project, rig, best.c)!;
+  metrics.slideAfter = +(after.mean * 100).toFixed(1);
+  metrics.speedAfter = +(after.speed / m.H).toFixed(2);
+  finding.fixed = `фаза ног ${best.phase}°${best.k < 1 ? `, рыскание таза ×${best.k}` : ""}${best.sw > 1 ? `, мах ног ×${best.sw}` : ""} → скольжение ${metrics.slideAfter} % роста за шаг, шаг ${metrics.speedAfter} роста/с, назад ${(after.backward * 100).toFixed(0)} % опоры`;
+  if (after.speed >= minSpeed && after.mean <= LIMITS.slide) finding.level = "warn";
+  return { finding, work: best.c };
+}
 
 /** Модель для проверок: кожа, рёбра, поза привязки и рост. Загружается один раз на make. */
 export async function loadMesh(ctx: Ctx & { dir: string }) {
@@ -154,6 +208,13 @@ export function checkClip(project: Project, ctx: Ctx, m: Mesh, clip: Clip, fix: 
   }
   if (skinF) findings.push(skinF);
   if (floorF) findings.push(floorF);
+
+  // 2б. скольжение стоп: персонаж идёт в игре с естественной скоростью клипа — опорная стопа должна стоять
+  const slideF = gaitCheck(project, rig, m, work, clip.name, fix, s.bad, steps, metrics);
+  if (slideF) {
+    findings.push(slideF.finding);
+    work = slideF.work;
+  }
 
   // кадры кожи один раз: пол, парение, шов, рывки
   const n = frameCount(work);

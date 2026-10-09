@@ -157,3 +157,25 @@ test("body-ram: голова гасит наклон корпуса и дого�
   const mid = hit - 0.05;
   assert.ok(at("pelvis", mid) + at("head", mid) < (1 - p.headHold) * at("pelvis", mid) - 0.5, "без запаздывания");
 });
+
+test("стопа скользит: проверка видит, починка подбирает фазу ног к тазу; «лунная» походка — брак", async () => {
+  const dir = copy("slide");
+  const ctx = await loadCtx(dir);
+  const m = await loadMesh(ctx);
+  const walk = ctx.project.clips.find((c) => c.name === "walk")!;
+  const before = checkClip(ctx.project, ctx, m, walk, false).report;
+  assert.equal(find(before, "slide")?.level, "warn", JSON.stringify(before.metrics));
+  // полный путь починки: веса сглаживаются первыми, иначе кожа рабочего рвётся почти при любой фазе ног
+  const [report] = await checkProject(dir, ["walk"], true);
+  assert.match(report.findings.find((f) => f.check === "slide")?.fixed ?? "", /фаза ног/, JSON.stringify(report.findings));
+  const ctx2 = await loadCtx(dir);
+  const fixed = ctx2.project.clips.find((c) => c.name === "walk")!;
+  assert.ok(fixed.layers.some((l) => l.type === "recipe" && Number(l.params.legPhase) > 0), "фаза ног не записана");
+  const after = checkClip(ctx2.project, ctx2, await loadMesh(ctx2), fixed, false).report;
+  assert.equal(find(after, "slide"), undefined, JSON.stringify(after.metrics));
+  assert.ok(after.metrics.backward >= 80, `назад ${after.metrics.backward} %`);
+  // ноги машут наоборот: опорная стопа едет вперёд
+  const moon = structuredClone(walk);
+  for (const l of moon.layers) if (l.type === "recipe" && /^leg_/.test(String(l.params.role))) l.params.legSwing = -30;
+  assert.equal(find(checkClip(ctx.project, ctx, m, moon, false).report, "slide")?.level, "fail");
+});
