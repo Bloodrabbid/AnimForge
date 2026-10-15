@@ -50,3 +50,29 @@ test("8 направлений: тело идёт точно под углом, 
     if (Math.abs(yp) > 10) assert.ok(Math.abs(yh) < 0.5 * Math.abs(yp) && yh * yp >= 0, `${suffix}: голова ${yh.toFixed(1)}° при тазе ${yp.toFixed(1)}°`);
   }
 });
+
+test("фиксация опорной стопы: скольжение уходит, скорость шага остаётся, таз опускается не больше 1 % роста (у походки с верной фазой ног — неверную чинит legPhase)", async () => {
+  const dir = join(tmp, "lock");
+  cpSync(join(ROOT, "projects/worker-demo"), dir, { recursive: true });
+  let ctx = await loadCtx(dir);
+  const rig = buildRig(ctx.skeleton);
+  const before = new Map(["walk_april", "walk_geralt"].map((n) => [n, gaitSlide(ctx.project, rig, ctx.project.clips.find((c) => c.name === n)!)!]));
+  for (const n of before.keys()) await call(dir, "clip.ground", { clip: n, bones: "foot_l,foot_r", mode: "floor", ik: true, flat: true, lock: true });
+  ctx = await loadCtx(dir);
+  const f = bodyFrame(ctx.project);
+  for (const [n, g0] of before) {
+    const c = ctx.project.clips.find((x) => x.name === n)!;
+    const g = gaitSlide(ctx.project, rig, c)!;
+    assert.ok(g.mean < 0.006, `${n}: стопа проезжает ${(g.mean * 100).toFixed(1)} % роста (было ${(g0.mean * 100).toFixed(1)})`);
+    assert.ok(Math.abs(g.speed - g0.speed) < 0.15 * g0.speed, `${n}: скорость ${g.speed.toFixed(2)}, была ${g0.speed.toFixed(2)}`);
+    // таз: не ниже 1 % роста относительно клипа без фиксации
+    const root = rig.index.get(ctx.project.chains.pelvis[0])!;
+    const free = { ...c, ground: { ...c.ground!, lock: false } };
+    const H = Math.max(...ctx.skeleton.nodes.map((_, i) => vdot(rig.worldT[i], f.up))) - Math.min(...ctx.skeleton.nodes.map((nd, i) => (nd.isJoint ? vdot(rig.worldT[i], f.up) : Infinity)));
+    for (let k = 0; k < 12; k++) {
+      const t = (c.duration * k) / 12;
+      const dz = vdot(worldPose(rig, posePartsAt(ctx.project, rig, free, t)).T[root], f.up) - vdot(worldPose(rig, posePartsAt(ctx.project, rig, c, t)).T[root], f.up);
+      assert.ok(dz < 0.0101 * H + 1e-6, `${n}: таз ниже на ${((dz / H) * 100).toFixed(2)} % роста`);
+    }
+  }
+});

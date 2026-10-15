@@ -126,6 +126,11 @@ function candidates(project: Project, ctx: Ctx, clip: Clip, check: Finding["chec
       }
     }
   }
+  // 3а. фиксация опорной стопы — для скольжения
+  if (check === "slide" && clip.ground?.bones.length && !clip.ground.lock) {
+    const g = { ...clip.ground, ik: true, lock: true };
+    out.push({ text: "зафиксировать опорную стопу (ground.lock)", apply: (c) => { c.ground = g; }, steps: [{ name: "clip.ground", args: { clip: clip.name, bones: g.bones.join(","), mode: g.mode, ik: true, ...(g.flat ? { flat: true } : {}), lock: true } }] });
+  }
   // 3. ступни на пол: колени гнутся, опорная стопа плоско — для пола, парения и скольжения
   if (/floor|float|slide/.test(check) && (!clip.ground?.ik || !clip.ground?.flat)) {
     const bones = clip.ground?.bones.length ? clip.ground.bones : footBones(project, ctx);

@@ -285,6 +285,7 @@ function applyTravel(acc: Acc, rig: Rig, project: Project, tr: Travel) {
 
 /** Основные слои (без вторичной динамики) и постановка на пол. */
 function primary(project: Project, rig: Rig, clip: Clip, t: number, opts: LiveOpts = {}): Acc {
+  const tClip = t; // фиксация стопы — по времени клипа, как её план (реверс уже внутри плана)
   if (clip.travel?.reverse) t = clip.duration - t;
   const acc = new Acc(rig, project);
   let heights = heightCache.get(rig);
@@ -332,6 +333,7 @@ function primary(project: Project, rig: Rig, clip: Clip, t: number, opts: LiveOp
     if (g.ik) for (const b of g.bones) footIK(acc, rig, project, b, off?.get(b) ?? 0);
     if (g.mode === "floor") ground(acc, rig, project, g, off);
     if (g.flat) for (const b of g.bones) flatFoot(acc, rig, project, b, off?.get(b) ?? 0);
+    if (g.lock && clip.loop) footLock(acc, rig, project, clip, tClip, off);
   }
   if (clip.constraints?.some((c) => !c.muted)) {
     for (const c of clip.constraints) if (!c.muted) solveConstraint(acc, rig, project, clip, c, t, opts.targets);
@@ -865,6 +867,122 @@ export function naturalSpeed(project: Project, rig: Rig, clip: Clip, steps = 96)
   if (!v.length) return 0;
   v.sort((x, y) => x - y);
   return Math.max(0, v[Math.floor(v.length / 2)]);
+}
+
+// ── фиксация опорной стопы (ground.lock) ────────────────────────────────────────────────────────────────────────
+// Персонаж идёт в игре со скоростью клипа v — значит, опорная стопа в клипе на месте должна уезжать назад ровно
+// со скоростью v, по прямой. Рецепт так не умеет: стопа в опоре идёт по дуге (мах — поворот бедра) и с переменной
+// скоростью, отсюда скольжение. План на клип: для каждого шага — прямая «как надо» (наименьшие квадраты к тому, где
+// стопа есть), поправка до неё в опоре; в переносе поправка плавно переходит от конца одного шага к началу
+// следующего (как у ActionForge Motion Lab: «сдвиг раздаётся по фазе переноса»). Если с поправкой нога не
+// дотягивается (длиннее 0.97 своей длины — колено в замок), таз опускается на сколько нужно, со сглаживанием.
+const LOCK_N = 96;
+const lockCache = new WeakMap<Rig, Map<string, { T: Vec3[][]; drop: number[] }>>();
+
+export function lockPlan(project: Project, rig: Rig, clip: Clip) {
+  let cache = lockCache.get(rig);
+  if (!cache) lockCache.set(rig, (cache = new Map()));
+  const key = JSON.stringify(clip);
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const g = clip.ground!;
+  const base: Clip = { ...clip, ground: { ...g, lock: false } };
+  const f = bodyFrame(project);
+  const N = LOCK_N, dt = clip.duration / N;
+  const idx = g.bones.map((b) => rig.index.get(b)).filter((i): i is number => i != null);
+  const hipOf = (fi: number) => rig.parent[rig.parent[fi]];
+  const size = (heightCache.get(rig) ?? restHeights(rig, project)).get(SIZE) ?? 1;
+  const W = Array.from({ length: N }, (_, k) => worldPose(rig, posePartsAt(project, rig, base, k * dt)));
+  const P = W.map((w) => idx.map((i) => w.T[i]));
+  const hmin = Math.min(...P.flatMap((r) => r.map((p) => vdot(p, f.up))));
+  const d = travelDir(project, base);
+  const flat = (x: Vec3) => vsub(x, vscale(f.up, vdot(x, f.up)));
+  // у пола: самая низкая стопа кадра (или почти вровень — двойная опора)
+  const low = P.map((r) => { const hs = r.map((p) => vdot(p, f.up)); const lo = Math.min(...hs); return hs.map((h) => h - hmin <= 0.02 * size && h - lo <= 0.005 * size); });
+  const back = (k: number, j: number) => vdot(vsub(P[(k + 1) % N][j], P[(k - 1 + N) % N][j]), d) < 0;
+  // скорость опоры — среднее по кадрам опоры (не медиана, как naturalSpeed: у медианы соседние значения далеко,
+  // и шум float32 в аддоне Godot сдвигает её на 2 % — а с ней все прямые «как надо»). После фиксации naturalSpeed
+  // клипа равна ей: стопа в опоре едет ровно с этой скоростью
+  let vs = 0, vn = 0;
+  for (let k = 0; k < N; k++) for (let j = 0; j < idx.length; j++) if (low[k][j] && back(k, j)) { vs -= vdot(vsub(P[(k + 1) % N][j], P[(k - 1 + N) % N][j]), d) / (2 * dt); vn++; }
+  const v = vn ? vs / vn : 0;
+  const tol = 0.015 * size, clear = 0.012 * size;
+  const T: Vec3[][] = P.map((r) => r.map((p) => [...p] as Vec3));
+  const drop = new Array(N).fill(0);
+  idx.forEach((fi, j) => {
+    // опора стопы — у пола и уезжает назад. Стопа, что у пола ещё едет вперёд, — это конец переноса, который
+    // рецепт провёл ниже пола (IK пола тащит её по полу): её приподнимаем, касание — там, где она остановилась
+    const on = Array.from({ length: N }, (_, k) => v > 0 && low[k][j] && back(k, j));
+    const c: (Vec3 | null)[] = new Array(N).fill(null);
+    if (on.some(Boolean) && !on.every(Boolean)) {
+      const start = on.findIndex((x, k) => x && !on[(k - 1 + N) % N]);
+      let k = start;
+      do {
+        const seg: number[] = [];
+        while (on[k % N] && seg.length < N) { seg.push(k); k++; }
+        // прямая «как надо»: q(t) = A − d·v·t, A — среднее (p + d·v·t) по шагу (наименьшие квадраты)
+        let A: Vec3 = [0, 0, 0];
+        for (const s of seg) A = vadd(A, vadd(flat(P[s % N][j]), vscale(d, v * s * dt)));
+        A = vscale(A, 1 / seg.length);
+        for (const s of seg) c[s % N] = vsub(vsub(A, vscale(d, v * s * dt)), flat(P[s % N][j]));
+        while (!on[k % N]) k++;
+      } while (k % N !== start);
+    }
+    if (on.some(Boolean) && !on.every(Boolean)) {
+      // перенос: поправка плавно от конца шага к началу следующего, и стопа над полом хотя бы на clear·sin(πu)^¼
+      const floorH = vdot(rig.worldT[fi], f.up);
+      for (let k0 = 0; k0 < N; k0++) {
+        if (on[k0] || !on[(k0 - 1 + N) % N]) continue;
+        let k1 = k0;
+        while (!on[k1 % N]) k1++;
+        const a = c[(k0 - 1 + N) % N]!, b = c[k1 % N]!, n = k1 - k0 + 1;
+        for (let k2 = k0; k2 < k1; k2++) {
+          const u = (k2 - k0 + 1) / n, sm = u * u * (3 - 2 * u);
+          // профиль — почти полка: у рецептов конец переноса часто идёт ниже пола (IK пола тащит стопу по нему
+          // вперёд) — стопа должна быть в воздухе до самого касания, а не только в середине переноса
+          const lift = Math.max(0, floorH + clear * Math.sin(Math.PI * u) ** 0.25 - vdot(P[k2 % N][j], f.up));
+          c[k2 % N] = vadd(vadd(vscale(a, 1 - sm), vscale(b, sm)), vscale(f.up, lift));
+        }
+      }
+    }
+    for (let k = 0; k < N; k++) {
+      if (c[k]) T[k][j] = vadd(P[k][j], c[k]!);
+      // дотянется ли нога: бедро → цель не длиннее 0.97 ноги, иначе таз вниз на δ
+      const hi = hipOf(fi);
+      if (hi < 0) continue;
+      const L = Math.hypot(...vsub(rig.worldT[rig.parent[fi]], rig.worldT[hi])) + Math.hypot(...vsub(rig.worldT[fi], rig.worldT[rig.parent[fi]]));
+      const H = W[k].T[hi], D = vsub(H, T[k][j]);
+      const vd = vdot(D, f.up), hd = Math.hypot(...flat(D)), R = 0.97 * L;
+      if (Math.hypot(vd, hd) > R) drop[k] = Math.max(drop[k], hd < R ? vd - Math.sqrt(R * R - hd * hd) : vd);
+    }
+  });
+  // таз — плавно: сначала максимум по окну (опустить не меньше нужного), потом среднее по тому же окну
+  const w = Math.max(1, Math.round(0.06 * N));
+  const mx = drop.map((_, k) => Math.max(...Array.from({ length: 2 * w + 1 }, (_, q) => drop[(k + q - w + N) % N])));
+  // и не ниже 1 % роста: у коротких толстых ног (рабочий) таз ниже — бедро уходит в пол (провал 1.9 % при полном
+  // опускании, 0.9 % при 1 %, 0.3 % без него — а скольжение 0.5 / 0.6 / 1.3 %)
+  const sm = mx.map((_, k) => Math.min(0.01 * size, Array.from({ length: 2 * w + 1 }, (_, q) => mx[(k + q - w + N) % N]).reduce((a, x) => a + x, 0) / (2 * w + 1)));
+  const plan = { T, drop: sm };
+  if (cache.size > 256) cache.clear();
+  cache.set(key, plan);
+  return plan;
+}
+
+function footLock(acc: Acc, rig: Rig, project: Project, clip: Clip, t: number, off?: Map<string, number>) {
+  const g = clip.ground!;
+  const plan = lockPlan(project, rig, clip);
+  const N = LOCK_N;
+  const x = ((((t / clip.duration) % 1) + 1) % 1) * N;
+  const k0 = Math.floor(x) % N, k1 = (k0 + 1) % N, u = x - Math.floor(x);
+  const up = bodyFrame(project).up;
+  const drop = plan.drop[k0] * (1 - u) + plan.drop[k1] * u;
+  const idx = g.bones.map((b) => rig.index.get(b)).filter((i): i is number => i != null);
+  if (drop > 1e-9 && idx.length) acc.add(rig.skel.nodes[skeletonRoot(rig, idx[0])].name, "move_up", -drop, () => ({ lateral: up, vertical: up, roll: up }));
+  g.bones.filter((b) => rig.index.has(b)).forEach((b, j) => {
+    const P = vadd(vadd(vscale(plan.T[k0][j], 1 - u), vscale(plan.T[k1][j], u)), vscale(up, off?.get(b) ?? 0));
+    twoBoneIK(acc, rig, project, b, P, undefined, 1);
+  });
+  if (g.flat) for (const b of g.bones) flatFoot(acc, rig, project, b, off?.get(b) ?? 0);
 }
 
 /** Куда на самом деле идёт походка, ° от вперёд (+ — влево, как Travel.angle): против хода стоп по полу, пока они

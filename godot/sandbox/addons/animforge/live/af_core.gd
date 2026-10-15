@@ -157,6 +157,7 @@ class Rig:
 	var recipes := {}
 	var heights := {}
 	var sec_cache := {}
+	var lock_cache := {}
 
 	func node(i: int) -> String:
 		return names[i]
@@ -480,10 +481,180 @@ static func apply_travel(acc: Acc, rig: Rig, tr: Dictionary) -> void:
 			acc.turn(bone, local_delta(rig, i, f.forward, width * side * k * DEG))
 
 
+# ── фиксация опорной стопы (footLock ядра) ──────────────────────────────────────────────────────────────────────
+const LOCK_N := 96
+
+
+static func _flat(x: Vector3, up: Vector3) -> Vector3:
+	return x - up * x.dot(up)
+
+
+static func lock_plan(rig: Rig, clip: Dictionary) -> Dictionary:
+	var key := JSON.stringify(clip)
+	if rig.lock_cache.has(key):
+		return rig.lock_cache[key]
+	var g: Dictionary = clip["ground"]
+	var base := clip.duplicate()
+	var g0 := g.duplicate()
+	g0["lock"] = false
+	base["ground"] = g0
+	var f := body_frame(rig)
+	var N := LOCK_N
+	var dt: float = float(clip["duration"]) / N
+	var idx := []
+	for b in g["bones"]:
+		if rig.index.has(b):
+			idx.append(rig.index[b])
+	var size: float = rig.heights.get(SIZE, 1.0)
+	var W := []
+	var P := []
+	var hmin := INF
+	for k in N:
+		var w := world_pose(rig, pose_parts_at(rig, base, k * dt))
+		W.append(w)
+		var row := []
+		for i in idx:
+			row.append(w.T[i])
+			hmin = minf(hmin, w.T[i].dot(f.up))
+		P.append(row)
+	var d := travel_dir(rig, base)
+	var low := []
+	for k in N:
+		var lo := INF
+		for p in P[k]:
+			lo = minf(lo, p.dot(f.up))
+		var row := []
+		for p in P[k]:
+			var h: float = p.dot(f.up)
+			row.append(h - hmin <= 0.02 * size and h - lo <= 0.005 * size)
+		low.append(row)
+	var vs := 0.0
+	var vn := 0
+	for k in N:
+		for j in idx.size():
+			var dv: float = (P[(k + 1) % N][j] - P[(k - 1 + N) % N][j]).dot(d)
+			if low[k][j] and dv < 0.0:
+				vs -= dv / (2.0 * dt)
+				vn += 1
+	var v: float = vs / vn if vn > 0 else 0.0
+	var clear := 0.012 * size
+	var T := []
+	for k in N:
+		T.append(P[k].duplicate())
+	var drop := []
+	drop.resize(N)
+	drop.fill(0.0)
+	for j in idx.size():
+		var fi: int = idx[j]
+		var on := []
+		for k in N:
+			var back: bool = (P[(k + 1) % N][j] - P[(k - 1 + N) % N][j]).dot(d) < 0.0
+			on.append(v > 0 and low[k][j] and back)
+		var c := []
+		c.resize(N)
+		var any_on: bool = on.has(true)
+		var all_on: bool = not on.has(false)
+		if any_on and not all_on:
+			var start := -1
+			for k in N:
+				if on[k] and not on[(k - 1 + N) % N]:
+					start = k
+					break
+			var k := start
+			while true:
+				var seg := []
+				while on[k % N] and seg.size() < N:
+					seg.append(k)
+					k += 1
+				var A := Vector3.ZERO
+				for s in seg:
+					A += _flat(P[s % N][j], f.up) + d * (v * s * dt)
+				A /= seg.size()
+				for s in seg:
+					c[s % N] = A - d * (v * s * dt) - _flat(P[s % N][j], f.up)
+				while not on[k % N]:
+					k += 1
+				if k % N == start:
+					break
+			var floor_h := rig.world_t[fi].dot(f.up)
+			for k0 in N:
+				if on[k0] or not on[(k0 - 1 + N) % N]:
+					continue
+				var k1 := k0
+				while not on[k1 % N]:
+					k1 += 1
+				var a: Vector3 = c[(k0 - 1 + N) % N]
+				var b: Vector3 = c[k1 % N]
+				var n := k1 - k0 + 1
+				for k2 in range(k0, k1):
+					var u := float(k2 - k0 + 1) / n
+					var sm := u * u * (3.0 - 2.0 * u)
+					var lift := maxf(0.0, floor_h + clear * pow(sin(PI * u), 0.25) - P[k2 % N][j].dot(f.up))
+					c[k2 % N] = a * (1.0 - sm) + b * sm + f.up * lift
+		var si := rig.parent[fi]
+		var hi := rig.parent[si] if si >= 0 else -1
+		for k in N:
+			if c[k] != null:
+				T[k][j] = P[k][j] + c[k]
+			if hi < 0:
+				continue
+			var L := (rig.world_t[si] - rig.world_t[hi]).length() + (rig.world_t[fi] - rig.world_t[si]).length()
+			var D: Vector3 = W[k].T[hi] - T[k][j]
+			var vd := D.dot(f.up)
+			var hd := _flat(D, f.up).length()
+			var R := 0.97 * L
+			if Vector2(vd, hd).length() > R:
+				drop[k] = maxf(drop[k], vd - sqrt(R * R - hd * hd) if hd < R else vd)
+	var w := maxi(1, roundi(0.06 * N))
+	var mx := []
+	for k in N:
+		var m := 0.0
+		for q in 2 * w + 1:
+			m = maxf(m, drop[(k + q - w + N) % N])
+		mx.append(m)
+	var smd := []
+	for k in N:
+		var acc_s := 0.0
+		for q in 2 * w + 1:
+			acc_s += mx[(k + q - w + N) % N]
+		smd.append(minf(0.01 * size, acc_s / (2 * w + 1)))
+	var plan := {"T": T, "drop": smd}
+	if rig.lock_cache.size() > 64:
+		rig.lock_cache.clear()
+	rig.lock_cache[key] = plan
+	return plan
+
+
+static func foot_lock(acc: Acc, rig: Rig, clip: Dictionary, t: float, off) -> void:
+	var g: Dictionary = clip["ground"]
+	var plan := lock_plan(rig, clip)
+	var N := LOCK_N
+	var x := fposmod(t / float(clip["duration"]), 1.0) * N
+	var k0 := int(floor(x)) % N
+	var k1 := (k0 + 1) % N
+	var u: float = x - floor(x)
+	var upv := body_frame(rig).up
+	var drop: float = plan["drop"][k0] * (1.0 - u) + plan["drop"][k1] * u
+	var bones := []
+	for b in g["bones"]:
+		if rig.index.has(b):
+			bones.append(b)
+	if drop > 1e-9 and not bones.is_empty():
+		acc.add(rig.names[skeleton_root(rig, rig.index[bones[0]])], "move_up", -drop, func(): return {"lateral": upv, "vertical": upv, "roll": upv})
+	for j in bones.size():
+		var b: String = bones[j]
+		var P: Vector3 = plan["T"][k0][j] * (1.0 - u) + plan["T"][k1][j] * u + upv * (off.get(b, 0.0) if off != null else 0.0)
+		two_bone_ik(acc, rig, b, P, null, 1.0)
+	if g.get("flat", false):
+		for b in g["bones"]:
+			flat_foot(acc, rig, b, off.get(b, 0.0) if off != null else 0.0)
+
+
 # ── основные слои и пол (primary) ──────────────────────────────────────────────────────────────────────────────
 ## opts: { "floor": Callable(bone: String, F: Vector3, rest: float) -> float — высота пола под стопой (рельеф в игре),
 ##         "targets": { id констрейна: Vector3 } — живые цели } — всё в координатах модели, как LiveOpts ядра.
 static func primary(rig: Rig, clip: Dictionary, t: float, opts := {}) -> Acc:
+	var t_clip := t  # фиксация стопы — по времени клипа, как её план
 	var trv = clip.get("travel")
 	if trv != null and trv.get("reverse", false):
 		t = float(clip["duration"]) - t
@@ -545,6 +716,8 @@ static func primary(rig: Rig, clip: Dictionary, t: float, opts := {}) -> Acc:
 		if g.get("flat", false):
 			for b in g["bones"]:
 				flat_foot(acc, rig, b, off.get(b, 0.0) if off != null else 0.0)
+		if g.get("lock", false) and clip["loop"]:
+			foot_lock(acc, rig, clip, t_clip, off)
 	var cons = clip.get("constraints")
 	if cons != null and cons.any(func(c): return not c.get("muted", false)):
 		for c in cons:

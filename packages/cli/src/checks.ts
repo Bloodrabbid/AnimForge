@@ -64,6 +64,21 @@ function gaitCheck(project: Project, rig: ReturnType<typeof buildRig>, m: Mesh, 
     : shuffle
       ? { check: "slide", level: "warn", msg: `топчется на месте: опорная стопа почти не уезжает назад — шаг на ${metrics.speed} роста в секунду; в игре его придётся крутить в разы быстрее`, value: metrics.speed }
       : { check: "slide", level: "warn", msg: `ноги скользят: опорная стопа проезжает по полу ${metrics.slide} % роста за шаг (худший шаг ${(g.max * 100).toFixed(1)} %)`, value: metrics.slide };
+  // сначала устройство: фиксация опорной стопы (ground.lock) снимает скольжение у любой походки, не трогая
+  // характер; «лунную» и топтание она не чинит — там стопа в опоре едет не туда, это дело фазы ног
+  if (fix && !moon && !shuffle && work.ground?.bones.length && !work.ground.lock) {
+    const c = structuredClone(work);
+    c.ground = { ...c.ground!, ik: true, lock: true };
+    const after = gaitSlide(project, rig, c);
+    if (after && after.mean <= LIMITS.slide && after.speed >= minSpeed && skinBad(project, rig, m, c, 17).bad <= Math.max(skin0, LIMITS.skinBad) && sinkOf(project, rig, m, c, 17).d <= Math.max(LIMITS.floor * m.H, sinkOf(project, rig, m, work, 17).d)) {
+      steps.push({ name: "clip.ground", args: { clip: name, bones: c.ground!.bones.join(","), mode: c.ground!.mode, ik: true, ...(c.ground!.flat ? { flat: true } : {}), lock: true } });
+      metrics.slideAfter = +(after.mean * 100).toFixed(1);
+      metrics.speedAfter = +(after.speed / m.H).toFixed(2);
+      finding.fixed = `опорная стопа зафиксирована (ground.lock) → скольжение ${metrics.slideAfter} % роста за шаг, шаг ${metrics.speedAfter} роста/с`;
+      finding.level = "warn";
+      return { finding, work: c };
+    }
+  }
   const layers = work.layers.filter((l) => l.type === "recipe" && l.recipe === "waddle-walk");
   if (!fix || !layers.length) return { finding, work };
   const p0 = withDefaults(RECIPES["waddle-walk"], (layers[0] as { params: Record<string, unknown> }).params);

@@ -58,7 +58,7 @@ export const SYNTHETIC: Clip = {
 export const SYNTHETIC_TRAVEL: Clip = {
   name: "synthetic_travel", duration: 0.958, fps: 30, loop: true,
   layers: ["pelvis", "chest", "head", "arm_l", "arm_r", "leg_l", "leg_r"].map((role) => ({ id: `${role}_w`, type: "recipe" as const, recipe: "waddle-walk", target: { chain: role }, params: { role, legPhase: 180, pelvisYaw: 12 } })),
-  ground: { bones: ["foot_l", "foot_r"], mode: "floor", ik: true, flat: true },
+  ground: { bones: ["foot_l", "foot_r"], mode: "floor", ik: true, flat: true, lock: true },
   travel: { angle: 120, swing: -40, hips: 25, chest: 0.7, look: 0.65, feet: 30, width: 6, stride: 0.8, reverse: true },
 };
 

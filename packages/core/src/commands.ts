@@ -263,6 +263,7 @@ const defs: CommandDef[] = [
       mode: { type: "string", help: "contact (по умолчанию) | floor" },
       ik: { type: "boolean", help: "провалившуюся ступню поднимать сгибом колена (двухзвенная IK: ступня → голень → бедро)" },
       flat: { type: "boolean", help: "опорная стопа (у пола) — плоско: наклон снимается, разворот остаётся; иначе носок или пятка уходят под пол" },
+      lock: { type: "boolean", help: "у цикла походки опорная стопа стоит на месте: уезжает назад ровно со скоростью клипа (в игре ноги не скользят), поправка раздаётся по переносу, таз опускается, если нога не дотягивается" },
     },
     mutates: true,
     run(ctx, a) {
@@ -271,7 +272,7 @@ const defs: CommandDef[] = [
       const bones = String(a.bones).split(",").map((s) => s.trim());
       for (const b of bones) need(ctx.skeleton.nodes.some((n) => n.name === b), `нет кости «${b}»`);
       need(!a.mode || a.mode === "contact" || a.mode === "floor", "mode: contact | floor");
-      clip.ground = { bones, mode: a.mode ?? "contact", ...(a.ik ? { ik: true } : {}), ...(a.flat ? { flat: true } : {}) };
+      clip.ground = { bones, mode: a.mode ?? "contact", ...(a.ik ? { ik: true } : {}), ...(a.flat ? { flat: true } : {}), ...(a.lock ? { lock: true } : {}) };
       return clip.ground;
     },
   },
