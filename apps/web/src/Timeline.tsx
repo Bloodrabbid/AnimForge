@@ -2,6 +2,7 @@
 import { useRef } from "react";
 import { clipEvents, type Clip } from "../../../packages/core/src/index.ts";
 import { Icon } from "./Icon.tsx";
+import { Menu } from "./Menu.tsx";
 
 interface Props {
   clips: Clip[];
@@ -19,11 +20,13 @@ interface Props {
   /** панель «График» над временем: открыта ли */
   graph?: boolean;
   onGraph?(v: boolean): void;
+  /** утилиты клипа: команда ядра над текущим клипом (зеркальная копия, задом наперёд, на месте, догоняющее) */
+  onAction?(name: string, args: Record<string, unknown>): void;
 }
 
 const SPEEDS = [0.1, 0.25, 0.5, 1, 1.5, 2];
 
-export function Timeline({ clips, clip, t, playing, loop, speed, tryClip, onClip, onTime, onPlay, onLoop, onSpeed, graph, onGraph }: Props) {
+export function Timeline({ clips, clip, t, playing, loop, speed, tryClip, onClip, onTime, onPlay, onLoop, onSpeed, graph, onGraph, onAction }: Props) {
   const d = clip?.duration ?? 1;
   const fps = clip?.fps ?? 30;
   const frames = Math.max(1, Math.round(d * fps));
@@ -74,6 +77,25 @@ export function Timeline({ clips, clip, t, playing, loop, speed, tryClip, onClip
             <button className={`icon ${graph ? "on" : ""}`} onClick={() => onGraph(!graph)} disabled={!clip} title="график амплитуд конечностей (K)">
               <Icon name="graph" />
             </button>
+          )}
+          {onAction && clip && (
+            <Menu label="⋯" title="утилиты клипа" align="right">
+              {(close) => {
+                const free = (base: string) => { let n = base, k = 2; while (clips.some((c) => c.name === n)) n = `${base}${k++}`; return n; };
+                const items: [string, string, Record<string, unknown>, boolean?][] = [
+                  ["Зеркальная копия", "clip.mirror", { clip: clip.name, as: free(`${clip.name}_mirror`) }],
+                  ["Копия задом наперёд", "clip.reverse", { clip: clip.name, as: free(`${clip.name}_reverse`) }],
+                  ["Зеркало у этого клипа", "clip.mirror", { clip: clip.name }, !!clip.mirror],
+                  ["На месте (вперёд и вбок)", "clip.inplace", clip.inPlace ? { clip: clip.name, off: true } : { clip: clip.name, axes: "forward,side" }, !!clip.inPlace],
+                  ["Догоняющее движение", "clip.follow", clip.follow ? { clip: clip.name } : { clip: clip.name, lag: 0.1, bounce: 0.3, loosen: 0.7 }, !!clip.follow],
+                ];
+                return items.map(([label, name, args, on]) => (
+                  <button key={label} onClick={() => { onAction(name, args); close(); }}>
+                    {on != null && <input type="checkbox" readOnly checked={on} />} {label}
+                  </button>
+                ));
+              }}
+            </Menu>
           )}
           <button className={`icon ${loop ? "on" : ""}`} onClick={() => onLoop(!loop)} title="играть по кругу (L)">
             <Icon name="loop" />

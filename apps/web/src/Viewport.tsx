@@ -40,6 +40,8 @@ interface Props {
   onStatus(msg: string, error?: boolean): void;
   /** следы за цикл клипа (стопы, кисти, таз): точки по кадрам графика движения — только показ */
   trails?: Trail[] | null;
+  /** камера едет за тазом персонажа (у клипов с ходом корня) */
+  followCam?: boolean;
   /** режим «Поза»: схватили след — перейти в этот момент (дальше тянут, как сустав) */
   onTrailTime?(t: number): void;
   /** подсветка цепочки (наведение на кривую графика): её кости и конец */
@@ -425,6 +427,7 @@ export function Viewport(props: Props) {
     const clock = new THREE.Clock();
     let lastSel = "";
     let raf = 0;
+    let followLast: THREE.Vector3 | null = null;
     const frame = () => {
       raf = requestAnimationFrame(frame);
       const p = live.current;
@@ -601,6 +604,18 @@ export function Viewport(props: Props) {
           segGeom.attributes.position.needsUpdate = true;
         }
       }
+      // камера за персонажем: цель и камера сдвигаются вместе с тазом
+      const pel = p.project.chains.pelvis?.[0] ?? p.project.chains.hips?.[0];
+      const po = pel ? loaded.current?.bones.get(pel)?.obj : undefined;
+      if (p.followCam && po) {
+        const now = po.getWorldPosition(new THREE.Vector3());
+        if (followLast) {
+          const dlt = now.clone().sub(followLast);
+          controls.target.add(dlt);
+          camera.position.add(dlt);
+        }
+        followLast = now;
+      } else followLast = null;
       const dt = clock.getDelta();
       if (gizmo.animating) gizmo.update(dt);
       controls.update();

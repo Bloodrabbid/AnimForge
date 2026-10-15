@@ -395,10 +395,107 @@ function shapeMean(recipe: string, p: Record<string, unknown>, i: number, n: num
   return m;
 }
 
+// ── утилиты клипа: на месте, зеркало ───────────────────────────────────────────────────────────────────────
+/** Таз и кости над ним — те, чей сдвиг и разворот уносят тело. */
+function rootBones(project: Project, rig: Rig): string[] {
+  const p = project.chains.pelvis?.[0] ?? project.chains.hips?.[0];
+  const out: string[] = [];
+  for (let i = p != null ? rig.index.get(p) ?? -1 : -1; i >= 0; i = rig.parent[i]) out.push(rig.skel.nodes[i].name);
+  return out;
+}
+
+const placeCache = new WeakMap<Rig, Map<string, Map<string, { move: Vec3; yaw: number }>>>();
+/** На месте (clip.inPlace): убрать с таза и корня ход клипа по выбранным осям тела — равномерно за клип снимается
+ * разница «конец − начало» (так у петли с root motion корень перестаёт уезжать, а качание внутри шага остаётся). */
+function applyInPlace(acc: Acc, rig: Rig, project: Project, clip: Clip, tClip: number) {
+  let cache = placeCache.get(rig);
+  if (!cache) placeCache.set(rig, (cache = new Map()));
+  const base: Clip = { ...clip, inPlace: undefined, ground: undefined, constraints: undefined };
+  const key = JSON.stringify([base, project.chains, project.up, project.forward]);
+  const f = bodyFrame(project);
+  let drift = cache.get(key);
+  if (!drift) {
+    const at = (t: number) => primary(project, rig, base, t);
+    // у петли конец = начало (ключи заворачиваются) — ход меряем чуть раньше конца
+    const a = at(0), b = at(clip.loop ? clip.duration * (1 - 1e-4) : clip.duration);
+    const yawOf = (x: Acc, bone: string) => vdot(rotvec(qmul(qmul(rig.worldR[rig.index.get(bone)!], x.rot.get(bone) ?? QI), qinv(rig.worldR[rig.index.get(bone)!]))), f.up);
+    drift = new Map(rootBones(project, rig).map((bone) => [bone, { move: vsub(b.move.get(bone) ?? [0, 0, 0], a.move.get(bone) ?? [0, 0, 0]), yaw: yawOf(b, bone) - yawOf(a, bone) }]));
+    if (cache.size > 64) cache.clear();
+    cache.set(key, drift);
+  }
+  const u = clip.duration > 0 ? tClip / (clip.loop ? clip.duration * (1 - 1e-4) : clip.duration) : 0;
+  const axes = clip.inPlace!;
+  for (const [bone, d] of drift) {
+    let m = acc.move.get(bone);
+    for (const [ax, dir] of [["forward", f.forward], ["side", f.side], ["up", f.up]] as const)
+      if (axes.includes(ax)) m = vsub(m ?? [0, 0, 0], vscale(dir, vdot(d.move, dir) * u));
+    if (m) acc.move.set(bone, m);
+    if (axes.includes("yaw") && Math.abs(d.yaw) > 1e-9) acc.turn(bone, localDelta(rig, rig.index.get(bone)!, f.up, -d.yaw * u));
+  }
+}
+
+/** Пары «левая ↔ правая» для зеркала: цепочки x_l ↔ x_r (и leg_l0 ↔ leg_r0) кость в кость, потом имена с метками
+ * сторон (_l/_r, Left/Right, .L/.R, l_/r_), потом дети уже найденных пар — по порядку. Остальные — на оси тела. */
+export function mirrorPairs(project: Project, rig: Rig): Record<string, string> {
+  const out: Record<string, string> = {};
+  const pair = (a: string, b: string) => { if (a !== b && !out[a] && !out[b] && rig.index.has(a) && rig.index.has(b)) { out[a] = b; out[b] = a; } };
+  for (const [name, bones] of Object.entries(project.chains)) {
+    const m = name.match(/^(.*_)l(\d*)$/);
+    const other = m ? project.chains[`${m[1]}r${m[2]}`] : undefined;
+    if (other && other.length === bones.length) bones.forEach((b, i) => pair(b, other[i]));
+  }
+  const swaps: [RegExp, string, string][] = [[/_l(?=$|[_.\d])/, "_l", "_r"], [/_L(?=$|[_.\d])/, "_L", "_R"], [/Left/, "Left", "Right"], [/\.L(?=$|[_.\d])/, ".L", ".R"], [/^l_/, "l_", "r_"], [/^L_/, "L_", "R_"]];
+  for (const n of rig.skel.nodes) {
+    for (const [re, a, b] of swaps) if (re.test(n.name)) { pair(n.name, n.name.replace(re, (x) => x.replace(a, b))); break; }
+  }
+  // дети найденных пар — по порядку (стопа под голенью, пальцы под кистью), сколько найдётся
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const [a, b] of Object.entries(out)) {
+      const ka = rig.parent.flatMap((p, k) => (p === rig.index.get(a) ? [k] : [])), kb = rig.parent.flatMap((p, k) => (p === rig.index.get(b) ? [k] : []));
+      if (ka.length !== kb.length) continue;
+      ka.forEach((x, i) => { const na = rig.skel.nodes[x].name, nb = rig.skel.nodes[kb[i]].name; if (!out[na] && !out[nb] && na !== nb) { pair(na, nb); changed = true; } });
+    }
+  }
+  return out;
+}
+const pairCache = new WeakMap<Rig, Record<string, string>>();
+
+/** Зеркало (clip.mirror): поза отражается через плоскость симметрии тела — левая сторона делает то, что делала
+ * правая. Поворот кости в мировых осях покоя отражается (ось — через плоскость, угол — со сменой знака) и
+ * отдаётся паре, сдвиги отражаются, масштабы — паре. */
+function applyMirror(acc: Acc, rig: Rig, project: Project) {
+  let pairs = pairCache.get(rig);
+  if (!pairs) pairCache.set(rig, (pairs = mirrorPairs(project, rig)));
+  const side = bodyFrame(project).side;
+  const refl = (v: Vec3): Vec3 => vsub(v, vscale(side, 2 * vdot(v, side)));
+  const rot = new Map<string, Quat>(), move = new Map<string, Vec3>(), scale = new Map<string, Vec3>();
+  const bones = new Set([...acc.rot.keys(), ...acc.move.keys(), ...acc.scale.keys()]);
+  for (const b of [...bones]) if (pairs[b]) bones.add(pairs[b]);
+  for (const b of bones) {
+    const src = pairs[b] ?? b, i = rig.index.get(b), j = rig.index.get(src);
+    if (i == null || j == null) continue;
+    const d = acc.rot.get(src);
+    if (d) {
+      const m = qmul(qmul(rig.worldR[j], d), qinv(rig.worldR[j]));
+      const r = refl([m[0], m[1], m[2]]);
+      rot.set(b, qnorm(qmul(qmul(qinv(rig.worldR[i]), [-r[0], -r[1], -r[2], m[3]]), rig.worldR[i])));
+    }
+    const mv = acc.move.get(src);
+    if (mv) move.set(b, refl(mv));
+    const sc = acc.scale.get(src);
+    if (sc) scale.set(b, [...sc] as Vec3);
+  }
+  acc.rot = rot;
+  acc.move = move;
+  acc.scale = scale;
+}
+
 /** Основные слои (без вторичной динамики) и постановка на пол. */
 function primary(project: Project, rig: Rig, clip: Clip, t: number, opts: LiveOpts = {}): Acc {
   const tClip = t; // фиксация стопы — по времени клипа, как её план (реверс уже внутри плана)
-  if (clip.travel?.reverse) t = clip.duration - t;
+  // задом наперёд (clip.reverse) и ход назад (travel.reverse) — вместе отменяют друг друга
+  if (!!clip.travel?.reverse !== !!clip.reverse) t = clip.duration - t;
   // стиль походки: быстрее — слои идут быстрее, клип (его длину clip.gait уже поделил) — вмещает те же шаги
   const cad = gaitCadence(clip.gait);
   const src = clip;
@@ -452,6 +549,7 @@ function primary(project: Project, rig: Rig, clip: Clip, t: number, opts: LiveOp
   if (src.gait) applyGait(acc, rig, project, src, heights.get(SIZE) ?? 1);
   clip = src;
   if (clip.travel) applyTravel(acc, rig, project, clip.travel);
+  if (clip.inPlace?.length) applyInPlace(acc, rig, project, clip, tClip);
   // ограничения — до постановки на пол: ноги встают на пол уже в разрешённой позе
   if (project.limits) acc.applyLimits();
   const g = clip.ground;
@@ -1350,6 +1448,7 @@ export function posePartsAt(project: Project, rig: Rig, clip: Clip, t: number, o
     addSecondary(acc, project, rig, clip, t);
     if (project.limits) acc.applyLimits(secondaryBones(project, clip)); // хвост и уши после пружины — тоже в своих пределах
   }
+  if (clip.mirror) applyMirror(acc, rig, project);
   const parts = acc.parts();
   if (acc.limited.size) parts.limited = acc.limited;
   return parts;
@@ -1363,6 +1462,7 @@ export function motionAt(project: Project, rig: Rig, clip: Clip, t: number): { r
     addSecondary(acc, project, rig, clip, t);
     if (project.limits) acc.applyLimits(secondaryBones(project, clip));
   }
+  if (clip.mirror) applyMirror(acc, rig, project);
   return { rot: acc.rot, base: acc.base, limited: acc.limited };
 }
 
@@ -1422,7 +1522,9 @@ export function clipEvents(clip: Clip): (ClipEvent & { layer: string })[] {
     if (l.type !== "recipe") continue;
     const def = RECIPES[l.recipe];
     if (!def?.events) continue;
-    for (const e of def.events(withDefaults(def, l.params))) {
+    for (const e0 of def.events(withDefaults(def, l.params))) {
+      // задом наперёд — события в зеркальные моменты (удар в конце замаха остаётся ударом)
+      const e = clip.reverse ? { ...e0, t: +(clip.duration - e0.t).toFixed(6) } : e0;
       const key = `${e.t.toFixed(4)}|${e.name}`;
       if (seen.has(key) || e.t < 0 || e.t > clip.duration + 1e-6) continue;
       seen.add(key);

@@ -158,6 +158,8 @@ class Rig:
 	var heights := {}
 	var sec_cache := {}
 	var lock_cache := {}
+	# пары «левая ↔ правая» для зеркала (mirrorPairs ядра, приходят в .af.json)
+	var mirror := {}
 
 	func node(i: int) -> String:
 		return names[i]
@@ -195,6 +197,7 @@ static func build_rig(data: Dictionary) -> Rig:
 	rig.align = pr.get("align", {}) if pr.get("align") != null else {}
 	rig.limits = pr.get("limits", {}) if pr.get("limits") != null else {}
 	rig.recipes = data.get("recipes", {})
+	rig.mirror = pr.get("mirror", {}) if pr.get("mirror") != null else {}
 	rig.heights = rest_heights(rig)
 	return rig
 
@@ -798,10 +801,97 @@ static func shape_mean(rig: Rig, recipe: String, p: Dictionary, i: int, n: int, 
 	return m
 
 
+# ── утилиты клипа: на месте, зеркало (как в ядре) ──────────────────────────────────────────────────────────
+static func root_bones(rig: Rig) -> Array:
+	var p = null
+	for nm in ["pelvis", "hips"]:
+		if p == null and rig.chains.has(nm) and not rig.chains[nm].is_empty():
+			p = rig.chains[nm][0]
+	var out: Array = []
+	var i: int = rig.index.get(p, -1) if p != null else -1
+	while i >= 0:
+		out.append(rig.names[i])
+		i = rig.parent[i]
+	return out
+
+
+static func apply_in_place(acc: Acc, rig: Rig, clip: Dictionary, t_clip: float) -> void:
+	var base := clip.duplicate()
+	for k in ["inPlace", "ground", "constraints"]:
+		base.erase(k)
+	var key := "place|" + JSON.stringify(base)
+	var f := body_frame(rig)
+	var drift: Dictionary
+	if rig.lock_cache.has(key):
+		drift = rig.lock_cache[key]
+	else:
+		var a := primary(rig, base, 0.0)
+		# у петли конец = начало (ключи заворачиваются) — ход меряем чуть раньше конца
+		var b := primary(rig, base, float(clip["duration"]) * (1.0 - 1e-4) if clip["loop"] else float(clip["duration"]))
+		drift = {}
+		for bone in root_bones(rig):
+			var wi: Quaternion = rig.world_r[rig.index[bone]]
+			var ya: float = _rotvec(wi * a.rot.get(bone, QI) * qinv(wi)).dot(f.up)
+			var yb: float = _rotvec(wi * b.rot.get(bone, QI) * qinv(wi)).dot(f.up)
+			drift[bone] = {"move": b.move.get(bone, Vector3.ZERO) - a.move.get(bone, Vector3.ZERO), "yaw": yb - ya}
+		if rig.lock_cache.size() > 64:
+			rig.lock_cache.clear()
+		rig.lock_cache[key] = drift
+	var dur := float(clip["duration"])
+	var u := t_clip / (dur * (1.0 - 1e-4) if clip["loop"] else dur) if dur > 0 else 0.0
+	var axes: Array = clip["inPlace"]
+	for bone in drift:
+		var d: Dictionary = drift[bone]
+		var has_m: bool = acc.move.has(bone)
+		var m: Vector3 = acc.move.get(bone, Vector3.ZERO)
+		for pair in [["forward", f.forward], ["side", f.side], ["up", f.up]]:
+			if axes.has(pair[0]):
+				m -= pair[1] * (d["move"].dot(pair[1]) * u)
+				has_m = true
+		if has_m:
+			acc.move[bone] = m
+		if axes.has("yaw") and absf(d["yaw"]) > 1e-9:
+			acc.turn(bone, local_delta(rig, rig.index[bone], f.up, -d["yaw"] * u))
+
+
+static func apply_mirror(acc: Acc, rig: Rig) -> void:
+	var pairs: Dictionary = rig.mirror
+	var side := body_frame(rig).side
+	var rot := {}
+	var move := {}
+	var scl := {}
+	var bones := {}
+	for d in [acc.rot, acc.move, acc.scale]:
+		for b in d:
+			bones[b] = true
+			if pairs.has(b):
+				bones[pairs[b]] = true
+	for b in bones:
+		var src: String = pairs.get(b, b)
+		if not rig.index.has(b) or not rig.index.has(src):
+			continue
+		var i: int = rig.index[b]
+		var j: int = rig.index[src]
+		if acc.rot.has(src):
+			var m: Quaternion = rig.world_r[j] * acc.rot[src] * qinv(rig.world_r[j])
+			var v := Vector3(m.x, m.y, m.z)
+			var r := v - side * (2.0 * v.dot(side))
+			rot[b] = qnorm(qinv(rig.world_r[i]) * Quaternion(-r.x, -r.y, -r.z, m.w) * rig.world_r[i])
+		if acc.move.has(src):
+			var mv: Vector3 = acc.move[src]
+			move[b] = mv - side * (2.0 * mv.dot(side))
+		if acc.scale.has(src):
+			scl[b] = acc.scale[src]
+	acc.rot = rot
+	acc.move = move
+	acc.scale = scl
+
+
 static func primary(rig: Rig, clip: Dictionary, t: float, opts := {}) -> Acc:
 	var t_clip := t  # фиксация стопы — по времени клипа, как её план
 	var trv = clip.get("travel")
-	if trv != null and trv.get("reverse", false):
+	# задом наперёд (clip.reverse) и ход назад (travel.reverse) вместе отменяют друг друга
+	if (trv != null and trv.get("reverse", false)) != bool(clip.get("reverse", false)):
 		t = float(clip["duration"]) - t
 	var src := clip
 	var gs = clip.get("gait")
@@ -869,6 +959,8 @@ static func primary(rig: Rig, clip: Dictionary, t: float, opts := {}) -> Acc:
 	clip = src
 	if trv != null:
 		apply_travel(acc, rig, trv)
+	if clip.get("inPlace") != null and not clip["inPlace"].is_empty():
+		apply_in_place(acc, rig, clip, t_clip)
 	if not rig.limits.is_empty():
 		acc.apply_limits()
 	var g = clip.get("ground")
@@ -1735,6 +1827,8 @@ static func pose_parts_at(rig: Rig, clip: Dictionary, t: float, opts := {}) -> P
 			add_secondary(acc, rig, clip, t)
 		if not rig.limits.is_empty():
 			acc.apply_limits(secondary_bones(rig, clip))
+	if clip.get("mirror", false):
+		apply_mirror(acc, rig)
 	var parts := acc.parts()
 	parts.limited = acc.limited
 	return parts
@@ -1747,7 +1841,11 @@ static func clip_events(rig: Rig, clip: Dictionary) -> Array:
 	for l in clip["layers"]:
 		if l["type"] != "recipe" or not rig.recipes.has(l["recipe"]):
 			continue
-		for e in AFRecipes.events(l["recipe"], with_defaults(rig, l["recipe"], l.get("params", {}))):
+		for e0 in AFRecipes.events(l["recipe"], with_defaults(rig, l["recipe"], l.get("params", {}))):
+			var e: Dictionary = e0
+			if clip.get("reverse", false):
+				e = e0.duplicate()
+				e["t"] = snappedf(float(clip["duration"]) - float(e0["t"]), 0.000001)
 			var key := "%.4f|%s" % [e["t"], e["name"]]
 			if seen.has(key) or e["t"] < 0 or e["t"] > clip["duration"] + 1e-6:
 				continue

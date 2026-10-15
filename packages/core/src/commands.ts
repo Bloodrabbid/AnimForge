@@ -717,6 +717,55 @@ const defs: CommandDef[] = [
       return { layers: ids, weight: +a.weight };
     },
   },
+  ...(
+    [
+      ["clip.mirror", "Зеркало: левая сторона делает то, что делала правая (поза отражается через плоскость симметрии тела). as — сделать зеркальную копию, иначе — переключить у самого клипа; off — снять.", "mirror"],
+      ["clip.reverse", "Задом наперёд: клип идёт от конца к началу, события — в зеркальные моменты. as — копия, иначе — переключить; off — снять.", "reverse"],
+    ] as const
+  ).map(([name, help, field]) => ({
+    name,
+    help,
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      as: { type: "string", help: "имя копии (по умолчанию правится сам клип)" },
+      off: { type: "boolean", help: "снять" },
+    },
+    mutates: true,
+    run(ctx: Ctx, a: Record<string, any>) {
+      const src = clipOf(ctx, a.clip);
+      let c = src;
+      if (a.as) {
+        need(!ctx.project.clips.some((x) => x.name === a.as), `клип «${a.as}» уже есть`);
+        c = { ...structuredClone(src), name: String(a.as) };
+        ctx.project.clips.push(c);
+      }
+      const on = a.off ? false : a.as ? !src[field] : !c[field];
+      if (on) c[field] = true;
+      else delete c[field];
+      return { clip: c.name, [field]: on };
+    },
+  })),
+  {
+    name: "clip.inplace",
+    help: "На месте по осям тела: ход клипа (конец − начало) снимается с таза и корня равномерно за клип — корень перестаёт уезжать, качание внутри шага остаётся. axes — forward, side, up, yaw через запятую; пусто — снять.",
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      axes: { type: "string", help: "например forward,side,yaw; по умолчанию forward,side" },
+      off: { type: "boolean", help: "снять" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const c = clipOf(ctx, a.clip);
+      if (a.off) {
+        delete c.inPlace;
+        return { clip: c.name, inPlace: null };
+      }
+      const ax = String(a.axes ?? "forward,side").split(",").map((x) => x.trim()).filter(Boolean);
+      need(ax.every((x) => ["forward", "side", "up", "yaw"].includes(x)), "оси: forward, side, up, yaw");
+      c.inPlace = ax as NonNullable<Clip["inPlace"]>;
+      return { clip: c.name, inPlace: c.inPlace };
+    },
+  },
   {
     name: "clip.follow",
     help: "Догоняющее движение (follow-through): грудь догоняет таз, голова и руки — грудь, через пружину. lag — запаздывание, с (0.08); bounce — перелёт 0…1 (0.3); loosen — доля 0…1 (0.6: 1 — грудь целиком отстаёт от таза, 0 — выключено). Без аргументов — убрать.",

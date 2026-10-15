@@ -70,6 +70,7 @@ export function App() {
   // график амплитуд под вьюпортом и следы конечностей во вьюпорте (запоминаются)
   const [showGraph, setShowGraph] = useState(() => query.get("graph") === "1" || (query.get("graph") !== "0" && localStorage.getItem("af.graph") === "1"));
   useEffect(() => localStorage.setItem("af.graph", showGraph ? "1" : "0"), [showGraph]);
+  const [followCam, setFollowCam] = useState(query.get("follow") === "1");
   const [showTrails, setShowTrails] = useState(() => query.get("trails") === "1" || (query.get("trails") !== "0" && localStorage.getItem("af.trails") === "1"));
   useEffect(() => localStorage.setItem("af.trails", showTrails ? "1" : "0"), [showTrails]);
   const [graphShown, setGraphShown] = useState<Record<string, boolean>>(() => JSON.parse(localStorage.getItem("af.graph.shown") ?? "{}"));
@@ -512,6 +513,7 @@ export function App() {
             }}
             onStatus={say}
             trails={trails}
+            followCam={followCam}
             onTrailTime={(v) => {
               setT(v);
               setPlaying(false);
@@ -582,6 +584,9 @@ export function App() {
                     </label>
                     <label title="путь стоп, кистей и таза за цикл клипа — цвета как на графике">
                       <input type="checkbox" checked={showTrails} onChange={() => setShowTrails((v) => !v)} /> Следы конечностей <span className="kbd">T</span>
+                    </label>
+                    <label title="камера едет за тазом — для клипов, где корень уходит вперёд">
+                      <input type="checkbox" checked={followCam} onChange={() => setFollowCam((v) => !v)} /> Камера за персонажем
                     </label>
                   </>
                 )}
@@ -670,6 +675,10 @@ export function App() {
           onSpeed={setSpeed}
           graph={showGraph}
           onGraph={setShowGraph}
+          onAction={(name, args) => {
+            run(name, args);
+            if (typeof args.as === "string") setClipName(args.as);
+          }}
         />
       </main>
 

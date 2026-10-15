@@ -1844,3 +1844,5 @@ button.adv.on { color: var(--accent, #ffb547); }
 .graph-shape .gs-row { display: grid; grid-template-columns: 62px 1fr 44px; align-items: center; gap: 6px; font-size: 12px; }
 .graph-shape .gs-v { text-align: right; font-variant-numeric: tabular-nums; }
 .graph-shape .gs-tip { font-size: 11px; margin: 2px 0 0; }
+/* меню утилит клипа у таймлайна — вверх: внизу экрана места нет */
+.timeline .menu-list { top: auto; bottom: calc(100% + 6px); }

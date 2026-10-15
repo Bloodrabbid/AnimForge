@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { RECIPES, bodyFrame, buildRig, naturalSpeed, posePartsAt, vadd, vdot, vscale, worldPose, type Clip, type Ctx, type LiveOpts, type Vec3 } from "../../core/src/index.ts";
+import { RECIPES, bodyFrame, buildRig, mirrorPairs, naturalSpeed, posePartsAt, vadd, vdot, vscale, worldPose, type Clip, type Ctx, type LiveOpts, type Vec3 } from "../../core/src/index.ts";
 import { GODOT, ROOT, loadCtx } from "./node.ts";
 
 export function liveData(ctx: Ctx) {
@@ -13,7 +13,7 @@ export function liveData(ctx: Ctx) {
   return {
     version: 1,
     name: p.name,
-    project: { up: p.up, forward: p.forward ?? null, chains: p.chains, align: p.align ?? null, limits: p.limits ?? null },
+    project: { up: p.up, forward: p.forward ?? null, chains: p.chains, align: p.align ?? null, limits: p.limits ?? null, mirror: mirrorPairs(p, buildRig(ctx.skeleton)) },
     skeleton: { nodes: ctx.skeleton.nodes.map((n) => ({ name: n.name, parent: n.parent, restT: n.restT, restR: n.restR, restS: n.restS, isJoint: n.isJoint })) },
     clips: p.clips,
     // схемы параметров: по ним аддон подставляет значения по умолчанию и рисует ручки в инспекторе
@@ -87,6 +87,10 @@ export const SYNTHETIC_SHAPE_ONCE: Clip = {
 export const SYNTHETIC_FOLLOW: Clip = { ...SYNTHETIC_TRAVEL, name: "synthetic_follow", travel: undefined, ground: { bones: ["foot_l", "foot_r"], mode: "floor", ik: true }, follow: { lag: 0.12, bounce: 0.6, loosen: 0.8 } };
 export const SYNTHETIC_FOLLOW_ONCE: Clip = { ...SYNTHETIC_SHAPE_ONCE, name: "synthetic_follow_once", layers: [...SYNTHETIC_SHAPE_ONCE.layers, { id: "core", type: "recipe", recipe: "melee-strike", target: { chain: "pelvis" }, params: { role: "pelvis", hits: 1 } }], follow: { lag: 0.05, bounce: 0.2 } };
 
+/** Утилиты клипа: зеркало, задом наперёд, на месте (ход вперёд и разворот снимаются) — на клипе со всем подряд. */
+export const SYNTHETIC_UTIL: Clip = { ...SYNTHETIC, name: "synthetic_util", mirror: true, reverse: true, inPlace: ["forward", "yaw"], follow: { lag: 0.08 } };
+export const SYNTHETIC_UTIL_TRAVEL: Clip = { ...SYNTHETIC_TRAVEL, name: "synthetic_util_travel", mirror: true, reverse: true };
+
 /** Моменты сверки: края, середина и точки между кадрами (живой рецепт считается в любой момент, не по кадрам). */
 const checkTimes = (d: number) => [0, 0.013, 0.137, 0.29, 0.5, 0.731, 0.97, 1].map((u) => +(u * d).toFixed(6));
 
@@ -101,7 +105,7 @@ export async function liveVerify(dirs?: string[]) {
     const syn = structuredClone(worker);
     syn.project.name = "worker-synthetic";
     syn.project.align = { arm_l: { to: "down", abduct: 8 } };
-    syn.project.clips = [SYNTHETIC, SYNTHETIC_TRAVEL, SYNTHETIC_GAIT, SYNTHETIC_SHAPE, SYNTHETIC_SHAPE_ONCE, SYNTHETIC_FOLLOW, SYNTHETIC_FOLLOW_ONCE];
+    syn.project.clips = [SYNTHETIC, SYNTHETIC_TRAVEL, SYNTHETIC_GAIT, SYNTHETIC_SHAPE, SYNTHETIC_SHAPE_ONCE, SYNTHETIC_FOLLOW, SYNTHETIC_FOLLOW_ONCE, SYNTHETIC_UTIL, SYNTHETIC_UTIL_TRAVEL];
     ctxs.push(syn);
   }
   for (const ctx of ctxs) {
