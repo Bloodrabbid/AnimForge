@@ -151,7 +151,8 @@ export async function make(dir: string, a: Record<string, any>) {
     `${ctx.project.name}: ${made.length} клип(ов)${missing.length ? `, не найдено ${missing.length}` : ""}`,
     ...made.map((m) => `• ${m.name} — ${m.preset} (${m.how}${m.alternatives ? `; ещё: ${m.alternatives.join(", ")}` : ""})`),
     ...missing.map((m) => `• «${m.query}» — ${m.reason}`),
-    ...checks.flatMap((r) => r.findings.map((f) => `${f.level === "fail" ? "✗" : "△"} ${r.clip}: ${f.msg}${f.fixed ? ` (починено: ${f.fixed})` : ""}`)),
+    ...checks.filter((r) => r.findings.length).map((r) => `  ${r.text}`),
+    ...checks.flatMap((r) => r.findings.flatMap((f) => [`${f.level === "fail" ? "✗" : "△"} ${r.clip}: ${f.msg}${f.fixed ? ` (починено: ${f.fixed})` : ""}`, ...(f.advice ?? []).map((x) => `   → ${x.text}`)])),
     ...notes.map((n) => `! ${n}`),
   ].join("\n");
   if (a.send) send([video, glb].filter(Boolean) as string[], summary);

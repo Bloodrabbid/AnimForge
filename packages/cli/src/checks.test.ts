@@ -179,3 +179,29 @@ test("стопа скользит: проверка видит, починка �
   for (const l of moon.layers) if (l.type === "recipe" && /^leg_/.test(String(l.params.role))) l.params.legSwing = -30;
   assert.equal(find(checkClip(ctx.project, ctx, m, moon, false).report, "slide")?.level, "fail");
 });
+
+test("советы: правка по одной ручке с замером «что станет» — команды совета дают ровно обещанное", async () => {
+  const dir = copy("advice");
+  const ctx = await loadCtx(dir);
+  const m = await loadMesh(ctx);
+  const walk = ctx.project.clips.find((c) => c.name === "walk")!;
+  const r = checkClip(ctx.project, ctx, m, walk, false).report;
+  assert.match(r.text, /м\/с.*мм\) за шаг/, r.text);
+  const slide = find(r, "slide") as { advice?: { text: string; after: number; steps: { name: string; args: Record<string, unknown> }[] }[] };
+  assert.ok(slide?.advice?.length, "у скольжения нет совета");
+  const best = slide.advice![0];
+  assert.ok(best.after < r.metrics.slide / 100 / 0.05, `совет не лучше, чем есть: ${best.text}`);
+  // применяем команды совета как есть — скольжение такое, как обещано
+  for (const st of best.steps) await call(dir, st.name, st.args);
+  const ctx2 = await loadCtx(dir);
+  const r2 = checkClip(ctx2.project, ctx2, m, ctx2.project.clips.find((c) => c.name === "walk")!, false, false).report;
+  const promised = Number(/проезжает ([\d.]+) %/.exec(best.text)?.[1]);
+  assert.ok(Math.abs((r2.metrics.slide ?? 0) - promised) < 0.15, `обещано ${promised} %, стало ${r2.metrics.slide} %`);
+  // провал в пол у ходьбы Геральта: совет — ступни на пол, и после него проверка пола проходит
+  const geralt = ctx.project.clips.find((c) => c.name === "walk_geralt")!;
+  const floor = find(checkClip(ctx.project, ctx, m, geralt, false).report, "floor") as typeof slide;
+  assert.match(floor.advice?.[0]?.text ?? "", /ступни на пол.*проходит/, JSON.stringify(floor.advice));
+  for (const st of floor.advice![0].steps) await call(dir, st.name, st.args);
+  const ctx3 = await loadCtx(dir);
+  assert.equal(find(checkClip(ctx3.project, ctx3, m, ctx3.project.clips.find((c) => c.name === "walk_geralt")!, false, false).report, "floor"), undefined);
+});

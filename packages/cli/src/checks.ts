@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { buildRig, clipEvents, gaitSlide, motionAt, posePartsAt, RECIPES, withDefaults, type Clip, type Ctx, type Project } from "../../core/src/index.ts";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { call, findPreset, loadCtx, smoothWeights } from "./node.ts";
+import { advise, type Advice } from "./advice.ts";
 import { heightOf, loadSkinScene, meshEdges, restVerts, skinFrame, stretchOf, type SkinScene } from "./skin.ts";
 
 export interface Finding {
@@ -16,6 +17,8 @@ export interface Finding {
   t?: number;
   value?: number;
   fixed?: string;
+  /** что поменять и что тогда станет — замерено пробой (advice.ts) */
+  advice?: Advice[];
 }
 
 export interface ClipReport {
@@ -23,6 +26,8 @@ export interface ClipReport {
   ok: boolean;
   findings: Finding[];
   metrics: Record<string, number>;
+  /** отчёт словами: что происходит и в каких числах */
+  text: string;
 }
 
 /** Пороги. Растяжение и сдвиги — в долях роста модели. */
@@ -99,14 +104,14 @@ export async function loadMesh(ctx: Ctx & { dir: string }) {
   for (let i = 2; i < rest.length; i += 3) floor = Math.min(floor, rest[i]);
   return { sc, rest, edges: meshEdges(sc), H: heightOf(rest), floor, dom: restVerts(sc).dom };
 }
-type Mesh = Awaited<ReturnType<typeof loadMesh>>;
+export type Mesh = Awaited<ReturnType<typeof loadMesh>>;
 
 const frameCount = (clip: Clip) => Math.max(12, Math.min(90, Math.round(clip.duration * clip.fps)));
 
 /** Худший кадр по коже. Кадров — простое число со сдвигом фазы: равномерные 8 кадров на ходьбу из четырёх шагов
  * попадают всегда в одни и те же фазы и пропускают разрыв (так и было: 8 кадров — 0,2 %, 12 — 4,5 %). */
 /** Глубже всего под полом за клип (по вершинам кожи), в единицах модели; те же кадры со сдвигом фазы. */
-function sinkOf(project: Project, rig: ReturnType<typeof buildRig>, m: Mesh, clip: Clip, n = 31) {
+export function sinkOf(project: Project, rig: ReturnType<typeof buildRig>, m: Mesh, clip: Clip, n = 31) {
   let d = 0, at = 0;
   for (let k = 0; k < n; k++) {
     const t = (clip.duration * (k + 0.37)) / n;
@@ -116,7 +121,7 @@ function sinkOf(project: Project, rig: ReturnType<typeof buildRig>, m: Mesh, cli
   return { d, t: at };
 }
 
-function skinBad(project: Project, rig: ReturnType<typeof buildRig>, m: Mesh, clip: Clip, n = 31) {
+export function skinBad(project: Project, rig: ReturnType<typeof buildRig>, m: Mesh, clip: Clip, n = 31) {
   let worst = { bad: 0, worst: 1, worstVertex: -1, t: 0 };
   for (let k = 0; k < n; k++) {
     const t = (clip.duration * (k + 0.37)) / n;
@@ -127,7 +132,7 @@ function skinBad(project: Project, rig: ReturnType<typeof buildRig>, m: Mesh, cl
 }
 
 /** Проверить клип. fix — разрешить чинить: возвращает и правки (команды), которые надо записать в проект. */
-export function checkClip(project: Project, ctx: Ctx, m: Mesh, clip: Clip, fix: boolean): { report: ClipReport; steps: { name: string; args: Record<string, unknown> }[] } {
+export function checkClip(project: Project, ctx: Ctx, m: Mesh, clip: Clip, fix: boolean, advice = true): { report: ClipReport; steps: { name: string; args: Record<string, unknown> }[] } {
   const rig = buildRig(ctx.skeleton);
   const findings: Finding[] = [];
   const steps: { name: string; args: Record<string, unknown> }[] = [];
@@ -280,7 +285,7 @@ export function checkClip(project: Project, ctx: Ctx, m: Mesh, clip: Clip, fix: 
       for (const l of layers) steps.push({ name: "recipe.set", args: { clip: clip.name, layer: l.id, params: { tail: 0.3 } } });
       steps.push({ name: "clip.set", args: { clip: clip.name, fit: true } });
       f.fixed = "окно 0,3 с (tail), клип удлинён до конца окна";
-    }
+    } else if (layers.length) f.advice = [{ text: "открыть окно на 0,3 с (tail) и удлинить клип до его конца", after: 0, steps: [...layers.map((l) => ({ name: "recipe.set", args: { clip: clip.name, layer: l.id, params: { tail: 0.3 } } })), { name: "clip.set", args: { clip: clip.name, fit: true } }] }];
     findings.push(f);
   }
 
@@ -289,7 +294,22 @@ export function checkClip(project: Project, ctx: Ctx, m: Mesh, clip: Clip, fix: 
   const recipe = work.layers.find((l) => l.type === "recipe" && RECIPES[l.recipe]?.events);
   if (!work.loop && recipe && last > work.duration + 1e-3) findings.push({ check: "length", level: "fail", msg: `клип ${work.duration} с короче своих событий (последнее в ${last.toFixed(2)} с)` });
 
-  return { report: { clip: clip.name, ok: !findings.some((f) => f.level === "fail"), findings, metrics }, steps };
+  // советы — к тому, что не починено: что поменять и что станет (пробой той же меркой)
+  if (advice) for (const f of findings) if (!f.fixed) { const a = advise(project, ctx, rig, m, work, f); if (a.length) f.advice = a; }
+  return { report: { clip: clip.name, ok: !findings.some((f) => f.level === "fail"), findings, metrics, text: describe(work, metrics, m, findings) }, steps };
+}
+
+/** Отчёт словами: что за клип и в каких числах — в единицах игры (м/с, мм), чтобы читалось без таблицы порогов. */
+export function describe(clip: Clip, x: Record<string, number>, m: Mesh, findings: Finding[]): string {
+  const mm = (pct: number) => `${Math.round((pct / 100) * m.H * 1000)} мм`;
+  const parts = [`${clip.name}: ${clip.loop ? "цикл" : "разовый"} ${clip.duration.toFixed(2)} с`];
+  if (x.speed !== undefined) parts.push(`идёт ${(x.speed * m.H).toFixed(2)} м/с (${x.speed} роста/с), опорная стопа проезжает ${x.slide} % роста (${mm(x.slide)}) за шаг`);
+  parts.push(x.skin > LIMITS.skinBad * 100 ? `кожа рвётся у ${x.skin} % рёбер` : `кожа цела (растянуто ${x.skin} % рёбер)`);
+  parts.push(x.sink > LIMITS.floor * 100 ? `уходит в пол на ${x.sink} % роста (${mm(x.sink)})` : `в пол не уходит (${mm(x.sink)})`);
+  if (x.seam !== undefined) parts.push(`шов цикла ${x.seam} % роста`);
+  const bad = findings.filter((f) => f.level === "fail").length, warn = findings.length - bad;
+  parts.push(!findings.length ? "замечаний нет" : `${bad ? `брак: ${bad}` : ""}${bad && warn ? ", " : ""}${warn ? `предупреждений: ${warn}` : ""}`);
+  return parts.join("; ") + ".";
 }
 
 /** Проверить клипы проекта (и починить, если fix): правки — командами ядра, потом проверка ещё раз — что осталось. */
@@ -324,7 +344,9 @@ export async function checkProject(dir: string, clips?: string[], fix = false, s
     }
   }
   for (const clip of list) {
-    const { report, steps } = checkClip(ctx.project, ctx, m, clip, fix);
+    // советы — в последнем проходе: при починке их считает повторная проверка, без правок — эта
+    const { report, steps } = checkClip(ctx.project, ctx, m, clip, fix, !fix);
+    if (fix && !steps.length) for (const f of report.findings) if (!f.fixed) { const a = advise(ctx.project, ctx, rig, m, clip, f); if (a.length) f.advice = a; }
     if (weightsNote) report.findings.unshift(weightsNote);
     if (fix && steps.length) {
       for (const st of steps) await call(dir, st.name, st.args);
