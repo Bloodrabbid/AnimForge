@@ -3,7 +3,7 @@
 import { CHANNELS } from "./project.ts";
 import type { Channel, Clip, Constraint, ConstraintTarget, Interp, KeyLayer, Layer, PoseLayer, Project, RecipeLayer, Skeleton } from "./project.ts";
 import { RECIPES, withDefaults } from "./recipes.ts";
-import { addPoseDelta, buildRig, followBones, frameTimes, motionAt, reach } from "./evaluate.ts";
+import { addPoseDelta, buildRig, followBones, frameTimes, mirrorPairs, mirrorPose, motionAt, reach } from "./evaluate.ts";
 import { LIMIT_AXES, boneAngles, limitFrame, type BoneLimit, type LimitAxis } from "./limits.ts";
 import { DEG, qaxis, qrot, vdot, vsub } from "./math.ts";
 import { bodyFrame } from "./evaluate.ts";
@@ -557,15 +557,88 @@ const defs: CommandDef[] = [
       length: { type: "number", help: "сколько костей сгибать, по умолчанию 2" },
       end: { type: "boolean", help: "тянуть конец кости (у кости без дочерней: кисть-варежка, кончик хвоста) — сгибается и она сама" },
       endLength: { type: "number", help: "длина этого конца (по умолчанию — как у родительской кости; редактор мерит по коже)" },
+      mirror: { type: "boolean", help: "зеркальный позинг: правка — и парной кости, отражённая" },
     },
     mutates: true,
     run(ctx, a) {
       const clip = clipOf(ctx, a.clip);
       const rig = buildRig(ctx.skeleton);
       need(rig.index.has(a.bone), `нет кости «${a.bone}»`);
-      const r = reach(ctx.project, rig, clip, +a.t, a.bone, vec(a.target, "target"), a.length == null ? 2 : Math.max(0, Math.round(+a.length)), !!a.end, a.endLength != null ? +a.endLength : undefined);
+      let length = a.length == null ? 2 : Math.max(0, Math.round(+a.length));
+      // зеркальный позинг: сгибаются только кости, у которых есть пара (грудь и таз на оси тела — не отражаются
+      // в другую сторону); та же правка, отражённая, — парным костям
+      if (a.mirror) {
+        const pairs = mirrorPairs(ctx.project, rig);
+        let k = 0;
+        for (let i = rig.parent[rig.index.get(a.bone)!]; k < length && i >= 0 && pairs[rig.skel.nodes[i].name]; i = rig.parent[i]) k++;
+        length = a.end ? Math.max(1, k + 1) : k;
+      }
+      const r = reach(ctx.project, rig, clip, +a.t, a.bone, vec(a.target, "target"), length, !!a.end, a.endLength != null ? +a.endLength : undefined);
+      if (a.mirror) {
+        const m = mirrorPose(ctx.project, rig, r);
+        for (const [bn, q] of Object.entries(m.rot)) if (!r.rot[bn]) r.rot[bn] = q;
+        for (const [bn, v] of Object.entries(m.move)) if (!r.move[bn]) r.move[bn] = v;
+      }
       const key = addPoseDelta(clip, +a.t, r);
       return { t: key.t, bones: [...Object.keys(r.rot), ...Object.keys(r.move)] };
+    },
+  },
+  {
+    name: "pose.mirror",
+    help: "Вставить зеркальную позу: ключ позы из момента t отражается (левая ↔ правая, через плоскость тела) и пишется в момент to (по умолчанию тот же — поза становится зеркальной). Кости, которых нет в исходном ключе, в целевом не трогаются.",
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      t: { type: "number", required: true, help: "ключ-источник, с" },
+      to: { type: "number", help: "куда, с (по умолчанию t)" },
+      layer: { type: "string", help: "слой позы (по умолчанию pose)" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const clip = clipOf(ctx, a.clip);
+      const rig = buildRig(ctx.skeleton);
+      const l = clip.layers.find((x) => x.type === "pose" && x.id === (a.layer ?? "pose")) as PoseLayer | undefined;
+      need(l, `нет слоя позы «${a.layer ?? "pose"}»`);
+      const src = l!.keys.find((k) => Math.abs(k.t - +a.t) < 1e-6);
+      need(src, `нет ключа позы в ${a.t} с; есть: ${l!.keys.map((k) => k.t).join(", ")}`);
+      const m = mirrorPose(ctx.project, rig, src!);
+      const to = a.to != null ? +a.to : +a.t;
+      let k = l!.keys.find((x) => Math.abs(x.t - to) < 1e-6);
+      // новый ключ — с тем, что слой давал в этот момент (как у позинга), иначе соседние ключи «потекут»
+      if (!k && l === clip.layers.find((x) => x.type === "pose")) k = addPoseDelta(clip, to, { rot: {}, move: {} });
+      if (!k) { l!.keys.push((k = { t: to })); l!.keys.sort((x, y) => x.t - y.t); }
+      // в тот же ключ: сначала всё отражённое, потом то, чего в отражении нет (кости на оси — отражены)
+      const rot = { ...(k === src ? {} : k.rot), ...m.rot }, move = { ...(k === src ? {} : k.move), ...m.move };
+      if (k === src) {
+        for (const [b, q] of Object.entries(src.rot ?? {})) if (!(b in rot)) rot[b] = q;
+        for (const [b, v] of Object.entries(src.move ?? {})) if (!(b in move)) move[b] = v;
+      }
+      if (Object.keys(rot).length) k.rot = rot;
+      if (Object.keys(move).length) k.move = move;
+      return { clip: clip.name, from: +a.t, to, bones: [...Object.keys(m.rot), ...Object.keys(m.move)] };
+    },
+  },
+  {
+    name: "layer.mute",
+    help: "Выключить слой (любой: рецепт, ключи, позы) или включить обратно (off).",
+    args: { clip: { type: "string", required: true, help: "клип" }, layer: { type: "string", required: true, help: "id слоя" }, off: { type: "boolean", help: "включить обратно" } },
+    mutates: true,
+    run(ctx, a) {
+      const l = clipOf(ctx, a.clip).layers.find((x) => x.id === a.layer);
+      need(l, `нет слоя «${a.layer}»`);
+      if (a.off) delete l!.muted; else l!.muted = true;
+      return { layer: a.layer, muted: !a.off };
+    },
+  },
+  {
+    name: "layer.solo",
+    help: "Соло слоя позы: остальные слои поз молчат, пока соло стоит; off — снять.",
+    args: { clip: { type: "string", required: true, help: "клип" }, layer: { type: "string", required: true, help: "id слоя позы" }, off: { type: "boolean", help: "снять" } },
+    mutates: true,
+    run(ctx, a) {
+      const l = clipOf(ctx, a.clip).layers.find((x) => x.id === a.layer);
+      need(l && l.type === "pose", `нет слоя позы «${a.layer}»`);
+      if (a.off) delete (l as PoseLayer).solo; else (l as PoseLayer).solo = true;
+      return { layer: a.layer, solo: !a.off };
     },
   },
   {
@@ -698,7 +771,7 @@ const defs: CommandDef[] = [
   },
   {
     name: "layer.set",
-    help: "Вес слоя-рецепта: 1 — как есть, 0 — выключен, между — ослаблен (несколько слоёв — через запятую).",
+    help: "Вес слоя (рецепта, ключей или поз): 1 — как есть, 0 — выключен, между — ослаблен (несколько слоёв — через запятую).",
     args: {
       clip: { type: "string", required: true, help: "клип" },
       layer: { type: "string", required: true, help: "id слоя или «id1,id2»" },
@@ -711,8 +784,8 @@ const defs: CommandDef[] = [
       const ids = String(a.layer).split(",").map((s) => s.trim()).filter(Boolean);
       const layers = ids.map((id) => {
         const l = clip.layers.find((l) => l.id === id);
-        need(l && l.type === "recipe", `нет слоя-рецепта «${id}»`);
-        return l as RecipeLayer;
+        need(l && l.type !== undefined, `нет слоя «${id}»`);
+        return l as RecipeLayer | KeyLayer | PoseLayer;
       });
       for (const l of layers) if (+a.weight === 1) delete l.weight; else l.weight = +a.weight;
       return { layers: ids, weight: +a.weight };

@@ -1846,3 +1846,8 @@ button.adv.on { color: var(--accent, #ffb547); }
 .graph-shape .gs-tip { font-size: 11px; margin: 2px 0 0; }
 /* меню утилит клипа у таймлайна — вверх: внизу экрана места нет */
 .timeline .menu-list { top: auto; bottom: calc(100% + 6px); }
+/* слои поз: M — выключить, S — соло, вес */
+.pose-layer .lh-actions { margin-left: auto; display: flex; gap: 4px; }
+.pose-layer .lh-actions .icon.sm { font-size: 11px; font-weight: 700; width: 22px; }
+.pose-w { display: grid; grid-template-columns: 30px 1fr 36px; gap: 6px; align-items: center; padding: 2px 10px 8px; font-size: 12px; }
+button.small.on { background: var(--accent); color: #111; }

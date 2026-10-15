@@ -905,8 +905,12 @@ static func primary(rig: Rig, clip: Dictionary, t: float, opts := {}) -> Acc:
 		align_rest(acc, rig)
 	for b in acc.rot:
 		acc.base[b] = acc.rot[b]
+	# соло среди слоёв поз: если есть — остальные слои поз молчат
+	var solo: bool = clip["layers"].any(func(l): return l["type"] == "pose" and l.get("solo", false) and not l.get("muted", false))
 	for layer in clip["layers"]:
-		if is_secondary(layer):
+		if is_secondary(layer) or layer.get("muted", false):
+			continue
+		if layer["type"] == "pose" and solo and not layer.get("solo", false):
 			continue
 		match layer["type"]:
 			"recipe":
@@ -945,12 +949,13 @@ static func primary(rig: Rig, clip: Dictionary, t: float, opts := {}) -> Acc:
 			"pose":
 				apply_pose(acc, layer, t, clip)
 			_:
+				var lw: float = float(layer.get("weight", 1.0)) if layer.get("weight") != null else 1.0
 				for tr in layer["tracks"]:
 					var bone: String = tr["bone"]
 					var chain = chain_of(rig, bone)
 					if chain == null:
 						chain = [bone]
-					var v := eval_keys(tr["keys"], t, clip["loop"], clip["duration"])
+					var v := eval_keys(tr["keys"], t, clip["loop"], clip["duration"]) * lw
 					var ax_chain: Array = chain if chain.size() > 1 else [bone]
 					var axis: String = tr["axis"]
 					acc.add(bone, axis, 1.0 + v if axis.begins_with("scale_") else v, func(): return chain_axes(rig, ax_chain))
@@ -1037,12 +1042,14 @@ static func sample_pose(layer: Dictionary, t: float, clip: Dictionary) -> Dictio
 
 static func apply_pose(acc: Acc, layer: Dictionary, t: float, clip: Dictionary) -> void:
 	var p := sample_pose(layer, t, clip)
+	# вес слоя позы: доля поворота (по углу) и сдвига
+	var w: float = float(layer.get("weight", 1.0)) if layer.get("weight") != null else 1.0
 	for bone in p["rot"]:
 		if acc.rig.index.has(bone):
-			acc.turn(bone, p["rot"][bone])
+			acc.turn(bone, p["rot"][bone] if w == 1.0 else qscale(p["rot"][bone], w))
 	for bone in p["move"]:
 		if acc.rig.index.has(bone):
-			acc.move[bone] = acc.move.get(bone, Vector3.ZERO) + p["move"][bone]
+			acc.move[bone] = acc.move.get(bone, Vector3.ZERO) + p["move"][bone] * w
 
 
 static func align_rest(acc: Acc, rig: Rig) -> void:
@@ -1616,7 +1623,7 @@ static func secondary_curve(rig: Rig, clip: Dictionary, layer: Dictionary, chain
 
 static func add_secondary(acc: Acc, rig: Rig, clip: Dictionary, t: float) -> void:
 	for layer in clip["layers"]:
-		if not is_secondary(layer):
+		if not is_secondary(layer) or layer.get("muted", false):
 			continue
 		var chain = rig.chains.get(layer["target"]["chain"])
 		if chain == null:
@@ -1839,7 +1846,7 @@ static func clip_events(rig: Rig, clip: Dictionary) -> Array:
 	var seen := {}
 	var out := []
 	for l in clip["layers"]:
-		if l["type"] != "recipe" or not rig.recipes.has(l["recipe"]):
+		if l["type"] != "recipe" or not rig.recipes.has(l["recipe"]) or l.get("muted", false):
 			continue
 		for e0 in AFRecipes.events(l["recipe"], with_defaults(rig, l["recipe"], l.get("params", {}))):
 			var e: Dictionary = e0

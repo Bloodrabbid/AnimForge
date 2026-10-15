@@ -505,8 +505,11 @@ function primary(project: Project, rig: Rig, clip: Clip, t: number, opts: LiveOp
   if (!heights) heightCache.set(rig, (heights = restHeights(rig, project)));
   if (project.align) alignRest(acc, rig, project);
   for (const [b, q] of acc.rot) acc.base.set(b, q);
+  // соло среди слоёв поз: если есть — остальные слои поз молчат
+  const solo = clip.layers.some((l) => l.type === "pose" && l.solo && !l.muted);
   for (const layer of clip.layers) {
-    if (isSecondary(layer)) continue;
+    if (isSecondary(layer) || layer.muted) continue;
+    if (layer.type === "pose" && solo && !layer.solo) continue;
     if (layer.type === "recipe") {
       const def = RECIPES[layer.recipe];
       const chain = project.chains[layer.target.chain];
@@ -539,9 +542,10 @@ function primary(project: Project, rig: Rig, clip: Clip, t: number, opts: LiveOp
     } else if (layer.type === "pose") {
       applyPose(acc, layer, t, clip);
     } else {
+      const lw = layer.weight ?? 1;
       for (const tr of layer.tracks) {
         const chain = chainOf(project, tr.bone) ?? [tr.bone];
-        const v = evalKeys(tr.keys, t, clip.loop, clip.duration);
+        const v = evalKeys(tr.keys, t, clip.loop, clip.duration) * lw;
         acc.add(tr.bone, tr.axis, tr.axis.startsWith("scale_") ? 1 + v : v, () => chainAxes(rig, project, chain.length > 1 ? chain : [tr.bone]));
       }
     }
@@ -620,8 +624,31 @@ export function addPoseDelta(clip: Clip, t: number, r: { rot: Record<string, Qua
 
 function applyPose(acc: Acc, layer: PoseLayer, t: number, clip: Clip) {
   const p = samplePose(layer, t, clip);
-  for (const [bone, q] of Object.entries(p.rot)) if (acc.rig.index.has(bone)) acc.turn(bone, q);
-  for (const [bone, v] of Object.entries(p.move)) if (acc.rig.index.has(bone)) acc.move.set(bone, vadd(acc.move.get(bone) ?? [0, 0, 0], v));
+  // вес слоя позы: доля поворота (по углу) и сдвига
+  const w = layer.weight ?? 1;
+  for (const [bone, q] of Object.entries(p.rot)) if (acc.rig.index.has(bone)) acc.turn(bone, w === 1 ? q : qscale(q, w));
+  for (const [bone, v] of Object.entries(p.move)) if (acc.rig.index.has(bone)) acc.move.set(bone, vadd(acc.move.get(bone) ?? [0, 0, 0], vscale(v, w)));
+}
+
+/** Зеркальная поза (вставка отражённой позы, зеркальный позинг): повороты и сдвиги ключа позы — паре кости,
+ * отражённые через плоскость симметрии тела. Кости на оси тела отражаются сами в себя. */
+export function mirrorPose(project: Project, rig: Rig, r: { rot?: Record<string, Quat>; move?: Record<string, Vec3> }): { rot: Record<string, Quat>; move: Record<string, Vec3> } {
+  const pairs = mirrorPairs(project, rig);
+  const side = bodyFrame(project).side;
+  const refl = (v: Vec3): Vec3 => vsub(v, vscale(side, 2 * vdot(v, side)));
+  const out = { rot: {} as Record<string, Quat>, move: {} as Record<string, Vec3> };
+  for (const [b, q] of Object.entries(r.rot ?? {})) {
+    const d = pairs[b] ?? b, i = rig.index.get(b), j = rig.index.get(d);
+    if (i == null || j == null) continue;
+    const m = qmul(qmul(rig.worldR[i], q), qinv(rig.worldR[i]));
+    const v = refl([m[0], m[1], m[2]]);
+    out.rot[d] = qnorm(qmul(qmul(qinv(rig.worldR[j]), [-v[0], -v[1], -v[2], m[3]]), rig.worldR[j]));
+  }
+  for (const [b, v] of Object.entries(r.move ?? {})) {
+    const d = pairs[b] ?? b;
+    if (rig.index.has(d)) out.move[d] = refl(v);
+  }
+  return out;
 }
 
 /** IK цепочки любой длины (CCD): от кости у кончика к основанию каждая поворачивается так, чтобы кончик шёл
@@ -1341,7 +1368,7 @@ function secondaryCurve(project: Project, rig: Rig, clip: Clip, layer: RecipeLay
 
 function addSecondary(acc: Acc, project: Project, rig: Rig, clip: Clip, t: number) {
   for (const layer of clip.layers) {
-    if (!isSecondary(layer) || layer.type !== "recipe") continue;
+    if (!isSecondary(layer) || layer.type !== "recipe" || layer.muted) continue;
     const chain = project.chains[layer.target.chain];
     if (!chain) continue;
     const p = withDefaults(RECIPES[layer.recipe], layer.params);
@@ -1519,7 +1546,7 @@ export function clipEvents(clip: Clip): (ClipEvent & { layer: string })[] {
   const seen = new Set<string>();
   const out: (ClipEvent & { layer: string })[] = [];
   for (const l of clip.layers) {
-    if (l.type !== "recipe") continue;
+    if (l.type !== "recipe" || l.muted) continue;
     const def = RECIPES[l.recipe];
     if (!def?.events) continue;
     for (const e0 of def.events(withDefaults(def, l.params))) {

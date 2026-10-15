@@ -2,7 +2,7 @@
 // Ползунки строятся из схемы RECIPES[recipe].params. Во время перетаскивания меняется только рабочая копия
 // (поза сразу видна), при отпускании — команды recipe.set.
 import { useRef, useState, type ReactNode } from "react";
-import { RECIPES, withDefaults, type Clip, type ParamSpec, type Project, type RecipeLayer } from "../../../packages/core/src/index.ts";
+import { RECIPES, withDefaults, type Clip, type ParamSpec, type PoseLayer, type Project, type RecipeLayer } from "../../../packages/core/src/index.ts";
 import type { LibRecipe, Step } from "./api.ts";
 import { Icon } from "./Icon.tsx";
 import { sourceOf } from "./LibraryPanel.tsx";
@@ -70,6 +70,37 @@ export function LayersPanel({ project, clip, library, readOnly, setProject, runM
           }
         />
       ))}
+      {clip.layers.filter((l) => l.type === "pose").map((l) => {
+        const pl = l as PoseLayer;
+        const w = pl.weight ?? 1;
+        return (
+          <div key={pl.id} className={`layer pose-layer ${pl.muted ? "muted-layer" : ""}`}>
+            <div className="layer-head static">
+              <span className="badge keys">поза</span>
+              <b>{pl.id}</b>
+              <span className="muted">ключей {pl.keys.length}</span>
+              {!readOnly && (
+                <div className="lh-actions">
+                  <button className={`icon sm ${pl.muted ? "" : "on"}`} title={pl.muted ? "включить" : "выключить"} onClick={() => runMany([{ name: "layer.mute", args: { clip: clip.name, layer: pl.id, ...(pl.muted ? { off: true } : {}) } }], pl.muted ? "слой включён" : "слой выключен")}>
+                    M
+                  </button>
+                  <button className={`icon sm ${pl.solo ? "on" : ""}`} title="соло: остальные слои поз молчат" onClick={() => runMany([{ name: "layer.solo", args: { clip: clip.name, layer: pl.id, ...(pl.solo ? { off: true } : {}) } }], pl.solo ? "соло снято" : "соло")}>
+                    S
+                  </button>
+                </div>
+              )}
+            </div>
+            {!readOnly && (
+              <label className="pose-w" title="вес слоя: доля поворотов и сдвигов позы">
+                <span>вес</span>
+                <input type="range" min={0} max={1} step={0.05} defaultValue={w} key={w}
+                  onPointerUp={(e) => runMany([{ name: "layer.set", args: { clip: clip.name, layer: pl.id, weight: +(e.target as HTMLInputElement).value } }], "вес слоя позы")} />
+                <span>{w.toFixed(2)}</span>
+              </label>
+            )}
+          </div>
+        );
+      })}
       {keyLayers.map((l) => (
         <div key={l.id} className="layer">
           <div className="layer-head static">

@@ -70,6 +70,7 @@ export function App() {
   // график амплитуд под вьюпортом и следы конечностей во вьюпорте (запоминаются)
   const [showGraph, setShowGraph] = useState(() => query.get("graph") === "1" || (query.get("graph") !== "0" && localStorage.getItem("af.graph") === "1"));
   useEffect(() => localStorage.setItem("af.graph", showGraph ? "1" : "0"), [showGraph]);
+  const [poseMirror, setPoseMirror] = useState(false);
   const [followCam, setFollowCam] = useState(query.get("follow") === "1");
   const [showTrails, setShowTrails] = useState(() => query.get("trails") === "1" || (query.get("trails") !== "0" && localStorage.getItem("af.trails") === "1"));
   useEffect(() => localStorage.setItem("af.trails", showTrails ? "1" : "0"), [showTrails]);
@@ -504,7 +505,7 @@ export function App() {
               if (!clip) return;
               // схватили след — ключ в момент точки следа, а не в текущий кадр
               const tt = at ?? t;
-              runMany([{ name: "pose.reach", args: { clip: clip.name, t: +tt.toFixed(3), bone, target: target.join(","), length, ...(end ? { end: true, ...(endLength ? { endLength: +endLength.toFixed(4) } : {}) } : {}) } }], length ? `поза: ${bone} в ${tt.toFixed(2)} с` : `тело перенесено в ${tt.toFixed(2)} с`);
+              runMany([{ name: "pose.reach", args: { clip: clip.name, t: +tt.toFixed(3), bone, target: target.join(","), length, ...(poseMirror ? { mirror: true } : {}), ...(end ? { end: true, ...(endLength ? { endLength: +endLength.toFixed(4) } : {}) } : {}) } }], length ? `поза: ${bone} в ${tt.toFixed(2)} с` : `тело перенесено в ${tt.toFixed(2)} с`);
             }}
             onPin={(bone, at) => {
               if (!clip) return;
@@ -547,6 +548,16 @@ export function App() {
                     </option>
                   ))}
                 </select>
+              )}
+              {poseMode && (
+                <button className={`small ${poseMirror ? "on" : ""}`} title="зеркальный позинг: тянете одну руку — другая отражённо (X-mirror)" onClick={() => setPoseMirror((v) => !v)}>
+                  ⇋ X
+                </button>
+              )}
+              {poseMode && clip?.layers.some((l) => l.type === "pose" && l.id === "pose" && l.keys.some((k) => Math.abs(k.t - t) < 1e-3)) && (
+                <button className="small" title="отразить позу этого кадра: левая ↔ правая (pose.mirror)" onClick={() => runMany([{ name: "pose.mirror", args: { clip: clip.name, t: +(clip.layers.find((l) => l.type === "pose" && l.id === "pose") as { keys: { t: number }[] }).keys.find((k) => Math.abs(k.t - t) < 1e-3)!.t } }], "поза отражена")}>
+                  отразить
+                </button>
               )}
               {poseMode && clip?.layers.some((l) => l.type === "pose") && (
                 <button className="small" title="убрать ключ позы в этом кадре" onClick={() => runMany([{ name: "pose.clear", args: { clip: clip.name, t: +t.toFixed(3) } }], "поза в кадре сброшена")}>

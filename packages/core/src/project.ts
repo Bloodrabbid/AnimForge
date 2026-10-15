@@ -53,6 +53,7 @@ export interface RecipeLayer {
   params: Record<string, number | string | boolean>;
   preset?: string; // из какого пресета библиотеки взяты параметры
   weight?: number;
+  muted?: boolean; // выключен (layer.mute)
   /** Правка кривых слоя (как Late / Amount / Step в ActionForge): late — сдвиг по фазе, доля периода (+ — позже);
    * amount — размах вокруг среднего за период (×); step — задержка каждой следующей кости цепочки, доля периода. */
   shape?: { late?: number; amount?: number; step?: number };
@@ -62,6 +63,8 @@ export interface KeyLayer {
   id: string;
   type: "keys";
   tracks: KeyTrack[]; // добавочные повороты поверх нижних слоёв
+  weight?: number; // множитель значений ключей
+  muted?: boolean;
 }
 
 /** Ключ позы: добавочные повороты костей (кватернион-дельта в локальных осях позы покоя, поверх нижних слоёв)
@@ -77,6 +80,10 @@ export interface PoseLayer {
   id: string;
   type: "pose";
   keys: PoseKey[];
+  weight?: number; // доля позы: 0.5 — повороты вполовину угла, сдвиги вполовину
+  muted?: boolean;
+  /** соло: пока у какого-то слоя поз стоит solo, остальные слои поз молчат */
+  solo?: boolean;
 }
 
 export type Layer = RecipeLayer | KeyLayer | PoseLayer;

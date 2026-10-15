@@ -91,6 +91,11 @@ export const SYNTHETIC_FOLLOW_ONCE: Clip = { ...SYNTHETIC_SHAPE_ONCE, name: "syn
 export const SYNTHETIC_UTIL: Clip = { ...SYNTHETIC, name: "synthetic_util", mirror: true, reverse: true, inPlace: ["forward", "yaw"], follow: { lag: 0.08 } };
 export const SYNTHETIC_UTIL_TRAVEL: Clip = { ...SYNTHETIC_TRAVEL, name: "synthetic_util_travel", mirror: true, reverse: true };
 
+/** Слои: вес у ключей и поз, выключенный слой, соло слоя поз. */
+const P2 = { id: "p2", type: "pose" as const, keys: [{ t: 0.3, rot: { arm_r_0: [0.2, 0, 0, 0.98] as [number, number, number, number] } }] };
+export const SYNTHETIC_LAYERS: Clip = { ...SYNTHETIC, name: "synthetic_layers", layers: [...SYNTHETIC.layers.map((l) => (l.type === "keys" ? { ...l, weight: 0.5 } : l.type === "pose" ? { ...l, weight: 0.6 } : l)), { ...P2, muted: true }, { id: "off", type: "recipe", recipe: "wave", target: { chain: "ear_l" }, params: {}, muted: true }] };
+export const SYNTHETIC_SOLO: Clip = { ...SYNTHETIC, name: "synthetic_solo", layers: [...SYNTHETIC.layers, { ...P2, solo: true, weight: 0.7 }] };
+
 /** Моменты сверки: края, середина и точки между кадрами (живой рецепт считается в любой момент, не по кадрам). */
 const checkTimes = (d: number) => [0, 0.013, 0.137, 0.29, 0.5, 0.731, 0.97, 1].map((u) => +(u * d).toFixed(6));
 
@@ -105,7 +110,7 @@ export async function liveVerify(dirs?: string[]) {
     const syn = structuredClone(worker);
     syn.project.name = "worker-synthetic";
     syn.project.align = { arm_l: { to: "down", abduct: 8 } };
-    syn.project.clips = [SYNTHETIC, SYNTHETIC_TRAVEL, SYNTHETIC_GAIT, SYNTHETIC_SHAPE, SYNTHETIC_SHAPE_ONCE, SYNTHETIC_FOLLOW, SYNTHETIC_FOLLOW_ONCE, SYNTHETIC_UTIL, SYNTHETIC_UTIL_TRAVEL];
+    syn.project.clips = [SYNTHETIC, SYNTHETIC_TRAVEL, SYNTHETIC_GAIT, SYNTHETIC_SHAPE, SYNTHETIC_SHAPE_ONCE, SYNTHETIC_FOLLOW, SYNTHETIC_FOLLOW_ONCE, SYNTHETIC_UTIL, SYNTHETIC_UTIL_TRAVEL, SYNTHETIC_LAYERS, SYNTHETIC_SOLO];
     ctxs.push(syn);
   }
   for (const ctx of ctxs) {
