@@ -1,7 +1,7 @@
 // Ядро команд. Каждое действие — команда с описанием и параметрами: её одинаково вызывают интерфейс, CLI и MCP.
 // Команды здесь чистые: меняют проект в памяти и возвращают результат. Файлы, Blender и рендер — в адаптерах (packages/cli).
 import { CHANNELS } from "./project.ts";
-import type { Channel, Clip, Constraint, ConstraintTarget, Interp, KeyLayer, PoseLayer, Project, RecipeLayer, Skeleton } from "./project.ts";
+import type { Channel, Clip, Constraint, ConstraintTarget, Interp, KeyLayer, Layer, PoseLayer, Project, RecipeLayer, Skeleton } from "./project.ts";
 import { RECIPES, withDefaults } from "./recipes.ts";
 import { addPoseDelta, buildRig, followBones, frameTimes, motionAt, reach } from "./evaluate.ts";
 import { LIMIT_AXES, boneAngles, limitFrame, type BoneLimit, type LimitAxis } from "./limits.ts";
@@ -9,6 +9,7 @@ import { DEG, qaxis, qrot, vdot, vsub } from "./math.ts";
 import { bodyFrame } from "./evaluate.ts";
 import { DIRECTION_NAMES, DIRECTIONS_SOURCE, GAIT_STYLES, directionClip } from "./directions.ts";
 import { gaitCadence } from "./evaluate.ts";
+import { HAND_POSES, fingersOf, handPose } from "./hands.ts";
 
 const wrapAngle = (x: number) => { const w = ((((x + 180) % 360) + 360) % 360) - 180; return w === -180 ? 180 : w; };
 
@@ -764,6 +765,87 @@ const defs: CommandDef[] = [
       need(ax.every((x) => ["forward", "side", "up", "yaw"].includes(x)), "оси: forward, side, up, yaw");
       c.inPlace = ax as NonNullable<Clip["inPlace"]>;
       return { clip: c.name, inPlace: c.inPlace };
+    },
+  },
+  {
+    name: "clip.compose",
+    help: "Сложить клипы по частям тела: цепочки chains (например arm_l,arm_r,chest) этого клипа берутся из клипа from — его рецепты на этих цепочках, ключи и позы их костей; остальное тело остаётся своим (ноги идут, руки бьют). mode=add — добавить поверх своих, а не заменить.",
+    args: {
+      clip: { type: "string", required: true, help: "куда (база)" },
+      from: { type: "string", required: true, help: "откуда брать части тела" },
+      chains: { type: "string", required: true, help: "цепочки через запятую" },
+      mode: { type: "string", help: "replace (по умолчанию) | add" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const dst = clipOf(ctx, a.clip), src = clipOf(ctx, a.from);
+      need(dst !== src, "from — другой клип");
+      const chains = String(a.chains).split(",").map((x) => x.trim()).filter(Boolean);
+      for (const c of chains) need(ctx.project.chains[c], `нет цепочки «${c}»`);
+      const mode = a.mode ?? "replace";
+      need(mode === "replace" || mode === "add", "mode — replace или add");
+      const bones = new Set(chains.flatMap((c) => ctx.project.chains[c]));
+      const onPart = (l: Layer) => l.type === "recipe" && chains.includes(l.target.chain);
+      const removed: string[] = [];
+      if (mode === "replace") {
+        dst.layers = dst.layers.flatMap((l): Layer[] => {
+          if (onPart(l)) { removed.push(l.id); return []; }
+          if (l.type === "keys") { const tracks = l.tracks.filter((t) => !bones.has(t.bone)); return tracks.length ? [{ ...l, tracks }] : []; }
+          if (l.type === "pose") {
+            const keys = l.keys.map((k) => ({ ...k, rot: k.rot && Object.fromEntries(Object.entries(k.rot).filter(([b]) => !bones.has(b))), move: k.move && Object.fromEntries(Object.entries(k.move).filter(([b]) => !bones.has(b))) }));
+            return [{ ...l, keys }];
+          }
+          return [l];
+        });
+      }
+      const ids = new Set(dst.layers.map((l) => l.id));
+      const uid = (id: string) => { let n = `${src.name}_${id}`, k = 2; while (ids.has(n)) n = `${src.name}_${id}_${k++}`; ids.add(n); return n; };
+      const added: string[] = [];
+      for (const l of src.layers) {
+        let copy: Layer | undefined;
+        if (onPart(l)) copy = structuredClone(l);
+        else if (l.type === "keys") { const tracks = l.tracks.filter((t) => bones.has(t.bone)); if (tracks.length) copy = { ...structuredClone(l), tracks: structuredClone(tracks) }; }
+        else if (l.type === "pose") {
+          const keys = l.keys
+            .map((k) => ({ ...k, rot: k.rot && Object.fromEntries(Object.entries(k.rot).filter(([b]) => bones.has(b))), move: k.move && Object.fromEntries(Object.entries(k.move).filter(([b]) => bones.has(b))) }))
+            .filter((k) => Object.keys(k.rot ?? {}).length || Object.keys(k.move ?? {}).length);
+          if (keys.length) copy = { ...l, keys: structuredClone(keys) };
+        }
+        if (copy) { copy.id = uid(l.id); dst.layers.push(copy); added.push(copy.id); }
+      }
+      need(added.length, `в «${src.name}» на цепочках ${chains.join(", ")} нечего брать`);
+      return { clip: dst.name, from: src.name, chains, removed, added };
+    },
+  },
+  {
+    name: "hand.pose",
+    help: `Поза кисти ключом позы: ${Object.entries(HAND_POSES).map(([k, v]) => `${k} — ${v.help}`).join("; ")}. Ключ — в момент t (по умолчанию 0: одна поза на весь клип); несколько ключей — кисть переходит от позы к позе. Слой «hands».`,
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      side: { type: "string", required: true, help: "l | r | both" },
+      pose: { type: "string", required: true, help: Object.keys(HAND_POSES).join(" | ") },
+      t: { type: "number", help: "момент ключа, с (0)" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const clip = clipOf(ctx, a.clip);
+      const rig = buildRig(ctx.skeleton);
+      const sides = a.side === "both" ? (["l", "r"] as const) : [a.side as "l" | "r"];
+      need(sides.every((s) => s === "l" || s === "r"), "side — l, r или both");
+      const t = +(a.t ?? 0);
+      let l = clip.layers.find((x) => x.type === "pose" && x.id === "hands") as PoseLayer | undefined;
+      if (!l) clip.layers.push((l = { id: "hands", type: "pose", keys: [] }));
+      let k = l.keys.find((x) => Math.abs(x.t - t) < 1e-6);
+      if (!k) { l.keys.push((k = { t })); l.keys.sort((x, y) => x.t - y.t); }
+      const set: Record<string, number> = {};
+      for (const s of sides) {
+        const rot = handPose(ctx.project, rig, s, String(a.pose));
+        // кости этой кисти — заменить целиком (open — пусто: пальцы прямо)
+        for (const f of fingersOf(ctx.project, rig, s)!.fingers) for (const b of f.bones) if (k.rot) delete k.rot[b];
+        for (const [b, q] of Object.entries(rot)) (k.rot ??= {})[b] = q;
+        set[s] = Object.keys(rot).length;
+      }
+      return { clip: clip.name, t, pose: a.pose, bones: set };
     },
   },
   {

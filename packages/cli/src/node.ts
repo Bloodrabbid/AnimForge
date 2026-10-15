@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { COMMANDS, Clip, type LibPreset, smoothJointWeights, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectFins, detectForward, detectMultiLeg, detectWings, detectQuadruped, detectRig, emptyProject, frameTimes, posePartsAt, readSkeleton, retargetClip, runCommand, samplePreset, standardNames, suggestAlign, worldPose, writeClips, type NameScheme } from "../../core/src/index.ts";
+import { COMMANDS, Clip, type LibPreset, smoothJointWeights, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectFins, detectForward, detectMultiLeg, detectWings, detectQuadruped, detectRig, emptyProject, frameTimes, posePartsAt, type Prop, readSkeleton, retargetClip, runCommand, samplePreset, standardNames, suggestAlign, worldPose, writeClips, type NameScheme } from "../../core/src/index.ts";
 import { loadSkinScene, restVerts, skinFrame, skinTopology } from "./skin.ts";
 import { recipeVectors } from "./recipe-vectors.ts";
 
@@ -54,6 +54,8 @@ export async function exportGlb(ctx: Ctx & { dir: string }, out: string, names?:
   const doc = await io.read(join(ctx.dir, ctx.project.model));
   const rig = buildRig(ctx.skeleton);
   const report = writeClips(doc, ctx.project, rig);
+  // пропы на костях — узлы-дети костей (до переименования: ищутся по именам проекта)
+  const props = await (await import("./props.ts")).attachProps(io, doc, ctx.dir, ctx.project, rig);
   // стандартные имена костей (Mixamo / Unreal): узлы glb переименовываются уже после записи клипов — каналы
   // анимации ссылаются на узлы, а не на имена
   const rename = names ? standardNames(ctx.project, rig, names) : new Map<string, string>();
@@ -84,7 +86,7 @@ export async function exportGlb(ctx: Ctx & { dir: string }, out: string, names?:
   const events = Object.fromEntries(ctx.project.clips.map((c) => [c.name, clipEvents(c).map(({ t, name }) => ({ t, name }))]).filter(([, e]) => (e as unknown[]).length));
   if (Object.keys(events).length) writeFileSync(out.replace(/\.glb$/, ".events.json"), JSON.stringify(events, null, 1));
   const empty = report.filter((r) => r.bones === 0).map((r) => r.clip);
-  return { out, clips: report, ...(rename.size ? { renamed: Object.fromEntries(rename) } : {}), ...(empty.length ? { warning: `пустые клипы не записаны (нет слоёв, двигающих кости): ${empty.join(", ")}` } : {}) };
+  return { out, clips: report, ...(props.length ? { props } : {}), ...(rename.size ? { renamed: Object.fromEntries(rename) } : {}), ...(empty.length ? { warning: `пустые клипы не записаны (нет слоёв, двигающих кости): ${empty.join(", ")}` } : {}) };
 }
 
 /** Экспорт в glb или FBX. FBX собирает Blender из того же glb: скин, клипы тейками, единицы под движок. */
@@ -671,6 +673,52 @@ NODE_COMMANDS["weights.smooth"] = {
     iters: { type: "number", help: "проходов сглаживания, по умолчанию 6" },
   },
   run: async (dir, a) => smoothWeights(dir, a.rings ?? 3, a.iters ?? 6),
+};
+
+NODE_COMMANDS["prop.attach"] = {
+  help: "Проп на кость: свой glb (file) или коробка-заглушка (size). hand l|r — в кисть. Смещение и поворот — в осях мира позы покоя, м и °. Едет в экспорт (glb, FBX; в Godot — BoneAttachment3D) и во вьюпорт.",
+  args: {
+    id: { type: "string", required: true, help: "имя пропа (повтор — заменить)" },
+    hand: { type: "string", help: "l | r — в кисть" },
+    bone: { type: "string", help: "или любая кость" },
+    file: { type: "string", help: "glb пропа (копируется в assets/props)" },
+    size: { type: "string", help: "коробка: «x,y,z» в метрах, по умолчанию 0.04,0.04,0.6 — палка" },
+    offset: { type: "string", help: "«x,y,z», м" },
+    rot: { type: "string", help: "«x,y,z», ° вокруг мировых осей" },
+  },
+  async run(dir, a) {
+    const ctx = await loadCtx(dir);
+    const rig = buildRig(ctx.skeleton);
+    const { handBone } = await import("./props.ts");
+    const bone = a.bone ?? (a.hand ? handBone(ctx.project, rig, a.hand) : undefined);
+    if (!bone || !rig.index.has(bone)) throw new Error(a.hand ? `нет кисти и цепочки arm_${a.hand}` : `нет кости «${a.bone}» — укажите bone или hand`);
+    const vec = (s: unknown) => (s == null ? undefined : (String(s).split(",").map(Number) as [number, number, number]));
+    let file: string | undefined;
+    if (a.file) {
+      const src = resolve(process.env.INIT_CWD ?? process.cwd(), a.file);
+      mkdirSync(join(dir, "assets/props"), { recursive: true });
+      file = `assets/props/${src.replace(/^.*\//, "")}`;
+      writeFileSync(join(dir, file), readFileSync(src));
+    }
+    const prop = { id: String(a.id), bone, ...(file ? { file } : { size: vec(a.size) ?? [0.04, 0.04, 0.6] }), ...(a.offset ? { offset: vec(a.offset) } : {}), ...(a.rot ? { rot: vec(a.rot) } : {}) };
+    ctx.project.props = [...(ctx.project.props ?? []).filter((p) => p.id !== prop.id), prop as Prop];
+    saveProject(dir, ctx.project);
+    return { prop };
+  },
+};
+
+NODE_COMMANDS["prop.remove"] = {
+  help: "Убрать проп.",
+  args: { id: { type: "string", required: true, help: "имя пропа" } },
+  async run(dir, a) {
+    const ctx = await loadCtx(dir);
+    const n = ctx.project.props?.length ?? 0;
+    ctx.project.props = (ctx.project.props ?? []).filter((p) => p.id !== a.id);
+    if (ctx.project.props.length === n) throw new Error(`нет пропа «${a.id}»`);
+    if (!ctx.project.props.length) delete ctx.project.props;
+    saveProject(dir, ctx.project);
+    return { removed: a.id };
+  },
 };
 
 NODE_COMMANDS["clip.copy"] = {

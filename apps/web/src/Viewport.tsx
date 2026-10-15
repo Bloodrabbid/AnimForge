@@ -42,6 +42,8 @@ interface Props {
   trails?: Trail[] | null;
   /** камера едет за тазом персонажа (у клипов с ходом корня) */
   followCam?: boolean;
+  /** пропы на костях: адрес glb (корень — держатель под костью) и кость */
+  props?: { id: string; bone: string; url: string }[];
   /** режим «Поза»: схватили след — перейти в этот момент (дальше тянут, как сустав) */
   onTrailTime?(t: number): void;
   /** подсветка цепочки (наведение на кривую графика): её кости и конец */
@@ -263,6 +265,18 @@ export function Viewport(props: Props) {
       }
       return best as { tip: string; t: number; at: THREE.Vector3; d: number } | null;
     };
+    // для проверок без окна: навести камеру на кость (крупный план кисти и т. п.)
+    (window as any).__afLook = (bone: string, dist: number, from?: [number, number, number]) => {
+      const o = loaded.current?.bones.get(bone)?.obj;
+      if (!o) return false;
+      const at = o.getWorldPosition(new THREE.Vector3());
+      const d = from ? new THREE.Vector3(...from).normalize() : camera.position.clone().sub(controls.target).normalize();
+      controls.target.copy(at);
+      camera.position.copy(at.clone().add(d.multiplyScalar(dist)));
+      camera.near = dist / 50;
+      camera.updateProjectionMatrix();
+      return true;
+    };
     // для проверок без окна: где на экране точка k следа i
     (window as any).__afTrailScreen = (i: number, k: number) => {
       const tr = (live.current.trails ?? [])[i], r = renderer.domElement.getBoundingClientRect();
@@ -428,8 +442,30 @@ export function Viewport(props: Props) {
     let lastSel = "";
     let raf = 0;
     let followLast: THREE.Vector3 | null = null;
+    // пропы: перегружаем, когда сменился их список или модель
+    let propsKey = "", propsModel: Loaded | null = null;
+    const propObjs: THREE.Object3D[] = [];
+    const syncProps = () => {
+      const p = live.current, m = loaded.current;
+      const key = JSON.stringify(p.props ?? []);
+      if (!m || (key === propsKey && m === propsModel)) return;
+      propsKey = key;
+      propsModel = m;
+      for (const o of propObjs.splice(0)) o.removeFromParent();
+      for (const pr of p.props ?? []) {
+        const bone = m.bones.get(pr.bone)?.obj;
+        if (!bone) continue;
+        new GLTFLoader().load(pr.url, (g) => {
+          if (propsKey !== key || loaded.current !== m) return;
+          g.scene.traverse((o) => ((o as THREE.Mesh).isMesh ? ((o as THREE.Mesh).castShadow = true) : null));
+          bone.add(g.scene);
+          propObjs.push(g.scene);
+        });
+      }
+    };
     const frame = () => {
       raf = requestAnimationFrame(frame);
+      syncProps();
       const p = live.current;
       const m = loaded.current;
       if (m) {

@@ -7,7 +7,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer as createVite } from "vite";
-import { libRoles } from "../../packages/core/src/index.ts";
+import { buildRig, libRoles } from "../../packages/core/src/index.ts";
 import { RECIPES, ROOT, call, dryRun, exportFile, loadCtx, loadPresets, projectFile } from "../../packages/cli/src/node.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -228,6 +228,25 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
+    return;
+  }
+  if (req.method === "GET" && path === "/api/prop") {
+    // проп во вьюпорт: glb, где корень — держатель с локальным сдвигом и поворотом под костью (как в экспорте)
+    const dir = projectDir(url.searchParams.get("dir"));
+    const ctx = await loadCtx(dir);
+    const p = ctx.project.props?.find((x) => x.id === url.searchParams.get("id"));
+    if (!p) throw new HttpError(404, "нет пропа");
+    const { propDoc, propLocal } = await import("../../packages/cli/src/props.ts");
+    const { NodeIO } = await import("@gltf-transform/core");
+    const io = new NodeIO();
+    const doc = await propDoc(io, dir, p);
+    const { t, r, s: sc } = propLocal(buildRig(ctx.skeleton), p);
+    const scene = doc.getRoot().getDefaultScene() ?? doc.getRoot().listScenes()[0];
+    const holder = doc.createNode(`prop_${p.id}`).setTranslation(t).setRotation(r).setScale(sc);
+    for (const c of scene.listChildren()) { scene.removeChild(c); holder.addChild(c); }
+    scene.addChild(holder);
+    res.writeHead(200, { "content-type": "model/gltf-binary", "cache-control": "no-store" });
+    res.end(Buffer.from(await io.writeBinary(doc)));
     return;
   }
   if (req.method === "GET" && path === "/api/model") {

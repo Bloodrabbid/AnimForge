@@ -12,6 +12,7 @@
   },
   "devDependencies": {
     "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
     "@types/node": "^26.6.4",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"

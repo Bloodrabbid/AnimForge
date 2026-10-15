@@ -227,6 +227,20 @@ export interface Project {
   style?: StyleCard;
   /** Куда класть готовый glb в игре на Godot (папка внутри проекта Godot) — make копирует туда после экспорта. */
   godot?: string;
+  /** Пропы на костях (prop.attach): меч в руке, фонарь, щит — едут в экспорт и во вьюпорт. */
+  props?: Prop[];
+}
+
+/** Проп на кости: свой glb (file — путь от папки проекта) или коробка size. Смещение (м) и поворот (°, вокруг
+ * мировых X, Y, Z) — в осях мира позы покоя от начала кости. */
+export interface Prop {
+  id: string;
+  bone: string;
+  file?: string;
+  size?: Vec3;
+  color?: [number, number, number];
+  offset?: Vec3;
+  rot?: Vec3;
 }
 
 export interface StyleCard {

@@ -514,6 +514,7 @@ export function App() {
             onStatus={say}
             trails={trails}
             followCam={followCam}
+            props={(shown?.props ?? []).map((pr) => ({ id: pr.id, bone: pr.bone, url: `/api/prop?dir=${encodeURIComponent(DIR)}&id=${encodeURIComponent(pr.id)}&v=${encodeURIComponent(JSON.stringify(pr))}` }))}
             onTrailTime={(v) => {
               setT(v);
               setPlaying(false);
