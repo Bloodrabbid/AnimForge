@@ -246,6 +246,21 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     }
     return;
   }
+  if (req.method === "GET" && path === "/api/directions") {
+    // восемь направлений одним архивом (export.directions): файлы, общий файл и BlendSpace2D; проект не меняется
+    const dir = projectDir(url.searchParams.get("dir"));
+    const clip = url.searchParams.get("clip") ?? "";
+    const tmp = mkdtempSync(join(tmpdir(), "af-8dir-dl-"));
+    try {
+      const out = join(tmp, `${clip}_8dir.zip`);
+      await serial(() => call(dir, "export.directions", { clip, out, format: url.searchParams.get("format") || "glb" }));
+      res.writeHead(200, { "content-type": "application/zip", "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(`${clip}_8dir.zip`)}`, "cache-control": "no-store" });
+      res.end(readFileSync(out));
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+    return;
+  }
   if (req.method === "GET" && path === "/api/prop") {
     // проп во вьюпорт: glb, где корень — держатель с локальным сдвигом и поворотом под костью (как в экспорте)
     const dir = projectDir(url.searchParams.get("dir"));

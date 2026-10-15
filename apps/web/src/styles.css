@@ -1858,3 +1858,5 @@ button.small.on { background: var(--accent); color: #111; }
 .clip-card .card-title { flex: 1 1 60%; }
 .clip-card .card-help { flex: 0 0 auto; }
 .overlay-on { padding: 6px 12px 0; }
+.gait-styles { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 6px; }
+.menu-sep { height: 1px; background: var(--line, #2a2b31); margin: 4px 0; }

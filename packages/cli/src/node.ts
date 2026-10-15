@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { COMMANDS, Clip, type LibPreset, smoothJointWeights, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectFins, detectForward, detectMultiLeg, detectWings, detectQuadruped, detectRig, emptyProject, frameTimes, importClip, posePartsAt, type Skeleton, type Vec3, type Prop, readSkeleton, retargetClip, runCommand, samplePreset, standardNames, suggestAlign, worldPose, writeClips, type NameScheme } from "../../core/src/index.ts";
+import { COMMANDS, Clip, type LibPreset, smoothJointWeights, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectFins, detectForward, detectMultiLeg, detectWings, detectQuadruped, detectRig, emptyProject, frameTimes, importClip, DIRECTION_NAMES, posePartsAt, type Skeleton, type Vec3, type Prop, readSkeleton, retargetClip, runCommand, samplePreset, standardNames, suggestAlign, worldPose, writeClips, type NameScheme } from "../../core/src/index.ts";
 import { loadSkinScene, restVerts, skinFrame, skinTopology } from "./skin.ts";
 import { recipeVectors } from "./recipe-vectors.ts";
 
@@ -847,6 +847,68 @@ NODE_COMMANDS["clips.pack"] = {
     j.packs = [...j.packs.filter((p: ClipPack) => p.id !== a.id), entry];
     writeFileSync(pf, JSON.stringify(j, null, 2) + "\n");
     return { ...entry, takes: doc.getRoot().listAnimations().map((x) => x.getName()), bytes: readFileSync(out).length };
+  },
+};
+
+NODE_COMMANDS["export.directions"] = {
+  help: "Восемь направлений ходьбы одним архивом: по файлу на направление (glb или FBX), все вместе в одном файле, BlendSpace2D для Godot (.tres) и README. Направлений нет — делает их clip.directions (в проект не пишет).",
+  args: {
+    clip: { type: "string", required: true, help: "прямая ходьба или бег (цикл)" },
+    out: { type: "string", help: "zip, по умолчанию out/<clip>_8dir.zip" },
+    format: { type: "string", help: "glb (по умолчанию) или fbx" },
+    idle: { type: "string", help: "клип стойки — в центр BlendSpace2D" },
+    face: { type: "string", help: "aim (по умолчанию) | travel — как у clip.directions" },
+    names: { type: "string", help: "имена костей: mixamo | unreal" },
+    units: { type: "string", help: "для FBX: blender | maya | unity | unreal" },
+    verify: { type: "boolean", help: "проверить BlendSpace2D в Godot (только glb)" },
+  },
+  async run(dir, a) {
+    const { blendSpace2D } = await import("./blendspace.ts");
+    const fmt = (a.format ?? "glb").toLowerCase();
+    if (!["glb", "fbx"].includes(fmt)) throw new Error("format: glb или fbx");
+    const ctx = await loadCtx(dir);
+    const dirs = Object.entries(DIRECTION_NAMES).map(([ang, nm]) => ({ angle: Number(ang), name: `${a.clip}_${nm}` }));
+    // нет готовых направлений — делаем в памяти, проект на диске не трогаем
+    if (dirs.some((d) => !ctx.project.clips.some((c) => c.name === d.name))) runCommand(ctx, "clip.directions", { clip: a.clip, replace: true, ...(a.face ? { face: a.face } : {}) });
+    const pick = [...dirs.map((d) => d.name), ...(a.idle ? [a.idle] : [])];
+    for (const n of pick) if (!ctx.project.clips.some((c) => c.name === n)) throw new Error(`нет клипа «${n}»`);
+    const tmp = mkdtempSync(join(tmpdir(), "af-8dir-"));
+    const only = (names: string[]) => ({ ...ctx, project: { ...ctx.project, clips: ctx.project.clips.filter((c) => names.includes(c.name)) } });
+    try {
+      const files: string[] = [];
+      for (const n of pick) {
+        await exportFile(only([n]), join(tmp, `${n}.${fmt}`), a.names, fmt === "fbx" ? a.units : undefined);
+        files.push(`${n}.${fmt}`);
+      }
+      const all = `${a.clip}_8dir.${fmt}`;
+      await exportFile(only(pick), join(tmp, all), a.names, fmt === "fbx" ? a.units : undefined);
+      const tres = `${a.clip}_blendspace.tres`;
+      writeFileSync(join(tmp, tres), blendSpace2D([...dirs.map((d) => ({ anim: d.name, angle: d.angle })), ...(a.idle ? [{ anim: a.idle }] : [])]));
+      writeFileSync(join(tmp, "README.txt"), [
+        `${a.clip}: восемь направлений из AnimForge (${new Date().toISOString().slice(0, 10)})`,
+        "",
+        ...dirs.map((d) => `${d.name}.${fmt} — ход под углом ${d.angle}° (+ влево)`),
+        ...(a.idle ? [`${a.idle}.${fmt} — стойка, центр BlendSpace2D`] : []),
+        `${all} — все клипы в одном файле`,
+        `${tres} — BlendSpace2D для Godot 4: AnimationTree → Tree Root → Load, Anim Player — плеер импортированного ${all}.`,
+        "  parameters/blend_position = Vector2(вправо, вперёд) — как ввод джойстика; длина 1 — эта ходьба. sync включён.",
+        "  Если клипы импортированы в библиотеку анимаций с именем, а не в общую, допишите её имя перед именами анимаций в .tres.",
+      ].join("\n") + "\n");
+      const out = resolve(dir, a.out ?? `out/${a.clip}_8dir.zip`);
+      mkdirSync(dirname(out), { recursive: true });
+      rmSync(out, { force: true });
+      execFileSync("zip", ["-q", "-j", out, ...[...files, all, tres, "README.txt"].map((f) => join(tmp, f))]);
+      // сверка в Godot: в вершинах BlendSpace2D поза — клип направления, между ними — смесь
+      let godot: string | undefined;
+      if (a.verify && fmt === "glb") {
+        const log = execFileSync(GODOT, ["--headless", "--path", join(ROOT, "godot/verify"), "--script", "blendspace_check.gd", "--", join(tmp, all), join(tmp, tres), dirs[0].name, dirs[2].name], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 300_000 });
+        godot = log.split("\n").filter((l) => l.startsWith("BLEND")).join("\n");
+        if (!godot.includes("BLEND_OK")) throw new Error("BlendSpace2D в Godot не сошёлся:\n" + godot);
+      }
+      return { out, files: [...files, all, tres, "README.txt"], bytes: readFileSync(out).length, ...(godot ? { godot } : {}) };
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   },
 };
 

@@ -1017,7 +1017,7 @@ const defs: CommandDef[] = [
   },
   {
     name: "clip.gait",
-    help: "Стиль походки поверх любых слоёв цикла: speed (×, частота ^0.6, шаг ^0.4 — длина клипа меняется сама), bounce, sway, arms, lift (× вокруг среднего за цикл), width (°), lower (доля роста), lean, posture (°). style — готовый набор: stroll | brisk | heavy | sneak; поля поверх него. Без style и gait — убрать.",
+    help: "Стиль походки поверх любых слоёв цикла: speed (×, частота ^0.6, шаг ^0.4 — длина клипа меняется сама), bounce, sway, arms, lift (× вокруг среднего за цикл), width (°), lower (доля роста), lean, posture (°), stance (доля опоры 0.2…0.85: шаг ~0.6, бег ~0.35). style — готовый набор: stroll | brisk | heavy | sneak; поля поверх него. Без style и gait — убрать.",
     args: {
       clip: { type: "string", required: true, help: "цикл ходьбы" },
       style: { type: "string", help: "stroll | brisk | heavy | sneak" },
@@ -1027,11 +1027,12 @@ const defs: CommandDef[] = [
     run(ctx, a) {
       const clip = clipOf(ctx, a.clip);
       need(clip.loop, `«${a.clip}» не цикл — стиль походки ставится на цикл`);
-      const keys = ["speed", "bounce", "sway", "arms", "lift", "width", "lower", "lean", "posture"];
+      const keys = ["speed", "bounce", "sway", "arms", "lift", "width", "lower", "lean", "posture", "stance"];
       if (a.style) need(GAIT_STYLES[a.style], `нет стиля «${a.style}». Есть: ${Object.keys(GAIT_STYLES).join(", ")}`);
       for (const [k, v] of Object.entries(a.gait ?? {})) need(keys.includes(k) && Number.isFinite(Number(v)), `gait.${k}: есть ${keys.join(", ")}, числа`);
       const next = a.style || a.gait ? { ...(a.style ? GAIT_STYLES[a.style].gait : {}), ...Object.fromEntries(Object.entries(a.gait ?? {}).map(([k, v]) => [k, Number(v)])) } : undefined;
       need(!next?.speed || next.speed > 0, "speed > 0");
+      need(next?.stance == null || (next.stance >= 0.2 && next.stance <= 0.85), "stance — доля опоры 0.2…0.85");
       // длина клипа — под новую частоту шагов: в цикле те же шаги
       clip.duration = +((clip.duration * gaitCadence(clip.gait)) / gaitCadence(next)).toFixed(4);
       if (next) clip.gait = next;

@@ -284,6 +284,65 @@ function gaitMeans(project: Project, rig: Rig, clip: Clip) {
   return out;
 }
 
+// ── доля опоры (gait.stance) ─────────────────────────────────────────────────────────────────────────────────
+/** Ноги для доли опоры: цепочки leg_* и передние лапы (arm_*, кончик которых в покое у пола). */
+function stanceChains(project: Project, rig: Rig): string[] {
+  const up = bodyFrame(project).up;
+  const hs = rig.skel.nodes.map((n, i) => (n.isJoint ? vdot(rig.worldT[i], up) : NaN)).filter((h) => !Number.isNaN(h));
+  const lo = Math.min(...hs), size = Math.max(...hs) - lo || 1;
+  return Object.entries(project.chains).filter(([n, c]) => {
+    if (/^leg_/.test(n)) return true;
+    const tip = c.length ? rig.index.get(c[c.length - 1]) : undefined;
+    return /^arm_/.test(n) && tip != null && vdot(rig.worldT[tip], up) - lo < 0.25 * size;
+  }).map(([n]) => n);
+}
+
+/** У каждой ноги: период её слоя, фаза касания (стопа дальше всего вперёд от бедра) и доля опоры в исходном цикле
+ * (от касания до отрыва — стопа дальше всего назад). Считается по одному слою ноги; кэш как у средних. */
+const stanceCache = new WeakMap<Rig, Map<string, Map<string, { period: number; strike: number; d0: number }>>>();
+function stancePlan(project: Project, rig: Rig, clip: Clip) {
+  let cache = stanceCache.get(rig);
+  if (!cache) stanceCache.set(rig, (cache = new Map()));
+  const base: Clip = { ...clip, gait: undefined, travel: undefined, ground: undefined, constraints: undefined, inPlace: undefined, follow: undefined, mirror: undefined, reverse: undefined };
+  const key = JSON.stringify(base);
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const f = bodyFrame(project);
+  const out = new Map<string, { period: number; strike: number; d0: number }>();
+  const N = 48;
+  for (const ch of stanceChains(project, rig)) {
+    const c = project.chains[ch];
+    const layer = clip.layers.find((l) => l.type === "recipe" && l.target.chain === ch && !l.muted) as RecipeLayer | undefined;
+    if (!layer || !c?.length) continue;
+    const def = RECIPES[layer.recipe];
+    const per = def ? Number(withDefaults(def, layer.params).period) : NaN;
+    const period = per > 0 ? per : clip.duration;
+    // мах самой ноги: только её слой, стопа — от тазобедренного сустава (таз и корпус время не перекраивают)
+    const solo: Clip = { ...base, layers: [layer] };
+    const tip = rig.index.get(c[c.length - 1])!, hip = rig.index.get(c[0])!;
+    const xs: number[] = [];
+    for (let k = 0; k < N; k++) {
+      const w = worldPose(rig, primary(project, rig, solo, (period * k) / N).parts());
+      xs.push(vdot(vsub(w.T[tip], w.T[hip]), f.forward));
+    }
+    const hi = xs.indexOf(Math.max(...xs)) / N, lo = xs.indexOf(Math.min(...xs)) / N;
+    const d0 = ((lo - hi) % 1 + 1) % 1;
+    if (d0 > 0.05 && d0 < 0.95) out.set(ch, { period, strike: hi, d0 });
+  }
+  if (cache.size > 256) cache.clear();
+  cache.set(key, out);
+  return out;
+}
+
+/** Время слоя ноги при доле опоры d: от касания опора идёт d цикла вместо d0, перенос — остаток; касание и отрыв
+ * в тех же местах цикла, ход — кусочно-линейный. */
+export function stanceTime(t: number, p: { period: number; strike: number; d0: number }, d: number): number {
+  const u = t / p.period - p.strike;
+  const n = Math.floor(u), x = u - n;
+  const y = x < d ? (x * p.d0) / d : p.d0 + ((x - d) * (1 - p.d0)) / (1 - d);
+  return (n + p.strike + y) * p.period;
+}
+
 /** Стиль походки поверх слоёв: размахи — вокруг своего среднего за цикл (подскок ×0 — таз на средней высоте),
  * постоянные — наклон, сутулость, колея, таз ниже. */
 function applyGait(acc: Acc, rig: Rig, project: Project, clip: Clip, size: number) {
@@ -507,6 +566,8 @@ function primary(project: Project, rig: Rig, clip: Clip, t: number, opts: LiveOp
   for (const [b, q] of acc.rot) acc.base.set(b, q);
   // соло среди слоёв поз: если есть — остальные слои поз молчат
   const solo = clip.layers.some((l) => l.type === "pose" && l.solo && !l.muted);
+  // доля опоры: время слоёв ног перекраивается (план — по клипу без стиля)
+  const stance = src.gait?.stance ? stancePlan(project, rig, src) : undefined;
   for (const layer of clip.layers) {
     if (isSecondary(layer) || layer.muted) continue;
     if (layer.type === "pose" && solo && !layer.solo) continue;
@@ -521,11 +582,13 @@ function primary(project: Project, rig: Rig, clip: Clip, t: number, opts: LiveOp
       const sh = layer.shape;
       // правка кривой (layer.shape): late и step — в долях периода рецепта (у разовых — длины клипа)
       const per = typeof p.period === "number" ? p.period : clip.duration;
+      const sp = stance?.get(layer.target.chain);
+      const t0 = sp ? stanceTime(t, sp, src.gait!.stance!) : t;
       chain.forEach((bone, i) => {
         const hc = { height: heights!.get(bone) ?? 0, size: heights!.get(SIZE) ?? 0 };
-        let tt = t;
+        let tt = t0;
         if (sh?.late || sh?.step) {
-          tt = t - ((sh.late ?? 0) + (sh.step ?? 0) * i) * per;
+          tt = t0 - ((sh.late ?? 0) + (sh.step ?? 0) * i) * per;
           if (!clip.loop) tt = Math.max(0, tt);
         }
         const out = def.evaluate(p, i, chain.length, tt, hc);

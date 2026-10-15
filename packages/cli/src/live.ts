@@ -94,6 +94,9 @@ export const SYNTHETIC_UTIL_TRAVEL: Clip = { ...SYNTHETIC_TRAVEL, name: "synthet
 /** Слои: вес у ключей и поз, выключенный слой, соло слоя поз. */
 const P2 = { id: "p2", type: "pose" as const, keys: [{ t: 0.3, rot: { arm_r_0: [0.2, 0, 0, 0.98] as [number, number, number, number] } }] };
 export const SYNTHETIC_LAYERS: Clip = { ...SYNTHETIC, name: "synthetic_layers", layers: [...SYNTHETIC.layers.map((l) => (l.type === "keys" ? { ...l, weight: 0.5 } : l.type === "pose" ? { ...l, weight: 0.6 } : l)), { ...P2, muted: true }, { id: "off", type: "recipe", recipe: "wave", target: { chain: "ear_l" }, params: {}, muted: true }] };
+/** доля опоры: время слоёв ног перекраивается по плану (касание, отрыв) — у ходьбы 0.7, у её же бега 0.35 */
+export const SYNTHETIC_STANCE: Clip = { ...SYNTHETIC_TRAVEL, name: "synthetic_stance", travel: undefined, gait: { stance: 0.7 } };
+export const SYNTHETIC_STANCE_RUN: Clip = { ...SYNTHETIC_GAIT, name: "synthetic_stance_run", gait: { ...SYNTHETIC_GAIT.gait, stance: 0.35 } };
 export const SYNTHETIC_SOLO: Clip = { ...SYNTHETIC, name: "synthetic_solo", layers: [...SYNTHETIC.layers, { ...P2, solo: true, weight: 0.7 }] };
 
 /** Моменты сверки: края, середина и точки между кадрами (живой рецепт считается в любой момент, не по кадрам). */
@@ -110,7 +113,7 @@ export async function liveVerify(dirs?: string[]) {
     const syn = structuredClone(worker);
     syn.project.name = "worker-synthetic";
     syn.project.align = { arm_l: { to: "down", abduct: 8 } };
-    syn.project.clips = [SYNTHETIC, SYNTHETIC_TRAVEL, SYNTHETIC_GAIT, SYNTHETIC_SHAPE, SYNTHETIC_SHAPE_ONCE, SYNTHETIC_FOLLOW, SYNTHETIC_FOLLOW_ONCE, SYNTHETIC_UTIL, SYNTHETIC_UTIL_TRAVEL, SYNTHETIC_LAYERS, SYNTHETIC_SOLO];
+    syn.project.clips = [SYNTHETIC, SYNTHETIC_TRAVEL, SYNTHETIC_GAIT, SYNTHETIC_SHAPE, SYNTHETIC_SHAPE_ONCE, SYNTHETIC_FOLLOW, SYNTHETIC_FOLLOW_ONCE, SYNTHETIC_UTIL, SYNTHETIC_UTIL_TRAVEL, SYNTHETIC_LAYERS, SYNTHETIC_SOLO, SYNTHETIC_STANCE, SYNTHETIC_STANCE_RUN];
     ctxs.push(syn);
   }
   for (const ctx of ctxs) {

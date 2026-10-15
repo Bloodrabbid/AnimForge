@@ -474,6 +474,22 @@ export function App() {
                     {label}
                   </a>
                 ))}
+                {clip?.loop && !clip.travel && Object.keys(project!.chains).some((c) => c.startsWith("leg_")) && (
+                  <>
+                    <div className="menu-sep" />
+                    {(["glb", "fbx"] as const).map((f) => (
+                      <a
+                        key={f}
+                        className="menu-item"
+                        href={`/api/directions?${new URLSearchParams({ dir: DIR, clip: clip.name, format: f })}`}
+                        onClick={close}
+                        title="8 направлений из этого цикла: по файлу на направление, общий файл и BlendSpace2D для Godot"
+                      >
+                        8 направлений «{clip.name}» — zip, {f.toUpperCase()} + BlendSpace2D
+                      </a>
+                    ))}
+                  </>
+                )}
               </>
             )}
           </Menu>

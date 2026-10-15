@@ -721,6 +721,86 @@ static func gait_means(rig: Rig, clip: Dictionary) -> Dictionary:
 	return out
 
 
+# ── доля опоры (gait.stance) — как stanceChains / stancePlan / stanceTime в ядре ──
+static func stance_chains(rig: Rig) -> Array:
+	var upv := body_frame(rig).up
+	var lo := INF
+	var hi := -INF
+	for i in rig.names.size():
+		if rig.is_joint[i]:
+			var h := rig.world_t[i].dot(upv)
+			lo = minf(lo, h)
+			hi = maxf(hi, h)
+	var size := hi - lo if hi > lo else 1.0
+	var out := []
+	for name in rig.chains:
+		var c: Array = rig.chains[name]
+		if String(name).begins_with("leg_"):
+			out.append(name)
+		elif String(name).begins_with("arm_") and not c.is_empty() and rig.index.has(c[c.size() - 1]):
+			if rig.world_t[rig.index[c[c.size() - 1]]].dot(upv) - lo < 0.25 * size:
+				out.append(name)
+	return out
+
+
+static func stance_plan(rig: Rig, clip: Dictionary) -> Dictionary:
+	var base := clip.duplicate()
+	for k in ["gait", "travel", "ground", "constraints", "inPlace", "follow", "mirror", "reverse"]:
+		base.erase(k)
+	var key := "stance|" + JSON.stringify(base)
+	if rig.lock_cache.has(key):
+		return rig.lock_cache[key]
+	var f := body_frame(rig)
+	var out := {}
+	var N := 48
+	for ch in stance_chains(rig):
+		var c: Array = rig.chains[ch]
+		var layer = null
+		for l in clip["layers"]:
+			if l["type"] == "recipe" and l["target"]["chain"] == ch and not l.get("muted", false):
+				layer = l
+				break
+		if layer == null or c.is_empty() or not rig.recipes.has(layer["recipe"]):
+			continue
+		var p := with_defaults(rig, layer["recipe"], layer.get("params", {}))
+		var per: float = float(p["period"]) if p.has("period") and (p["period"] is float or p["period"] is int) else 0.0
+		var period: float = per if per > 0.0 else float(clip["duration"])
+		# мах самой ноги: только её слой, стопа — от тазобедренного сустава
+		var solo := base.duplicate()
+		solo["layers"] = [layer]
+		var tip: int = rig.index[c[c.size() - 1]]
+		var hip: int = rig.index[c[0]]
+		var xs := []
+		for k in N:
+			var w := world_pose(rig, primary(rig, solo, period * k / N).parts())
+			xs.append((w.T[tip] - w.T[hip]).dot(f.forward))
+		var hi_i := 0
+		var lo_i := 0
+		for k in N:
+			if xs[k] > xs[hi_i]:
+				hi_i = k
+			if xs[k] < xs[lo_i]:
+				lo_i = k
+		var hi := float(hi_i) / N
+		var lo := float(lo_i) / N
+		var d0 := fposmod(lo - hi, 1.0)
+		if d0 > 0.05 and d0 < 0.95:
+			out[ch] = {"period": period, "strike": hi, "d0": d0}
+	if rig.lock_cache.size() > 64:
+		rig.lock_cache.clear()
+	rig.lock_cache[key] = out
+	return out
+
+
+static func stance_time(t: float, p: Dictionary, d: float) -> float:
+	var u: float = t / p["period"] - p["strike"]
+	var n := floorf(u)
+	var x := u - n
+	var d0: float = p["d0"]
+	var y := x * d0 / d if x < d else d0 + (x - d) * (1.0 - d0) / (1.0 - d)
+	return (n + p["strike"] + y) * p["period"]
+
+
 static func _gait_scale(acc: Acc, mean: Dictionary, bone: String, k: float) -> void:
 	if k == 1.0 or not acc.rot.has(bone):
 		return
@@ -907,6 +987,10 @@ static func primary(rig: Rig, clip: Dictionary, t: float, opts := {}) -> Acc:
 		acc.base[b] = acc.rot[b]
 	# соло среди слоёв поз: если есть — остальные слои поз молчат
 	var solo: bool = clip["layers"].any(func(l): return l["type"] == "pose" and l.get("solo", false) and not l.get("muted", false))
+	# доля опоры: время слоёв ног перекраивается (план — по клипу без стиля)
+	var stance := {}
+	if gs != null and gs.get("stance") != null:
+		stance = stance_plan(rig, src)
 	for layer in clip["layers"]:
 		if is_secondary(layer) or layer.get("muted", false):
 			continue
@@ -929,12 +1013,15 @@ static func primary(rig: Rig, clip: Dictionary, t: float, opts := {}) -> Acc:
 				var sh: Dictionary = layer.get("shape", {}) if layer.get("shape") != null else {}
 				var per: float = float(p["period"]) if p.has("period") and (p["period"] is float or p["period"] is int) else float(clip["duration"])
 				var amount: float = float(sh.get("amount", 1.0))
+				var t0 := t
+				if stance.has(layer["target"]["chain"]):
+					t0 = stance_time(t, stance[layer["target"]["chain"]], float(gs["stance"]))
 				for i in n:
 					var bone: String = chain[i]
 					var hc := {"height": rig.heights.get(bone, 0.0), "size": rig.heights.get(SIZE, 0.0)}
-					var tt := t
+					var tt := t0
 					if sh.has("late") or sh.has("step"):
-						tt = t - (float(sh.get("late", 0.0)) + float(sh.get("step", 0.0)) * i) * per
+						tt = t0 - (float(sh.get("late", 0.0)) + float(sh.get("step", 0.0)) * i) * per
 						if not clip["loop"]:
 							tt = maxf(0.0, tt)
 					var out := AFRecipes.evaluate(layer["recipe"], p, i, n, tt, hc)
