@@ -35,11 +35,13 @@ interface Props {
   /** режим «Поза»: суставы — точки, сустав тащат мышью (IK с пределами), Alt+клик — закрепить */
   poseMode?: boolean;
   poseLength?: number;
-  onPoseDrop?(bone: string, target: [number, number, number], length: number, end: boolean, endLength?: number): void;
+  onPoseDrop?(bone: string, target: [number, number, number], length: number, end: boolean, endLength?: number, t?: number): void;
   onPin?(bone: string, at: [number, number, number]): void;
   onStatus(msg: string, error?: boolean): void;
   /** следы за цикл клипа (стопы, кисти, таз): точки по кадрам графика движения — только показ */
   trails?: Trail[] | null;
+  /** режим «Поза»: схватили след — перейти в этот момент (дальше тянут, как сустав) */
+  onTrailTime?(t: number): void;
   /** подсветка цепочки (наведение на кривую графика): её кости и конец */
   highlight?: { bones: string[]; color: string } | null;
 }
@@ -49,6 +51,10 @@ export interface Trail {
   pts: [number, number, number][];
   /** время каждой точки (для бегущей точки «сейчас») */
   times: number[];
+  /** ручка позы на конце цепочки (как у суставов: «имя>» — конец кости-листа): след тянут в режиме «Поза» */
+  tip?: string;
+  /** моменты ключей позы этой цепочки — метки на следе */
+  keys?: number[];
 }
 
 interface Loaded {
@@ -186,7 +192,7 @@ export function Viewport(props: Props) {
     const jointPool: THREE.Mesh[] = [];
     const jointMat = new THREE.MeshBasicMaterial({ color: 0xe8e2d6, depthTest: false, transparent: true, opacity: 0.85 });
     const jointHot = new THREE.MeshBasicMaterial({ color: 0xffb547, depthTest: false });
-    let posing: { bone: string; end: boolean; length: number; plane: THREE.Plane; target: THREE.Vector3 } | null = null;
+    let posing: { bone: string; end: boolean; length: number; plane: THREE.Plane; target: THREE.Vector3; t?: number } | null = null;
     let poseHold: { bone: string; end: boolean; length: number; target: [number, number, number]; until: number } | null = null;
     let hover = "";
     // ручки позы: каждый сустав и конец каждой кости-листа («имя>»): у руки-варежки тянут за кисть
@@ -210,7 +216,8 @@ export function Viewport(props: Props) {
       const e = effectorOf(p.rig, i, true, m.ends.get(name.slice(0, -1)))(w);
       return out.set(e[0], e[1], e[2]);
     };
-    const pickJoint = (e: PointerEvent) => {
+    const pickJoint = (e: PointerEvent) => pickJointD(e)?.name ?? null;
+    const pickJointD = (e: PointerEvent) => {
       const m = loaded.current;
       if (!m) return null;
       const r = renderer.domElement.getBoundingClientRect();
@@ -223,7 +230,7 @@ export function Viewport(props: Props) {
         const d = Math.hypot(x - e.clientX, y - e.clientY);
         if (d < bd) (bd = d), (best = name);
       }
-      return best;
+      return best ? { name: best as string, d: bd } : null;
     };
     const lengthFor = (bone: string) => {
       // корень скелета (или кость без сустава-родителя) — переносим тело целиком
@@ -239,20 +246,52 @@ export function Viewport(props: Props) {
       ray.setFromCamera(ndc, camera);
       return ray.ray.intersectPlane(plane, out);
     };
+    // ближайшая к курсору точка следа (в пикселях) у следа с ручкой
+    const pickTrail = (e: PointerEvent) => {
+      const r = renderer.domElement.getBoundingClientRect();
+      let best: { tip: string; t: number; at: THREE.Vector3; d: number } | null = null, bd = 12;
+      const v = new THREE.Vector3();
+      for (const tr of live.current.trails ?? []) {
+        if (!tr.tip) continue;
+        tr.pts.forEach((pt, k) => {
+          v.set(pt[0], pt[1], pt[2]).project(camera);
+          const d = Math.hypot(r.left + ((v.x + 1) / 2) * r.width - e.clientX, r.top + ((1 - v.y) / 2) * r.height - e.clientY);
+          if (d < bd) (bd = d), (best = { tip: tr.tip!, t: tr.times[k], at: new THREE.Vector3(pt[0], pt[1], pt[2]), d });
+        });
+      }
+      return best as { tip: string; t: number; at: THREE.Vector3; d: number } | null;
+    };
+    // для проверок без окна: где на экране точка k следа i
+    (window as any).__afTrailScreen = (i: number, k: number) => {
+      const tr = (live.current.trails ?? [])[i], r = renderer.domElement.getBoundingClientRect();
+      if (!tr) return null;
+      const v = new THREE.Vector3(...tr.pts[k]).project(camera);
+      return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height, t: tr.times[k], tip: tr.tip };
+    };
     const poseDown = (e: PointerEvent) => {
       const p = live.current, m = loaded.current;
       if (!p.poseMode || !m || !p.clip || e.button !== 0) return;
-      const bone = pickJoint(e);
-      if (!bone) return; // мимо суставов — камера
+      const jd = pickJointD(e);
+      let bone = jd?.name ?? null;
+      let at: THREE.Vector3 | null = null, tAt: number | undefined;
+      // след ближе сустава: точка следа = момент клипа, тянем конец цепочки в этом моменте
+      const tg = pickTrail(e);
+      if (tg && (!jd || tg.d < jd.d)) {
+        p.onTrailTime?.(tg.t);
+        bone = tg.tip;
+        at = tg.at;
+        tAt = tg.t;
+      }
+      if (!bone) return; // мимо всего — камера
       e.stopImmediatePropagation();
-      const at = handlePos(bone, new THREE.Vector3());
+      at ??= handlePos(bone, new THREE.Vector3());
       const end = bone.endsWith(">"), name = end ? bone.slice(0, -1) : bone;
       if (e.altKey) {
         if (!end) p.onPin?.(name, [at.x, at.y, at.z].map((x) => +x.toFixed(4)) as [number, number, number]);
         return;
       }
       const normal = camera.getWorldDirection(new THREE.Vector3()).negate();
-      posing = { bone: name, end, length: end ? Math.max(1, p.poseLength ?? 2) : lengthFor(name), plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, at), target: at.clone() };
+      posing = { bone: name, end, length: end ? Math.max(1, p.poseLength ?? 2) : lengthFor(name), plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, at), target: at.clone(), t: tAt };
       try {
         renderer.domElement.setPointerCapture(e.pointerId);
       } catch {
@@ -273,7 +312,7 @@ export function Viewport(props: Props) {
       const tgt = [d.target.x, d.target.y, d.target.z].map((x) => +x.toFixed(4)) as [number, number, number];
       poseHold = { bone: d.bone, end: d.end, length: d.length, target: tgt, until: performance.now() + 2000 };
       (window as any).__afLastDrop = { ...poseHold };
-      live.current.onPoseDrop?.(d.bone, tgt, d.length, d.end, d.end ? loaded.current?.ends.get(d.bone) : undefined);
+      live.current.onPoseDrop?.(d.bone, tgt, d.length, d.end, d.end ? loaded.current?.ends.get(d.bone) : undefined, d.t);
     };
     renderer.domElement.addEventListener("pointerdown", poseDown, { capture: true });
     renderer.domElement.addEventListener("pointermove", poseMove);
@@ -320,6 +359,16 @@ export function Viewport(props: Props) {
         dot.renderOrder = 9;
         trailGroup.add(line, dot);
         trailDots.push({ dot, tr });
+        // ключи позы на следе: кольца побольше — за них и тянут
+        for (const kt of tr.keys ?? []) {
+          let k = 0;
+          for (let j = 1; j < tr.times.length; j++) if (Math.abs(tr.times[j] - kt) < Math.abs(tr.times[k] - kt)) k = j;
+          const mk = new THREE.Mesh(limGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false }));
+          mk.renderOrder = 10;
+          mk.position.set(...tr.pts[k]);
+          mk.userData.key = true;
+          trailGroup.add(mk);
+        }
       }
     };
     // подсветка цепочки: точки суставов и ломаная через них
@@ -446,6 +495,7 @@ export function Viewport(props: Props) {
           dot.position.set(...tr.pts[k]);
           dot.scale.setScalar(m.size * 0.006);
         }
+        for (const o of trailGroup.children) if (o.userData.key) o.scale.setScalar(m.size * 0.009);
         // подсветка цепочки
         const hl = p.highlight ? p.highlight.bones.map((b) => m.bones.get(b)?.obj).filter((o) => !!o) : [];
         hlLine.visible = hl.length > 0;

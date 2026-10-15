@@ -718,6 +718,44 @@ const defs: CommandDef[] = [
     },
   },
   {
+    name: "layer.shape",
+    help: "Правка кривых слоя-рецепта (как Late / Amount / Step): late — сдвиг по фазе, доля периода (0.1 — на десятую цикла позже); amount — размах вокруг среднего (1.5 — в полтора раза шире, 0 — среднее значение); step — задержка каждой следующей кости цепочки, доля периода (волна по позвоночнику, хвосту, руке). Слои — по id или все слои цепочки (chain).",
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      layer: { type: "string", help: "id слоя или «id1,id2»" },
+      chain: { type: "string", help: "или все слои-рецепты на цепочке (pelvis, leg_l, tail…)" },
+      late: { type: "number", help: "−1…1, доля периода" },
+      amount: { type: "number", help: "0…3, множитель размаха" },
+      step: { type: "number", help: "−0.5…0.5, доля периода на кость" },
+      reset: { type: "boolean", help: "убрать правку" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const clip = clipOf(ctx, a.clip);
+      need(a.layer || a.chain, "нужен layer или chain");
+      const layers = a.layer
+        ? String(a.layer).split(",").map((id) => {
+            const l = clip.layers.find((l) => l.id === id.trim());
+            need(l && l.type === "recipe", `нет слоя-рецепта «${id}»`);
+            return l as RecipeLayer;
+          })
+        : (clip.layers.filter((l) => l.type === "recipe" && l.target.chain === a.chain) as RecipeLayer[]);
+      need(layers.length, `на цепочке «${a.chain}» нет слоёв-рецептов`);
+      const rng = (k: string, lo: number, hi: number) => a[k] == null || (Number.isFinite(+a[k]) && +a[k] >= lo && +a[k] <= hi);
+      need(rng("late", -1, 1) && rng("amount", 0, 3) && rng("step", -0.5, 0.5), "late −1…1, amount 0…3, step −0.5…0.5");
+      for (const l of layers) {
+        if (a.reset) { delete l.shape; continue; }
+        const sh = { ...l.shape };
+        for (const k of ["late", "amount", "step"] as const) if (a[k] != null) sh[k] = +a[k];
+        if (sh.late === 0) delete sh.late;
+        if (sh.step === 0) delete sh.step;
+        if (sh.amount === 1) delete sh.amount;
+        if (Object.keys(sh).length) l.shape = sh; else delete l.shape;
+      }
+      return { layers: layers.map((l) => ({ id: l.id, shape: l.shape ?? null })) };
+    },
+  },
+  {
     name: "clip.directions",
     help: "8 направлений из прямой ходьбы (стрейф, назад, диагонали): копии клипа <clip>_fwd, _fwd_l, _left, _back_l, _back, _back_r, _right, _fwd_r с ходом под углом (travel). face=aim — взгляд вперёд, таз доворачивает к ходу, грудь держит плечи на цели; face=travel — всё тело поворачивается по ходу. Плоскость маха подбирается замером, чтобы тело шло точно под углом; все — с той же фазы шага, для смешивания в движке.",
     args: {

@@ -1834,3 +1834,13 @@ table.keys tbody tr:hover {
 .checks h3 .ok { color: #7ee0a1; font-weight: 400; }
 .checks h3 .bad { color: #ff6b6b; font-weight: 400; }
 button.adv.on { color: var(--accent, #ffb547); }
+
+/* правка кривой выбранной конечности (layer.shape) */
+.gl-name.can { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.gl-name.sel { color: var(--accent); font-weight: 600; }
+.gl-dot { color: var(--accent); margin-left: 3px; }
+.graph-shape { border-top: 1px solid var(--line, #333); padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; }
+.graph-shape .gs-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+.graph-shape .gs-row { display: grid; grid-template-columns: 62px 1fr 44px; align-items: center; gap: 6px; font-size: 12px; }
+.graph-shape .gs-v { text-align: right; font-variant-numeric: tabular-nums; }
+.graph-shape .gs-tip { font-size: 11px; margin: 2px 0 0; }

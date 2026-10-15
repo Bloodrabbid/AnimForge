@@ -70,6 +70,19 @@ export const SYNTHETIC_GAIT: Clip = {
   gait: { speed: 1.3, bounce: 0.6, sway: 1.4, arms: 1.5, lift: 1.3, width: 3, lower: 0.02, lean: 5, posture: 8 },
 };
 
+/** Правка кривых (layer.shape): сдвиг фазы, размах вокруг среднего, задержка по цепочке; у разового — сдвиг от начала. */
+export const SYNTHETIC_SHAPE: Clip = {
+  name: "synthetic_shape", duration: 0.958, fps: 30, loop: true,
+  layers: [
+    ...SYNTHETIC_TRAVEL.layers.map((l) => (l.type === "recipe" && l.target.chain === "pelvis" ? { ...l, shape: { late: 0.1, amount: 1.4 } } : l.type === "recipe" && l.target.chain === "arm_l" ? { ...l, shape: { amount: 0 } } : l)),
+    { id: "ear_wave", type: "recipe", recipe: "wave", target: { chain: "ear_l" }, params: { period: 0.479, tipAmp: 20 }, shape: { step: 0.15, amount: 1.5, late: -0.2 } },
+  ],
+};
+export const SYNTHETIC_SHAPE_ONCE: Clip = {
+  name: "synthetic_shape_once", duration: 1.4, fps: 30, loop: false,
+  layers: [{ id: "hit", type: "recipe", recipe: "melee-strike", target: { chain: "arm_r" }, params: { role: "arm", hits: 1 }, shape: { late: 0.1, amount: 0.7 } }],
+};
+
 /** Моменты сверки: края, середина и точки между кадрами (живой рецепт считается в любой момент, не по кадрам). */
 const checkTimes = (d: number) => [0, 0.013, 0.137, 0.29, 0.5, 0.731, 0.97, 1].map((u) => +(u * d).toFixed(6));
 
@@ -84,7 +97,7 @@ export async function liveVerify(dirs?: string[]) {
     const syn = structuredClone(worker);
     syn.project.name = "worker-synthetic";
     syn.project.align = { arm_l: { to: "down", abduct: 8 } };
-    syn.project.clips = [SYNTHETIC, SYNTHETIC_TRAVEL, SYNTHETIC_GAIT];
+    syn.project.clips = [SYNTHETIC, SYNTHETIC_TRAVEL, SYNTHETIC_GAIT, SYNTHETIC_SHAPE, SYNTHETIC_SHAPE_ONCE];
     ctxs.push(syn);
   }
   for (const ctx of ctxs) {

@@ -781,6 +781,23 @@ static func apply_gait(acc: Acc, rig: Rig, clip: Dictionary, size: float) -> voi
 # ── основные слои и пол (primary) ──────────────────────────────────────────────────────────────────────────────
 ## opts: { "floor": Callable(bone: String, F: Vector3, rest: float) -> float — высота пола под стопой (рельеф в игре),
 ##         "targets": { id констрейна: Vector3 } — живые цели } — всё в координатах модели, как LiveOpts ядра.
+# Среднее кривых рецепта за период — для размаха layer.shape.amount (48 отсчётов, как в ядре).
+static func shape_mean(rig: Rig, recipe: String, p: Dictionary, i: int, n: int, per: float, hc: Dictionary) -> Dictionary:
+	var key := "shape|%s|%s|%d|%d|%f|%f|%f" % [recipe, JSON.stringify(p), i, n, per, hc["height"], hc["size"]]
+	if rig.lock_cache.has(key):
+		return rig.lock_cache[key]
+	var m := {}
+	var N := 48
+	for k in N:
+		var out := AFRecipes.evaluate(recipe, p, i, n, per * k / N, hc)
+		for ch in out:
+			m[ch] = m.get(ch, 0.0) + float(out[ch]) / N
+	if rig.lock_cache.size() > 256:
+		rig.lock_cache.clear()
+	rig.lock_cache[key] = m
+	return m
+
+
 static func primary(rig: Rig, clip: Dictionary, t: float, opts := {}) -> Acc:
 	var t_clip := t  # фиксация стопы — по времени клипа, как её план
 	var trv = clip.get("travel")
@@ -814,11 +831,25 @@ static func primary(rig: Rig, clip: Dictionary, t: float, opts := {}) -> Acc:
 					return cache["a"]
 				var w: float = layer.get("weight", 1.0) if layer.get("weight") != null else 1.0
 				var n: int = chain.size()
+				# правка кривой (layer.shape): late и step — доли периода рецепта (у разовых — длины клипа)
+				var sh: Dictionary = layer.get("shape", {}) if layer.get("shape") != null else {}
+				var per: float = float(p["period"]) if p.has("period") and (p["period"] is float or p["period"] is int) else float(clip["duration"])
+				var amount: float = float(sh.get("amount", 1.0))
 				for i in n:
 					var bone: String = chain[i]
-					var out := AFRecipes.evaluate(layer["recipe"], p, i, n, t, {"height": rig.heights.get(bone, 0.0), "size": rig.heights.get(SIZE, 0.0)})
+					var hc := {"height": rig.heights.get(bone, 0.0), "size": rig.heights.get(SIZE, 0.0)}
+					var tt := t
+					if sh.has("late") or sh.has("step"):
+						tt = t - (float(sh.get("late", 0.0)) + float(sh.get("step", 0.0)) * i) * per
+						if not clip["loop"]:
+							tt = maxf(0.0, tt)
+					var out := AFRecipes.evaluate(layer["recipe"], p, i, n, tt, hc)
+					var mean := shape_mean(rig, layer["recipe"], p, i, n, per, hc) if amount != 1.0 else {}
 					for ch in out:
 						var v: float = out[ch]
+						if amount != 1.0:
+							var m: float = mean.get(ch, 0.0)
+							v = m + amount * (v - m)
 						var val := 1.0 + (v - 1.0) * w if ch.begins_with("scale_") else v * w
 						acc.add(bone, ch, val, get_axes)
 			"pose":

@@ -381,6 +381,20 @@ function applyTravel(acc: Acc, rig: Rig, project: Project, tr: Travel) {
   }
 }
 
+/** Среднее кривых рецепта за период — для размаха layer.shape.amount (48 отсчётов, как в аддоне Godot). */
+const shapeCache = new Map<string, Record<string, number>>();
+function shapeMean(recipe: string, p: Record<string, unknown>, i: number, n: number, per: number, hc: { height: number; size: number }): Record<string, number> {
+  const key = `${recipe}|${JSON.stringify(p)}|${i}|${n}|${per}|${hc.height}|${hc.size}`;
+  let m = shapeCache.get(key);
+  if (m) return m;
+  m = {};
+  const N = 48;
+  for (let k = 0; k < N; k++) for (const [ch, v] of Object.entries(RECIPES[recipe].evaluate(p as never, i, n, (per * k) / N, hc))) m[ch] = (m[ch] ?? 0) + (v as number) / N;
+  if (shapeCache.size > 512) shapeCache.clear();
+  shapeCache.set(key, m);
+  return m;
+}
+
 /** Основные слои (без вторичной динамики) и постановка на пол. */
 function primary(project: Project, rig: Rig, clip: Clip, t: number, opts: LiveOpts = {}): Acc {
   const tClip = t; // фиксация стопы — по времени клипа, как её план (реверс уже внутри плана)
@@ -404,11 +418,24 @@ function primary(project: Project, rig: Rig, clip: Clip, t: number, opts: LiveOp
       let axes: Record<SemanticAxis, Vec3> | undefined;
       const getAxes = () => (axes ??= chainAxes(rig, project, chain));
       const w = layer.weight ?? 1;
+      const sh = layer.shape;
+      // правка кривой (layer.shape): late и step — в долях периода рецепта (у разовых — длины клипа)
+      const per = typeof p.period === "number" ? p.period : clip.duration;
       chain.forEach((bone, i) => {
-        const out = def.evaluate(p, i, chain.length, t, { height: heights!.get(bone) ?? 0, size: heights!.get(SIZE) ?? 0 });
-        for (const [ch, v] of Object.entries(out)) {
+        const hc = { height: heights!.get(bone) ?? 0, size: heights!.get(SIZE) ?? 0 };
+        let tt = t;
+        if (sh?.late || sh?.step) {
+          tt = t - ((sh.late ?? 0) + (sh.step ?? 0) * i) * per;
+          if (!clip.loop) tt = Math.max(0, tt);
+        }
+        const out = def.evaluate(p, i, chain.length, tt, hc);
+        const mean = sh?.amount != null && sh.amount !== 1 ? shapeMean(layer.recipe, p, i, chain.length, per, hc) : undefined;
+        for (const [ch, v0] of Object.entries(out)) {
+          // размах (amount) — вокруг среднего этой кривой за период: подъём колена остаётся, качание растёт
+          const m = mean?.[ch] ?? 0;
+          const v = mean ? m + sh!.amount! * ((v0 as number) - m) : (v0 as number);
           // вес слоя: для углов и сдвигов — множитель, для масштаба — доля пути от 1 до значения
-          const val = ch.startsWith("scale_") ? 1 + ((v as number) - 1) * w : (v as number) * w;
+          const val = ch.startsWith("scale_") ? 1 + (v - 1) * w : v * w;
           acc.add(bone, ch as Channel, val, getAxes);
         }
       });

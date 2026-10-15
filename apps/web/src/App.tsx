@@ -3,7 +3,7 @@
 // Примерка пресета — те же команды на копии проекта (/api/preview): видно на своей модели, на диск не пишется,
 // пока не нажато «Применить».
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { buildRig, clipSteps, type Project } from "../../../packages/core/src/index.ts";
+import { RECIPES, buildRig, clipSteps, type Project } from "../../../packages/core/src/index.ts";
 import {
   command,
   downloadUrl,
@@ -280,9 +280,14 @@ export function App() {
       showTrails && graph
         ? graph.limbs
             .filter((l) => (l.kind === "foot" || l.kind === "hand" || l.kind === "pelvis") && isShown(graphShown, l))
-            .map((l) => ({ color: limbColor(l.chain, graph.limbs.indexOf(l)), pts: l.pos, times: graph.times }))
+            .map((l) => {
+              // ключи позы, где двигали кости этой цепочки, — метки на следе
+              const bones = new Set([...(shown?.chains[l.chain] ?? []), l.tip.replace(/>$/, "")]);
+              const keys = (clip?.layers ?? []).flatMap((ly) => (ly.type === "pose" ? ly.keys.filter((k) => [...Object.keys(k.rot ?? {}), ...Object.keys(k.move ?? {})].some((b) => bones.has(b))).map((k) => k.t) : []));
+              return { color: limbColor(l.chain, graph.limbs.indexOf(l)), pts: l.pos, times: graph.times, tip: l.tip, keys };
+            })
         : null,
-    [showTrails, graph, graphShown],
+    [showTrails, graph, graphShown, clip],
   );
   const highlight = useMemo(() => {
     const l = hoverChain ? graph?.limbs.find((x) => x.chain === hoverChain) : undefined;
@@ -494,9 +499,11 @@ export function App() {
             }}
             poseMode={poseMode && !trial && !!clip}
             poseLength={poseLength}
-            onPoseDrop={(bone, target, length, end, endLength) => {
+            onPoseDrop={(bone, target, length, end, endLength, at) => {
               if (!clip) return;
-              runMany([{ name: "pose.reach", args: { clip: clip.name, t: +t.toFixed(3), bone, target: target.join(","), length, ...(end ? { end: true, ...(endLength ? { endLength: +endLength.toFixed(4) } : {}) } : {}) } }], length ? `поза: ${bone} в ${t.toFixed(2)} с` : `тело перенесено в ${t.toFixed(2)} с`);
+              // схватили след — ключ в момент точки следа, а не в текущий кадр
+              const tt = at ?? t;
+              runMany([{ name: "pose.reach", args: { clip: clip.name, t: +tt.toFixed(3), bone, target: target.join(","), length, ...(end ? { end: true, ...(endLength ? { endLength: +endLength.toFixed(4) } : {}) } : {}) } }], length ? `поза: ${bone} в ${tt.toFixed(2)} с` : `тело перенесено в ${tt.toFixed(2)} с`);
             }}
             onPin={(bone, at) => {
               if (!clip) return;
@@ -505,6 +512,10 @@ export function App() {
             }}
             onStatus={say}
             trails={trails}
+            onTrailTime={(v) => {
+              setT(v);
+              setPlaying(false);
+            }}
             highlight={highlight}
           />
           <div className="overlay tl">
@@ -626,6 +637,16 @@ export function App() {
             }}
             shown={graphShown}
             onShown={setGraphShown}
+            shapes={Object.fromEntries(
+              clip.layers.flatMap((l) => {
+                if (l.type !== "recipe") return [];
+                const per = l.params.period ?? RECIPES[l.recipe]?.params.period?.default;
+                return [[l.target.chain, { shape: l.shape ?? {}, period: typeof per === "number" ? per : clip.duration }]];
+              }),
+            )}
+            onShape={(chain, sh) =>
+              run("layer.shape", Object.keys(sh).length ? { clip: clip.name, chain, late: sh.late ?? 0, amount: sh.amount ?? 1, step: sh.step ?? 0 } : { clip: clip.name, chain, reset: true })
+            }
           />
         )}
         <Timeline

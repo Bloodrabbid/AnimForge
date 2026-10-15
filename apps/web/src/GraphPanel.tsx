@@ -75,7 +75,21 @@ interface Props {
   /** какие конечности показаны (их же следы во вьюпорте) */
   shown: Record<string, boolean>;
   onShown(v: Record<string, boolean>): void;
+  /** правка кривых (layer.shape) по цепочкам: текущая правка и период рецепта; null — на цепочке нет рецепта */
+  shapes?: Record<string, { shape: Shape; period: number }>;
+  onShape?(chain: string, shape: Shape): void;
 }
+
+export interface Shape {
+  late?: number;
+  amount?: number;
+  step?: number;
+}
+const SHAPE_KNOBS = [
+  { k: "late", title: "Сдвиг", hint: "сдвиг по фазе, доля цикла: + — позже", min: -0.5, max: 0.5, step: 0.01, def: 0 },
+  { k: "amount", title: "Размах", hint: "размах вокруг среднего: 1 — как есть, 0 — замереть в среднем", min: 0, max: 3, step: 0.05, def: 1 },
+  { k: "step", title: "Задержка", hint: "задержка каждой следующей кости цепочки, доля цикла — волна", min: -0.25, max: 0.25, step: 0.01, def: 0 },
+] as const;
 
 export const isShown = (shown: Record<string, boolean>, l: LimbCurve) => shown[l.chain] ?? shownByDefault(l);
 
@@ -89,7 +103,14 @@ function values(l: LimbCurve, q: Quantity): number[] | null {
 }
 const ampOf = (l: LimbCurve, q: Quantity) => (q === "lift" ? l.amp.lift : l.amp[q]);
 
-export function GraphPanel({ graph, t, duration, hover, onHover, onTime, shown, onShown }: Props) {
+export function GraphPanel({ graph, t, duration, hover, onHover, onTime, shown, onShown, shapes, onShape }: Props) {
+  const [sel, setSel] = useState<string | null>(null);
+  // черновик правки, пока тянут ползунок или кривую: команда уходит, когда отпустили
+  const [draft, setDraft] = useState<Shape | null>(null);
+  const drag = useRef<{ chain: string; x: number; y: number; shape: Shape } | null>(null);
+  // правка записана — черновик больше не нужен
+  const committed = JSON.stringify(shapes?.[sel ?? ""]?.shape ?? null);
+  useEffect(() => setDraft(null), [committed]);
   const [q, setQ] = useState<Quantity>(() => (new URLSearchParams(location.search).get("gq") as Quantity) || (localStorage.getItem("af.graph.q") as Quantity) || "forward");
   useEffect(() => localStorage.setItem("af.graph.q", q), [q]);
   const svg = useRef<SVGSVGElement>(null);
@@ -185,12 +206,38 @@ export function GraphPanel({ graph, t, duration, hover, onHover, onTime, shown, 
               >
                 <input type="checkbox" checked={on} onChange={() => toggle(l)} />
                 <span className="sw" style={{ background: col(l) }} />
-                <span className="gl-name">{l.chain}</span>
+                <span className={`gl-name ${sel === l.chain ? "sel" : ""} ${shapes?.[l.chain] ? "can" : ""}`} onClick={(e) => { e.preventDefault(); if (shapes?.[l.chain]) { setSel(sel === l.chain ? null : l.chain); setDraft(null); } }} title={shapes?.[l.chain] ? "править кривую: сдвиг, размах, задержка" : "на цепочке нет рецепта — править нечего"}>
+                  {l.chain}
+                  {shapes?.[l.chain] && Object.keys(shapes[l.chain].shape).length > 0 && <span className="gl-dot" title="кривая правлена">•</span>}
+                </span>
                 <span className="gl-amp">{a == null ? "—" : `${a.toFixed(a < 10 ? 1 : 0)} ${unit}`}</span>
               </label>
             );
           })}
         </div>
+        {sel && shapes?.[sel] && onShape && (
+          <div className="graph-shape">
+            <div className="gs-head">
+              <b>{sel}</b>
+              <button className="ghost" onClick={() => { onShape(sel, {}); setDraft(null); }} title="убрать правку">сброс</button>
+            </div>
+            {SHAPE_KNOBS.map((kn) => {
+              const cur = draft ?? shapes[sel].shape;
+              const v = cur[kn.k] ?? kn.def;
+              return (
+                <label key={kn.k} className="gs-row" title={kn.hint}>
+                  <span>{kn.title}</span>
+                  <input type="range" min={kn.min} max={kn.max} step={kn.step} value={v}
+                    onChange={(e) => setDraft({ ...cur, [kn.k]: +e.target.value })}
+                    onPointerUp={() => draft && onShape(sel, draft)}
+                    onKeyUp={() => draft && onShape(sel, draft)} />
+                  <span className="gs-v">{kn.k === "amount" ? `×${v.toFixed(2)}` : `${v > 0 ? "+" : ""}${v.toFixed(2)}`}</span>
+                </label>
+              );
+            })}
+            <p className="muted gs-tip">Alt + тянуть кривую: вбок — сдвиг, вверх-вниз — размах</p>
+          </div>
+        )}
       </div>
       <svg
         ref={svg}
@@ -198,10 +245,29 @@ export function GraphPanel({ graph, t, duration, hover, onHover, onTime, shown, 
         viewBox={`0 0 ${W} ${H}`}
         onPointerDown={(e) => {
           (e.target as Element).setPointerCapture?.(e.pointerId);
+          const n = e.altKey ? nearest(e) : null;
+          if (n && shapes?.[n] && onShape) {
+            const { x, y } = local(e);
+            drag.current = { chain: n, x, y, shape: { ...shapes[n].shape } };
+            setSel(n);
+            return;
+          }
           seek(e);
         }}
+        onPointerUp={() => {
+          if (drag.current && draft) onShape?.(drag.current.chain, draft);
+          drag.current = null;
+        }}
         onPointerMove={(e) => {
-          if (e.buttons & 1) seek(e);
+          const g = drag.current;
+          if (g && e.buttons & 1) {
+            // вбок — сдвиг по фазе (доля периода рецепта), вверх — размах больше
+            const { x, y } = local(e);
+            const dt = ((x - g.x) / (W - PAD_L - PAD_R)) * d;
+            const late = Math.max(-0.5, Math.min(0.5, (g.shape.late ?? 0) + dt / (shapes![g.chain].period || d)));
+            const amount = Math.max(0, Math.min(3, (g.shape.amount ?? 1) * Math.exp((g.y - y) / 80)));
+            setDraft({ ...g.shape, late: +late.toFixed(3), amount: +amount.toFixed(3) });
+          } else if (e.buttons & 1) seek(e);
           else {
             const n = nearest(e);
             if (n !== hover) onHover(n);

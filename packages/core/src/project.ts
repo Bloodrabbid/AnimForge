@@ -53,6 +53,9 @@ export interface RecipeLayer {
   params: Record<string, number | string | boolean>;
   preset?: string; // из какого пресета библиотеки взяты параметры
   weight?: number;
+  /** Правка кривых слоя (как Late / Amount / Step в ActionForge): late — сдвиг по фазе, доля периода (+ — позже);
+   * amount — размах вокруг среднего за период (×); step — задержка каждой следующей кости цепочки, доля периода. */
+  shape?: { late?: number; amount?: number; step?: number };
 }
 
 export interface KeyLayer {
