@@ -500,14 +500,16 @@ pnpm af project.new --file ~/Downloads/statue.obj --project out/uploads/statue  
 
 | рецепт | для кого | пресеты (игра) |
 |---|---|---|
-| `multileg-gait` | насекомые, пауки, сколопендры, кикиморы | `tripod`, `witcher-centipede`, `witcher-kikimora-trot/run`, `witcher-kosh-walk` |
-| `quadruped-gait` | звери, ходьба на кулаках | `witcher-dog-*`, `trot`, `pace`, `witcher-gigant-knuckle/bound` |
-| `waddle-walk` | големы, мелкие двуногие | `witcher-golem-walk`, `witcher-zjad-walk` |
-| `wing-flap` | птицы, ласты, бабочки | `witcher-cockatrice-flap`, `tlj-crow-flap`, `toolsup-butterfly`, `dredge-turtle-stroke` |
-| `hover` | призраки, ифриты | `witcher-wraith-move/idle/ready`, `witcher-ifryt-dive` |
+| `multileg-gait` | насекомые, пауки, сколопендры, кикиморы | `tripod`, `witcher-centipede`, `witcher-kikimora-trot/run`, `witcher-kosh-walk`, `haven-heliga-run` |
+| `quadruped-gait` | звери, ходьба на кулаках | `witcher-dog-*`, `trot`, `pace`, `witcher-gigant-knuckle/bound`; Haven: `haven-toriko-walk/gallop`, `haven-tanoli-walk/bound`, `haven-bigufurai-waddle/gallop`, `haven-dorago-walk/gallop`, `haven-babulardo-bound`, `haven-salamash-scurry` |
+| `waddle-walk` | големы, мелкие двуногие | `witcher-golem-walk`, `witcher-zjad-walk`; Haven: `haven-daikon-waddle/hop-run`, `haven-hornet-shuffle`, `haven-holobug-hop`, `haven-nokk-bouncy`, `haven-chirulida-walk`, `haven-sunatcha-walk`, `haven-bodigado-walk`; Ghost Master: `gm-mortal-walk/brisk/run-flee/sneak` |
+| `wing-flap` | птицы, ласты, бабочки | `witcher-cockatrice-flap`, `tlj-crow-flap`, `toolsup-butterfly`, `dredge-turtle-stroke`; `haven-bird-flap/takeoff`, `haven-fayasna-wings(-fast)`, `haven-katefulai-wings`, `haven-beruberu-wings`, `gm-crow-glide-flap`, `gm-crow-flutter` |
+| `hover` | призраки, ифриты, парящие звери, роботы | `witcher-wraith-move/idle/ready`, `witcher-ifryt-dive`; Ghost Master: `gm-sheet-ghost-idle/move`, `gm-banshee-idle/move`, `gm-imp-hover`, `gm-stormtalon-hover`; Haven: `haven-droploot-float/dash`, `haven-fayasna-drift`, `haven-katefulai-hang`, `haven-fulare-hang`, `haven-sukopi-hover`, `haven-lorudo-float`, `haven-shifuta-float`; Breathedge: `breathedge-guardian-idle/move`, `breathedge-repairbot` |
 | `tentacle-strike` | щупальца, хлысты | `witcher-tentacle-slam`, `witcher-echinops-whip/slam` |
-| `emerge` | из-под земли или воды и обратно | `witcher-tentacle-up/down`, `witcher-dagon-surface`, `witcher-zeugl-rise`, `witcher-wraith-vanish`, `witcher-drowner-dive` |
-| `wave` | рыбы, змеи, черви, хвосты | `dredge-ghost-shark-*`, `dredge-great-white`, `dredge-leviathan`, `dredge-twisted-strand`, `dredge-dog-tail-wag`, `tlj-mermaid-tail`, `tlj-snapjaw-idle`, `toolsup-dog-tail-*` |
+| `emerge` | из-под земли или воды и обратно, падения | `witcher-tentacle-up/down`, `witcher-dagon-surface`, `witcher-zeugl-rise`, `witcher-wraith-vanish`, `witcher-drowner-dive`, `gm-faint-drop` |
+| `wave` | рыбы, змеи, черви, хвосты | `dredge-ghost-shark-*`, `dredge-great-white`, `dredge-leviathan`, `dredge-twisted-strand`, `dredge-dog-tail-wag`, `tlj-mermaid-tail`, `tlj-snapjaw-idle`, `toolsup-dog-tail-*`, хвосты и тела Haven (`haven-*-tail`, `haven-fulare/fayasna/katefulai-body`), волосы и подол банши (`gm-banshee-hair/hem`), `gm-sheep-tail-flick` |
+| `body-ram` | тараны и выпады существ | Haven: `haven-heliga-lunge`, `haven-bodigado-rear`, `haven-dorago-ram`, `haven-shifuta-lunge`, `haven-sunatcha-ram` |
+| прочее | | `melee-strike`: `breathedge-guardian-hit`, `breathedge-fp-crowbar/jab`; `curl`: `haven-creature-breathe`, `breathedge-xeno-tail-walk/angry`; `jiggle`: `breathedge-cow-ragdoll-limb/tongue`; `blink`: `haven-toriko/daikon-blink`; `charge-release`: `gm-ghost-power`; твины камеры `breathedge-camera-hit/bump` |
 
 Шаблоны `template.make`: `quadruped`, `insect`, `spider`, `centipede`, `bird`, `ghost`, `plant`. Разборы, из которых взяты числа:
-`research/` (Witcher — главы 05–06, DREDGE — глава 04, TLJ, Biped и Tools Up! — главы 05).
+`research/` (Witcher — главы 05–06, DREDGE — глава 04, TLJ, Biped и Tools Up! — главы 05), Haven (2020) — главы 04 и 06, Ghost Master (2003) — глава 05, Breathedge (2021) — глава 05. Разборы лежат вне репозитория (`~/Documents/re-tools/*-anim`); в библиотеку попадают только числа и ссылки на главы. Диапазоны рецептов расширены под них: период `quadruped-gait` до 5 с, `waddle-walk` до 3 с, у `body-ram` замах до 5 с, бросок до 1.5, откат до 3.5.

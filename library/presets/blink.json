@@ -75,6 +75,46 @@
      "note": "interval 0.6 — середина коротких интервалов"
     }
    ]
+  },
+  {
+   "name": "haven-toriko-blink",
+   "help": "Моргание Toriko: медианы четырёх морганий.",
+   "params": {
+    "interval": 2.0,
+    "close": 0.106,
+    "hold": 0.067,
+    "open": 0.091
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md D1: NPC_Toriko=RoamingIdle и ещё 3 клипа — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "interval (в Haven веко крутится, а не сжимается) — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-daikon-blink",
+   "help": "Моргание Daikon: очень быстро закрывает.",
+   "params": {
+    "interval": 2.0,
+    "close": 0.03,
+    "hold": 0.033,
+    "open": 0.058
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md D1: NPC_Daiko=TurnAround, GuardStun1Start — 3 моргания, close 0.029 (поднят до минимума рецепта 0.03) — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "interval — на глаз"
+    }
+   ]
   }
  ]
 }

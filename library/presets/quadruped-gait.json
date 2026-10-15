@@ -136,6 +136,246 @@
      "ref": "кривые лап — галоп собаки"
     }
    ]
+  },
+  {
+   "name": "haven-toriko-walk",
+   "help": "Шаг Toriko (Haven): 1.333 с, латеральная последовательность как у собаки, таз качается вбок ±4°.",
+   "params": {
+    "gait": "walk",
+    "period": 1.333,
+    "offsetFR": 0.508,
+    "offsetHL": 0.354,
+    "offsetHR": 0.879,
+    "legs": 0.9,
+    "body": 1.5,
+    "bob": 0.6
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A1; 04-creatures.md §2.1: NPC_Toriko=RoamingWalk2Idle — измерено: period, фазы, bob 0.8 % / 1.3 %"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "legs, body (таз ±4.4° крен, ±4.1° рыскание) — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-toriko-gallop",
+   "help": "Галоп Toriko: 0.5 с, корпус ходит ±20° — вдвое сильнее собаки.",
+   "params": {
+    "gait": "run",
+    "period": 0.5,
+    "offsetFR": 0.838,
+    "offsetHL": 0.571,
+    "offsetHR": 0.634,
+    "legs": 1.3,
+    "body": 1.8,
+    "bob": 1.08
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A1: NPC_Toriko=RoamingRun2Idle — измерено: фазы, bob 8.0 / 7.4 %, таз ±20° / 11°"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "legs (размах суставов 113–141°) — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-bigufurai-waddle",
+   "help": "Вразвалку Bigufurai: медленно (3 с), крен ±14°, большой подскок.",
+   "params": {
+    "gait": "walk",
+    "period": 3.0,
+    "offsetFR": 0.433,
+    "offsetHL": 0.321,
+    "offsetHR": 0.734,
+    "legs": 0.8,
+    "body": 3,
+    "bob": 2.0
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A1: NPC_Bigufurai=RoamingWalk2Idle — измерено: period, фазы, bob 2.6 / 1.3 %; body 3 — потолок рецепта (в игре крен ±14°, рыскание ±18.6°)"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "legs — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-dorago-walk",
+   "help": "Шаг Dorago: 2 с, тяжёлый подскок (в игре раз за цикл).",
+   "params": {
+    "gait": "walk",
+    "period": 2.0,
+    "offsetFR": 0.629,
+    "offsetHL": 0.187,
+    "offsetHR": 0.721,
+    "legs": 1,
+    "body": 2,
+    "bob": 4.5
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A1: NPC_Dorago=RoamingWalk2Idle — измерено: фазы, bob 5.9 / 1.3 % (у Dorago подскок раз за цикл, рецепт — дважды)"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "body, legs — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-tanoli-bound",
+   "help": "Прыжками Tanoli: все лапы почти разом (в 0.12 цикла), огромный подскок.",
+   "params": {
+    "gait": "run",
+    "period": 1.0,
+    "offsetFR": 0.879,
+    "offsetHL": 0.854,
+    "offsetHR": 0.908,
+    "legs": 1.5,
+    "body": 3,
+    "bob": 3.4
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A1: NPC_Tanoli=RoamingRun2Idle — измерено: фазы, bob 24.9 / 7.4 %, таз ±36° (body упирается в потолок 3)"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "legs — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-tanoli-walk",
+   "help": "Медленный шаг Tanoli: 4 с на цикл.",
+   "params": {
+    "gait": "walk",
+    "period": 4.0,
+    "offsetFR": 0.55,
+    "offsetHL": 0.85,
+    "offsetHR": 0.35,
+    "legs": 0.7,
+    "body": 1,
+    "bob": 1.5
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A1: NPC_Tanoli=RoamingWalk2Idle — измерено (диапазон period рецепта расширен до 5 с)"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "legs, body — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-babulardo-bound",
+   "help": "Прыжками Babulardo: 0.5 с, лапы парами, таз ±20°.",
+   "params": {
+    "gait": "run",
+    "period": 0.5,
+    "offsetFR": 0.2,
+    "offsetHL": 0.21,
+    "offsetHR": 0.2,
+    "legs": 1.2,
+    "body": 1.8,
+    "bob": 1.26
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A1: NPC_Babulardo=RoamingRun2Idle — измерено: фазы, bob 9.3 / 7.4 %, таз ±19.6°"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "legs — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-salamash-scurry",
+   "help": "Ящерица Salamash семенит: корпус не кивает (хвост — слоем wave haven-salamash-tail).",
+   "params": {
+    "gait": "run",
+    "period": 0.5,
+    "offsetFR": 0.863,
+    "offsetHL": 0.809,
+    "offsetHR": 0.029,
+    "legs": 1,
+    "body": 0.3,
+    "bob": 0.77
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A1: NPC_Salamash=RoamingRun2Idle — измерено: фазы, bob (тело качается вбок ±18° — рецепт этого не умеет)"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "body 0.3 — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-dorago-gallop",
+   "help": "Галоп Dorago: передние лапы парой, подскок 13 % — почти вдвое выше собаки.",
+   "params": {
+    "gait": "run",
+    "period": 1.0,
+    "offsetFR": 0.033,
+    "offsetHL": 0.833,
+    "offsetHR": 0.433,
+    "legs": 1.2,
+    "body": 0.7,
+    "bob": 1.8
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md D1: NPC_Dorago=RoamingRun2Idle — измерено: фазы, period, bob 13.3 / 7.4 %, таз ±7.8° / 11°"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "legs — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-bigufurai-gallop",
+   "help": "Бег Bigufurai: 1 с, подскок 9 %.",
+   "params": {
+    "gait": "run",
+    "period": 1.0,
+    "offsetFR": 0.733,
+    "offsetHL": 0.408,
+    "offsetHR": 0.092,
+    "legs": 1,
+    "body": 0.95,
+    "bob": 1.25
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md D1: NPC_Bigufurai=RoamingRun2Idle — измерено: фазы, bob 9.25 %, таз ±10.4°"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "legs — на глаз"
+    }
+   ]
   }
  ]
 }

@@ -160,6 +160,45 @@
      "note": "f₀ и ζ пересчитаны из параметров DynamicBone при rate 30 Гц (расчёт по открытому алгоритму, с кодом игры не сверено)"
     }
    ]
+  },
+  {
+   "name": "breathedge-cow-ragdoll-limb",
+   "help": "Обвисшая лапа «космической коровы»: медленная, сильно задемпфированная.",
+   "params": {
+    "hz": 0.8,
+    "damping": 1.0,
+    "inert": 0.7,
+    "gain": 0.5
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/05-recipe-candidates.md A; 03 §2, SK_Cow_PhysicsAsset — демпфирование 0.3/0.1, пределы 20–25° — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "перевод в частоту и ζ — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-cow-tongue",
+   "help": "Язык коровы: болтается, мало демпфирования.",
+   "params": {
+    "hz": 1.5,
+    "damping": 0.3,
+    "length": 1.5
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/05-recipe-candidates.md A; 03 §2 — язык 3 звена, предел 10°, демпфирование 0.3/0.1"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "hz, damping — на глаз"
+    }
+   ]
   }
  ]
 }

@@ -160,6 +160,70 @@
      "note": "firstHit = 0.46·1.3 + 2/30 ≈ 0.67 — расчёт; присед 0.15 — на глаз"
     }
    ]
+  },
+  {
+   "name": "breathedge-guardian-hit",
+   "help": "Удар робота-охранника: одна атака, замах 0.52 с, корпус вперёд.",
+   "params": {
+    "hits": 1,
+    "firstHit": 0.52,
+    "strike": 0.12,
+    "follow": 0.15,
+    "recover": 0.5,
+    "windupAngle": 60,
+    "whooshLead": 0.13,
+    "crouch": 0,
+    "coreLean": 20
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/05-recipe-candidates.md A; 03 §5.2, A_RobotGuardian_Hit_1…5 — позы 0 / 0.333 / 0.667 / 1.167 с, подъём 0.10–0.13 с — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "windupAngle (угол плеча), coreLean 20 (замер 10…32) — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-fp-crowbar",
+   "help": "Удар ломом от первого лица: дальняя точка 0.23 с, пик 5.2 м/с, звук 0.39 с.",
+   "params": {
+    "hits": 1,
+    "firstHit": 0.39,
+    "strike": 0.1,
+    "follow": 0.14,
+    "recover": 0.5,
+    "hitLag": 0.06,
+    "plane": "vertical",
+    "side": "r"
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/05-recipe-candidates.md A; 04 §4, A_Scrap_Use_1 — измерено"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-fp-jab",
+   "help": "Тычок от первого лица: пик 3.1 м/с за 0.07 с, без замаха.",
+   "params": {
+    "hits": 1,
+    "firstHit": 0.23,
+    "strike": 0.07,
+    "follow": 0.1,
+    "recover": 0.77,
+    "hitLag": 0.07,
+    "windupAngle": 0
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/05-recipe-candidates.md A; 04 §4, A_SIBD_Hit — измерено, контакт SC_GlassHit 0.234"
+    }
+   ]
   }
  ]
 }

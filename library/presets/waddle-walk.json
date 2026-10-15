@@ -322,6 +322,223 @@
      "ref": "chestCounter, head*, armSwing, legSwing, knee — на глаз"
     }
    ]
+  },
+  {
+   "name": "haven-daikon-waddle",
+   "help": "Daikon (Haven) переваливается: 1 с, рыскание таза ±28°.",
+   "params": {
+    "period": 1.0,
+    "pelvisYaw": 27.9,
+    "pelvisRoll": 2.5,
+    "bob": 0.032
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A2: NPC_Daikon=RoamingWalk2Idle — измерено"
+    }
+   ]
+  },
+  {
+   "name": "haven-daikon-hop-run",
+   "help": "Daikon бежит вприпрыжку: крен ±13°, подскок 30 % (фазы полёта рецепт не делает).",
+   "params": {
+    "period": 1.333,
+    "pelvisYaw": 16.8,
+    "pelvisRoll": 12.6,
+    "bob": 0.3
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A2: NPC_Daikon=RoamingRun2Idle — измерено (опора 0.18 цикла)"
+    }
+   ]
+  },
+  {
+   "name": "haven-hornet-shuffle",
+   "help": "Hornet шаркает: стопа почти не отрывается (0.6 % роста), опора 76 % цикла.",
+   "params": {
+    "period": 2.0,
+    "pelvisYaw": 17.4,
+    "pelvisRoll": 5.8,
+    "bob": 0.015,
+    "knee": 8,
+    "legSwing": 15
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A2: NPC_Hornet=RoamingWalk2Idle — измерено: period, таз, bob"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "knee, legSwing — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-holobug-hop",
+   "help": "HoloBug подпрыгивает на каждом шаге: подскок 19 %.",
+   "params": {
+    "period": 1.0,
+    "pelvisYaw": 17.4,
+    "pelvisRoll": 8.7,
+    "bob": 0.19
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A2: NPC_HoloBug=RoamingWalk2Idle — измерено"
+    }
+   ]
+  },
+  {
+   "name": "haven-nokk-bouncy",
+   "help": "Nokk пружинит: 2 с, подскок 12 %.",
+   "params": {
+    "period": 2.0,
+    "pelvisYaw": 7.8,
+    "pelvisRoll": 7.6,
+    "bob": 0.119
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A2: NPC_Nokk=RoamingWalk2Idle — измерено"
+    }
+   ]
+  },
+  {
+   "name": "haven-chirulida-walk",
+   "help": "Chirulida идёт ровно, без маха рук (кивок головы ±9.7° рецепт пока не делает).",
+   "params": {
+    "period": 2.0,
+    "pelvisYaw": 13.9,
+    "pelvisRoll": 2.2,
+    "bob": 0.008,
+    "armSwing": 0
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A2: NPC_Chirulida=RoamingWalk2Idle — измерено"
+    }
+   ]
+  },
+  {
+   "name": "haven-sunatcha-walk",
+   "help": "Sunatcha: 1 с, мелко, без рук-маятников.",
+   "params": {
+    "period": 1.0,
+    "pelvisYaw": 8.7,
+    "pelvisRoll": 1.4,
+    "bob": 0.067,
+    "armSwing": 0
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md D1: NPC_Sunatcha=RoamingWalk2Idle — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "armSwing 0 — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-bodigado-walk",
+   "help": "Bodigado: 2 с, почти не качается (крылья — слоем wing-flap или wave).",
+   "params": {
+    "period": 2.0,
+    "pelvisYaw": 3.0,
+    "pelvisRoll": 0.3,
+    "bob": 0.021,
+    "armSwing": 0
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md D1: NPC_Bodigado=RoamingWalk2Idle — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "armSwing 0 — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "gm-mortal-walk",
+   "help": "Смертный (Ghost Master) идёт: цикл 1.33 с.",
+   "params": {
+    "period": 1.33,
+    "bob": 0.042
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/05-candidates.md A waddle-walk: maa_mv2/16/21 — измерено: period, подскок 0.023 роста"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "перевод подскока в долю высоты таза (таз ≈ 0.55 роста); остальное по умолчанию — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "gm-mortal-brisk",
+   "help": "Смертный спешит: цикл 1 с.",
+   "params": {
+    "period": 1.0,
+    "bob": 0.044
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/05-candidates.md A waddle-walk: maa_mv5/17 — измерено: period, подскок 0.024 роста"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "перевод подскока в долю высоты таза (таз ≈ 0.55 роста); остальное по умолчанию — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "gm-mortal-run-flee",
+   "help": "Смертный убегает от призрака: 0.93 с, подскок вдвое выше.",
+   "params": {
+    "period": 0.93,
+    "bob": 0.089
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/05-candidates.md A waddle-walk: maa_mv11 — измерено: period, подскок 0.049 роста"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "перевод подскока в долю высоты таза (таз ≈ 0.55 роста); остальное по умолчанию, что это бегство — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "gm-mortal-sneak",
+   "help": "Смертный крадётся на цыпочках: медленно, 2.4 с.",
+   "params": {
+    "period": 2.43,
+    "bob": 0.087
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/05-candidates.md A waddle-walk: maa_mv7 — измерено: period, подскок 0.048 роста"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "перевод подскока в долю высоты таза (таз ≈ 0.55 роста); остальное по умолчанию, «на цыпочках» — на глаз"
+    }
+   ]
   }
  ]
 }

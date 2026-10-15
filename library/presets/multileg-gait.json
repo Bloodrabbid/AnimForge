@@ -115,6 +115,29 @@
      "ref": "фазы — по определению трипода; остальное — на глаз"
     }
    ]
+  },
+  {
+   "name": "haven-heliga-run",
+   "help": "Бег шестиногой Heliga: 0.5 с, опора 25 % (приближённо: своей таблицы фаз у рецепта нет).",
+   "params": {
+    "period": 0.5,
+    "duty": 0.25,
+    "lag": 0.1,
+    "side": 0.2,
+    "swing": 30,
+    "lift": 30,
+    "chestRoll": 11.9
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A8: NPC_Heliga=RoamingRun2Idle — измерено: period, duty, крен"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "lag, side, swing, lift (все шесть лап в 0.35 цикла) — на глаз"
+    }
+   ]
   }
  ]
 }

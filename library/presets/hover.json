@@ -82,6 +82,328 @@
      "ref": "пик подъёма взят от призрака (0.75), у ифрита 0.29 — неточность фазы"
     }
    ]
+  },
+  {
+   "name": "haven-droploot-float",
+   "help": "Droploot (Haven) парит: 2 с, подъём ±15 %.",
+   "params": {
+    "period": 2.0,
+    "bob": 0.155,
+    "lean": 0,
+    "pitch": 3,
+    "roll": 2
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A3: NPC_Droploot=RoamingWalk2Idle — измерено: period, bob"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "lean, pitch, roll — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-droploot-dash",
+   "help": "Droploot в рывке: 1.33 с, наклон 2.4°.",
+   "params": {
+    "period": 1.333,
+    "bob": 0.098,
+    "pitch": 2.4,
+    "roll": 0
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md D1: NPC_Droploot=RoamingRun2Idle — измерено"
+    }
+   ]
+  },
+  {
+   "name": "haven-fayasna-drift",
+   "help": "Fayasna медленно дрейфует: 5 с, ±31 % (тело — wave haven-fayasna-body, крылья — wing-flap).",
+   "params": {
+    "period": 5.0,
+    "bob": 0.31,
+    "lean": 0
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A3: NPC_Fayasna=RoamingWalk2Idle — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "lean — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-katefulai-hang",
+   "help": "Katefulai висит: 4 с, едва колышется.",
+   "params": {
+    "period": 4.0,
+    "bob": 0.052
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A3: NPC_Katefulai=RoamingWalk2Idle — измерено"
+    }
+   ]
+  },
+  {
+   "name": "haven-fulare-hang",
+   "help": "Fulare висит: 4 с, ±8 %.",
+   "params": {
+    "period": 4.0,
+    "bob": 0.076
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A3: NPC_Fulare=RoamingWalk2Idle — измерено"
+    }
+   ]
+  },
+  {
+   "name": "haven-sukopi-hover",
+   "help": "Sukopi зависает: 1 с, ±10 %.",
+   "params": {
+    "period": 1.0,
+    "bob": 0.1
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A3: NPC_Sukopi=RoamingWalk2Idle — измерено"
+    }
+   ]
+  },
+  {
+   "name": "haven-lorudo-float",
+   "help": "Lorudo парит с креном ±5.5°.",
+   "params": {
+    "period": 2.667,
+    "bob": 0.088,
+    "lean": 0,
+    "roll": 5.5
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md D1: NPC_Lorudo=RoamingWalk2Idle — измерено: period, bob, крен"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "lean — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-shifuta-float",
+   "help": "Shifuta парит: 2 с, кивает и кренится.",
+   "params": {
+    "period": 2.0,
+    "bob": 0.127,
+    "lean": 0,
+    "pitch": 3.2,
+    "roll": 5.9
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md D1: NPC_Shifuta=RoamingWalk2Idle — измерено"
+    }
+   ]
+  },
+  {
+   "name": "gm-sheet-ghost-idle",
+   "help": "Призрак-простыня (Ghost Master) висит: 2 с, ±5 %, голова запаздывает.",
+   "params": {
+    "period": 1.97,
+    "bob": 0.053,
+    "pitch": 0,
+    "roll": 0,
+    "chestYaw": 0,
+    "look": 0,
+    "chestPitch": 4.8,
+    "headPitch": 7
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/05-candidates.md A hover: boo_idl, quiv_idl, wen_idl — измерено (синус, чистота 1.0)"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "headPitch 7 (замер 6–8) — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "gm-sheet-ghost-move",
+   "help": "Призрак-простыня в движении: 1 с, почти без подъёма.",
+   "params": {
+    "period": 0.97,
+    "bob": 0.014,
+    "pitch": 0,
+    "roll": 0,
+    "chestYaw": 0,
+    "look": 0,
+    "chestPitch": 3.8,
+    "headPitch": 3.1
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/05-candidates.md A hover: boo_mov — измерено"
+    }
+   ]
+  },
+  {
+   "name": "gm-banshee-idle",
+   "help": "Банши висит: 3 с, ±8 % (как призрак Witcher — 3.07 с, 8.4 %).",
+   "params": {
+    "period": 3.0,
+    "bob": 0.082,
+    "pitch": 0,
+    "roll": 0,
+    "chestYaw": 0,
+    "look": 0,
+    "chestPitch": 5.8,
+    "headPitch": 9.2
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/05-candidates.md A hover: brigit_idl, moonscream_idl, weatherwitch_idl, soulscreech_idl — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "headPitch 9.2 (замер 8.3–10.2) — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "gm-banshee-move",
+   "help": "Банши в движении: 3 с, ±4 %.",
+   "params": {
+    "period": 3.0,
+    "bob": 0.038,
+    "pitch": 0,
+    "roll": 0,
+    "chestYaw": 0,
+    "look": 0,
+    "chestPitch": 5.3
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/05-candidates.md A hover: brigit_mov — измерено (±0.062 м)"
+    }
+   ]
+  },
+  {
+   "name": "gm-imp-hover",
+   "help": "Бесёнок мельтешит: 1 с, подъём ±35 %, сильно кивает.",
+   "params": {
+    "period": 1.0,
+    "bob": 0.35,
+    "pitch": 5.4,
+    "roll": 0,
+    "chestYaw": 0,
+    "look": 0,
+    "chestPitch": 17.7,
+    "headPitch": 10.4
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/05-candidates.md A hover: firetail_idl, sparkle_idl — измерено"
+    }
+   ]
+  },
+  {
+   "name": "gm-stormtalon-hover",
+   "help": "Stormtalon парит: 3.6 с, шея кивает на 11°.",
+   "params": {
+    "period": 3.63,
+    "bob": 0.091,
+    "pitch": 2.5,
+    "roll": 0,
+    "chestYaw": 0,
+    "look": 0,
+    "chestPitch": 7.2,
+    "headPitch": 11.3
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/05-candidates.md A hover: stormtalon_idl — измерено"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-guardian-idle",
+   "help": "Робот-охранник (Breathedge) висит почти неподвижно: 2 с, ±1 см.",
+   "params": {
+    "period": 2.0,
+    "bob": 0.006,
+    "lean": 0,
+    "pitch": 0,
+    "roll": 0,
+    "chestYaw": 0
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/05-recipe-candidates.md A; 03 §5.1, A_RobotGuardian_Idle — измерено ±0.93 см"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "перевод в долю высоты (у робота нет таза — взят размер корпуса 1.5 м) — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-guardian-move",
+   "help": "Робот-охранник в движении: ±1.2 см (наклон в игре даёт код).",
+   "params": {
+    "period": 2.0,
+    "bob": 0.008
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/05-recipe-candidates.md A; 03 §5.1, A_RobotGuardian_Walk — измерено ±1.16 см"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "перевод в долю высоты; фаза +180° (старт сверху) рецептом не задаётся — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-repairbot",
+   "help": "Ремонтный робот: 3.3 с, голова поворачивается ±6° с отставанием.",
+   "params": {
+    "role": "head",
+    "period": 3.33,
+    "bob": 0.005,
+    "look": 6.1
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/05-recipe-candidates.md A; 03 §5.1, A_RobotRepair_Idle — измерено ±0.62 см / 1.2 м, yaw ±6.1° с отставанием 90°"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "в hover.look есть вторая гармоника, в игре её нет — на глаз"
+    }
+   ]
   }
  ]
 }

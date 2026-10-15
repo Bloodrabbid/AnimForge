@@ -11,6 +11,9 @@ const SOURCES: Record<string, string> = {
   "research/tlj": "Longest Journey",
   "research/toolsup": "Tools Up!",
   "research/biped": "Biped",
+  "research/haven": "Haven",
+  "research/ghostmaster": "Ghost Master",
+  "research/breathedge": "Breathedge",
   "hand-tuned": "вручную",
 };
 export const sourceOf = (p: LibPreset) => [...new Set((p.provenance ?? []).map((s) => SOURCES[s.source] ?? s.source))];

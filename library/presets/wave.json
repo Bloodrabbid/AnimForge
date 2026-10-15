@@ -457,6 +457,272 @@
      }
     }
    ]
+  },
+  {
+   "name": "haven-fulare-body",
+   "help": "Тело Fulare (7 позвонков): волна вверх-вниз, к кончику до 40°.",
+   "params": {
+    "plane": "vertical",
+    "period": 4.0,
+    "tipAmp": 40,
+    "growth": 1.5,
+    "bodyDelay": 367
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A4: NPC_Fulare=RoamingWalk2Idle — 7 позвонков, 0.17 цикла/кость — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "growth (амплитуда 0 → 40) — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-fayasna-body",
+   "help": "Тело Fayasna (11 позвонков): ровная медленная волна ±7°.",
+   "params": {
+    "plane": "vertical",
+    "period": 5.0,
+    "tipAmp": 7,
+    "growth": 0,
+    "bodyDelay": 288
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A4: NPC_Fayasna=RoamingWalk2Idle — 11 позвонков, 0.08/кость — измерено"
+    }
+   ]
+  },
+  {
+   "name": "haven-katefulai-body",
+   "help": "Тело Katefulai: стоячая волна 3 → 9° без задержки.",
+   "params": {
+    "plane": "vertical",
+    "period": 4.0,
+    "tipAmp": 9,
+    "growth": 1,
+    "bodyDelay": 0
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A4: NPC_Katefulai=RoamingWalk2Idle — измерено"
+    }
+   ]
+  },
+  {
+   "name": "haven-dorago-tail",
+   "help": "Хвост Dorago на шагу: 4.2 → 21° к кончику, бежит волной.",
+   "params": {
+    "plane": "vertical",
+    "period": 2.0,
+    "tipAmp": 21,
+    "growth": 1.16,
+    "bodyDelay": 238
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A4: NPC_Dorago=RoamingWalk2Idle — 4 кости 4.2/6.6/10.5/21°, 0.22/кость — измерено"
+    }
+   ]
+  },
+  {
+   "name": "haven-dorago-idle-tail",
+   "help": "Хвост Dorago в покое: виляет вбок, сильнее всего в середине.",
+   "params": {
+    "plane": "lateral",
+    "period": 2.0,
+    "tipAmp": 17,
+    "growth": 0.5,
+    "bodyDelay": 203
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md D1: NPC_Dorago=RoamingIdle — 8.7/23.8/26.6/17.4°, 0.19/кость — измерено (пик в середине рецепт не повторит)"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "growth — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-toriko-gallop-tail",
+   "help": "Хвост Toriko в галопе: машет целиком, без задержки.",
+   "params": {
+    "plane": "vertical",
+    "period": 0.5,
+    "tipAmp": 22,
+    "growth": 2,
+    "bodyDelay": 0
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A4: NPC_Toriko=RoamingRun2Idle — 0.5/5.4/17.6/21.8°, без задержки — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "growth — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-salamash-tail",
+   "help": "Хвост ящерицы Salamash: вбок ±12°, лёгкая волна.",
+   "params": {
+    "plane": "lateral",
+    "period": 1.0,
+    "tipAmp": 12,
+    "growth": 1,
+    "bodyDelay": 62
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A4: NPC_Salamash=RoamingWalk2Idle — 5 костей, 0.043/кость — измерено (пик 18° в середине хвоста рецепт не повторит)"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "tipAmp, growth — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-babulardo-tail",
+   "help": "Хвост Babulardo: почти жёсткий, вбок ±13°.",
+   "params": {
+    "plane": "lateral",
+    "period": 1.0,
+    "tipAmp": 13,
+    "growth": 1,
+    "bodyDelay": 36
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A4: NPC_Babulardo=RoamingWalk2Idle — 0.033/кость — измерено"
+    }
+   ]
+  },
+  {
+   "name": "haven-nokk-tail",
+   "help": "Хвост Nokk: 3 кости, кончик до 16°.",
+   "params": {
+    "plane": "vertical",
+    "period": 2.0,
+    "tipAmp": 16,
+    "growth": 1.5,
+    "bodyDelay": 137
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md D1: NPC_Nokk=RoamingWalk2Idle — 6.3/4.1/16.1°, 0.19/кость — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "growth — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-bigufurai-run-tail",
+   "help": "Хвост Bigufurai на бегу: до 22° к кончику, волной.",
+   "params": {
+    "plane": "vertical",
+    "period": 1.0,
+    "tipAmp": 22,
+    "growth": 1.5,
+    "bodyDelay": 194
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md D1: NPC_Bigufurai=RoamingRun2Idle — 7.6/5.4/11.3/21.7°, 0.18/кость — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "growth — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-sunatcha-tail",
+   "help": "Хвост Sunatcha: маятник ±5° без задержки.",
+   "params": {
+    "plane": "lateral",
+    "period": 1.0,
+    "tipAmp": 5.4,
+    "growth": 0,
+    "bodyDelay": 0
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md D1: NPC_Sunatcha=RoamingWalk2Idle — измерено"
+    }
+   ]
+  },
+  {
+   "name": "gm-banshee-hair",
+   "help": "Волосы банши: медленная волна, к кончику до 60°.",
+   "params": {
+    "plane": "vertical",
+    "period": 3.0,
+    "tipAmp": 60,
+    "growth": 1.0,
+    "bodyDelay": 130
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/05-candidates.md A wave: moonscream_idl, jnt_hair_A/B/C — 22 → 33 → 63°, 0.18 цикла на звено — измерено (63° срезано до потолка 60)"
+    }
+   ]
+  },
+  {
+   "name": "gm-banshee-hem",
+   "help": "Подол банши: волна 22° к кончику.",
+   "params": {
+    "plane": "vertical",
+    "period": 3.0,
+    "tipAmp": 22,
+    "growth": 0.8,
+    "bodyDelay": 120
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/05-candidates.md A wave: brigit_idl, jnt-tail_A…D — измерено (знак оси последнего звена неоднозначен)"
+    }
+   ]
+  },
+  {
+   "name": "gm-sheep-tail-flick",
+   "help": "Овца дёргает хвостиком: 1 с, 3.7 → 9.5°.",
+   "params": {
+    "plane": "lateral",
+    "period": 1.02,
+    "tipAmp": 9.5,
+    "growth": 1.4,
+    "bodyDelay": 0
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/05-candidates.md A wave: sheep_idl — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "bodyDelay 0 — на глаз"
+    }
+   ]
   }
  ]
 }

@@ -108,6 +108,28 @@
      "ref": "analysis/06-creatures-tentacle-float.md: §8: −2.1 м, +35 % перед нырком"
     }
    ]
+  },
+  {
+   "name": "gm-faint-drop",
+   "help": "Падает плашмя (обморок смертного): таз опускается на 0.63 роста за 1 с, основное — за 0.3 с.",
+   "params": {
+    "mode": "submerge",
+    "duration": 1.0,
+    "depth": 0.63,
+    "rise": 0.35,
+    "overshoot": 0,
+    "easeIn": 2
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/05-candidates.md A emerge: maa_re7, faa_re7 — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "rise, easeIn — на глаз"
+    }
+   ]
   }
  ]
 }

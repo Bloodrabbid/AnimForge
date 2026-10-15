@@ -50,6 +50,104 @@
      "note": "на глаз: удар игрока ≤ 0.35 с (быстрые стили Witcher 0.21–0.30 с, docs/review-criteria.md)"
     }
    ]
+  },
+  {
+   "name": "haven-heliga-lunge",
+   "help": "Выпад Heliga: долгий замах 0.83 с, бросок за 0.07 с.",
+   "params": {
+    "windupT": 0.83,
+    "strikeT": 0.067,
+    "recover": 0.9,
+    "settle": 0.73,
+    "forward": 60,
+    "push": 0.3
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A6: NPC_Heliga=Atk1Start/2Atk/3End — измерено: фазы (возврат 1.63), таз +77° (рецепт режет до 60), ход головы 3.9 h (push до потолка 0.3)"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "разбиение recover/settle — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-bodigado-rear",
+   "help": "Bodigado встаёт на дыбы (−51°) и бьёт.",
+   "params": {
+    "windupT": 0.73,
+    "strikeT": 0.43,
+    "recover": 0.5,
+    "settle": 0.5,
+    "back": 45,
+    "forward": 20
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A6: NPC_Bodigado=Atk* — 0.73 / 0.43 / 1.0, вздыбливание −51° — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "forward, разбиение возврата — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-dorago-ram",
+   "help": "Таран Dorago: замах 1.2 с, удар 0.33 с.",
+   "params": {
+    "windupT": 1.2,
+    "strikeT": 0.33,
+    "recover": 0.7,
+    "settle": 0.57
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A6: NPC_Dorago=Atk* — 1.2 / 0.33 / 1.27 — измерено"
+    }
+   ]
+  },
+  {
+   "name": "haven-shifuta-lunge",
+   "help": "Выпад Shifuta: откидывается на 31° и бросается.",
+   "params": {
+    "windupT": 1.17,
+    "strikeT": 0.43,
+    "recover": 0.6,
+    "settle": 0.33,
+    "back": 31
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md D1: NPC_Shifuta=Atk* — 1.17 / 0.43 / 0.93, тангаж −31° — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "разбиение возврата — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-sunatcha-ram",
+   "help": "Таран Sunatcha: замах 1.37 с, удар 0.57 с.",
+   "params": {
+    "windupT": 1.37,
+    "strikeT": 0.57,
+    "recover": 0.9,
+    "settle": 0.5,
+    "forward": 30
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md D1: NPC_Sunatcha=Atk* — 1.37 / 0.57 / 1.4, таз +30° — измерено"
+    }
+   ]
   }
  ]
 }

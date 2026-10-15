@@ -122,6 +122,164 @@
      }
     }
    ]
+  },
+  {
+   "name": "haven-bird-flap",
+   "help": "Птица Haven: взмах 0.667 с, ±57°, вниз и вверх поровну.",
+   "params": {
+    "period": 0.667,
+    "amp": 57,
+    "mean": 0,
+    "down": 0.5,
+    "lag": 0.05,
+    "fold": 20,
+    "bob": 0.04
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A5: Bird_Flying — 5 взмахов за 3.3 с, основание ±57.3°, вниз/вверх 0.504/0.496 — измерено (пауза 0.17 цикла рецептом не делается)"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "mean, lag, fold, bob — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-bird-takeoff",
+   "help": "Птица взлетает: крыло раскрыто на 180°, корпус подброшен (разовое движение — в рецепте цикл).",
+   "params": {
+    "period": 0.767,
+    "amp": 90,
+    "down": 0.5,
+    "bob": 0.18
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md D1: Bird_TakingOff — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "down — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-fayasna-wings",
+   "help": "Крылья Fayasna: медленно (5 с), ±47°, волна к кончикам.",
+   "params": {
+    "period": 5.0,
+    "amp": 47,
+    "down": 0.5,
+    "lag": 0.27
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A5: NPC_Fayasna=RoamingWalk2Idle, l_WingA, 0.27/кость — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "down — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-fayasna-wings-fast",
+   "help": "Крылья Fayasna в рывке: 1 с, ±67°.",
+   "params": {
+    "period": 1.0,
+    "amp": 67,
+    "down": 0.5,
+    "lag": 0.27
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A5: NPC_Fayasna=RoamingRun2Idle — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "down, lag — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-katefulai-wings",
+   "help": "Крылья Katefulai: 4 с, ±27°.",
+   "params": {
+    "period": 4.0,
+    "amp": 27,
+    "down": 0.5,
+    "lag": 0.125
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A5: NPC_Katefulai=RoamingWalk2Idle — измерено (крен перьев ±19–22° рецепт не делает)"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "down — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "haven-beruberu-wings",
+   "help": "Крылья Beruberu: 4 с, ±20°.",
+   "params": {
+    "period": 4.0,
+    "amp": 20,
+    "down": 0.5,
+    "lag": 0.27
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A5: NPC_Beruberu=RoamingWalk2Idle — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "down — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "gm-crow-glide-flap",
+   "help": "Ворона машет: 0.97 с, плечо ±61°.",
+   "params": {
+    "period": 0.97,
+    "amp": 61,
+    "mean": 0,
+    "down": 0.5,
+    "fold": 30
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/05-candidates.md A wing-flap: crow_fly — измерено: плечо 61°, локоть 45, кисть 30"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "mean, down, fold (по раскадровке 06-creature-crow_fly.png) — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "gm-crow-flutter",
+   "help": "Ворона трепещет крыльями: 0.25 с, ±31°.",
+   "params": {
+    "period": 0.25,
+    "amp": 31
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/05-candidates.md A wing-flap: crow_flutter — измерено (в игре беспорядочно, чистота 0.35)"
+    }
+   ]
   }
  ]
 }

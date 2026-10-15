@@ -101,6 +101,89 @@
      "note": "angle — размах отклонения torso_g от средней позы, а не изгиб по цепочке; это первый замер изгиба спины в разборах"
     }
    ]
+  },
+  {
+   "name": "haven-creature-breathe",
+   "help": "Существа Haven в покое: грудь поднимается и опускается раз в 3 с (медиана RoamingIdle 2–4 с), вдох-выдох зверя.",
+   "params": {
+    "plane": "vertical",
+    "angle": 4,
+    "growth": 1,
+    "pulse": 0.5,
+    "period": 3.0
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A7: RoamingIdle Toriko 2.0 / Bigufurai 3.0 / Tanoli 4.0 — период измерен"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "angle, pulse (замерен подъём груди 0.3–6 % h, а не угол) — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-xeno-tail-walk",
+   "help": "Хвост пришельца на шагу: изгиб вбок, секции почти синхронно.",
+   "params": {
+    "plane": "lateral",
+    "angle": 60,
+    "growth": 0,
+    "pulse": 0.5,
+    "period": 1.8
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/05-recipe-candidates.md A; 03 §3, A_Alien_Walk — ≈ 20–22° на звено у корня, без задержки, кончик 0.55 Гц — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "angle 60 (≈ 20° × 3 звена секции), pulse — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-xeno-tail-angry",
+   "help": "Хвост пришельца в злости: чаще (0.68 с), к кончику сильнее.",
+   "params": {
+    "plane": "lateral",
+    "angle": 40,
+    "growth": 0.75,
+    "pulse": 0.5,
+    "period": 0.68
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/05-recipe-candidates.md A; 03 §3, SK_Alien_Anim — 8 → 16° к кончику, 1.48 Гц — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "angle, pulse — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-idle-ground-breathe",
+   "help": "Руки от первого лица (Breathedge): ключицы поднимаются на ±1.4° за 6.7 с — вдох виден только в камере.",
+   "params": {
+    "plane": "vertical",
+    "angle": 2.5,
+    "pulse": 1,
+    "period": 6.7
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/05-recipe-candidates.md A; 02 §4, A_Idle — измерено: ключица ±1…1.4° на 6.7 с"
+    },
+    {
+     "source": "hand-tuned",
+     "ref": "для третьего лица мало — на глаз"
+    }
+   ]
   }
  ]
 }
