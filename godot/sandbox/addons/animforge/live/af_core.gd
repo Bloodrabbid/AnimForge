@@ -406,10 +406,87 @@ static func with_defaults(rig: Rig, recipe: String, params: Dictionary) -> Dicti
 	return out
 
 
+# ── ход под углом (applyTravel ядра) ───────────────────────────────────────────────────────────────────────────
+## Куда идёт клип: вперёд тела, повёрнутое на travel.angle вокруг up (travelDir ядра).
+static func travel_dir(rig: Rig, clip: Dictionary) -> Vector3:
+	var f := body_frame(rig)
+	var tr = clip.get("travel")
+	if tr == null or float(tr.get("angle", 0.0)) == 0.0:
+		return f.forward
+	return vnorm(qrot(qaxis(f.up, float(tr["angle"]) * DEG), f.forward))
+
+
+static func is_ancestor(rig: Rig, a: int, i: int) -> bool:
+	var p := rig.parent[i]
+	while p >= 0:
+		if p == a:
+			return true
+		p = rig.parent[p]
+	return false
+
+
+static func _num(d: Dictionary, k: String, dflt: float) -> float:
+	var v = d.get(k)
+	return dflt if v == null else float(v)
+
+
+static func apply_travel(acc: Acc, rig: Rig, tr: Dictionary) -> void:
+	var f := body_frame(rig)
+	var hips := _num(tr, "hips", 0.0)
+	var feet := _num(tr, "feet", 0.0)
+	var pi := -1
+	var ci := -1
+	var hi := -1
+	for pair in [["pelvis", 0], ["chest", 1], ["head", 2]]:
+		var ch = rig.chains.get(pair[0])
+		if ch != null and not ch.is_empty() and rig.index.has(ch[0]):
+			match pair[1]:
+				0: pi = rig.index[ch[0]]
+				1: ci = rig.index[ch[0]]
+				2: hi = rig.index[ch[0]]
+	var under := func(i: int) -> float: return 1.0 if pi >= 0 and i >= 0 and is_ancestor(rig, pi, i) else 0.0
+	if pi >= 0 and hips != 0.0:
+		acc.turn(rig.names[pi], local_delta(rig, pi, f.up, hips * DEG))
+	var chest_back: float = _num(tr, "chest", 0.0) * hips * under.call(ci)
+	if ci >= 0 and chest_back != 0.0:
+		acc.turn(rig.names[ci], local_delta(rig, ci, f.up, -chest_back * DEG))
+	var rest: float = hips * under.call(hi) - (chest_back if ci >= 0 and hi >= 0 and is_ancestor(rig, ci, hi) else 0.0)
+	var look := _num(tr, "look", 0.0)
+	if hi >= 0 and look != 0.0 and rest != 0.0:
+		acc.turn(rig.names[hi], local_delta(rig, hi, f.up, -look * rest * DEG))
+	var swing := _num(tr, "swing", _num(tr, "angle", 0.0))
+	for name in rig.chains:
+		var chain: Array = rig.chains[name]
+		if not String(name).begins_with("leg_") or chain.is_empty() or not rig.index.has(chain[0]):
+			continue
+		var bone: String = chain[0]
+		var i: int = rig.index[bone]
+		var base: Quaternion = acc.base.get(bone, QI)
+		var m := qscale(qnorm(acc.rot.get(bone, QI) * qinv(base)), _num(tr, "stride", 1.0))
+		var A := local_delta(rig, i, f.up, (swing - feet) * DEG)
+		acc.rot[bone] = qnorm(A * m * qinv(A) * base)
+		var twist: float = feet - hips * under.call(i)
+		if twist != 0.0:
+			acc.turn(bone, local_delta(rig, i, f.up, twist * DEG))
+		var width := _num(tr, "width", 0.0)
+		if width != 0.0:
+			var origin: Vector3 = rig.world_t[pi] if pi >= 0 else Vector3.ZERO
+			var side := signf((rig.world_t[i] - origin).dot(f.side))
+			if side == 0.0:
+				side = 1.0
+			var k := signf(f.forward.cross(-f.up).dot(f.side))
+			if k == 0.0:
+				k = 1.0
+			acc.turn(bone, local_delta(rig, i, f.forward, width * side * k * DEG))
+
+
 # ── основные слои и пол (primary) ──────────────────────────────────────────────────────────────────────────────
 ## opts: { "floor": Callable(bone: String, F: Vector3, rest: float) -> float — высота пола под стопой (рельеф в игре),
 ##         "targets": { id констрейна: Vector3 } — живые цели } — всё в координатах модели, как LiveOpts ядра.
 static func primary(rig: Rig, clip: Dictionary, t: float, opts := {}) -> Acc:
+	var trv = clip.get("travel")
+	if trv != null and trv.get("reverse", false):
+		t = float(clip["duration"]) - t
 	var acc := Acc.new(rig)
 	if not rig.align.is_empty():
 		align_rest(acc, rig)
@@ -450,6 +527,8 @@ static func primary(rig: Rig, clip: Dictionary, t: float, opts := {}) -> Acc:
 					var ax_chain: Array = chain if chain.size() > 1 else [bone]
 					var axis: String = tr["axis"]
 					acc.add(bone, axis, 1.0 + v if axis.begins_with("scale_") else v, func(): return chain_axes(rig, ax_chain))
+	if trv != null:
+		apply_travel(acc, rig, trv)
 	if not rig.limits.is_empty():
 		acc.apply_limits()
 	var g = clip.get("ground")
@@ -669,6 +748,7 @@ static func natural_speed(rig: Rig, clip: Dictionary, steps := 96) -> float:
 		return 0.0
 	var size: float = rig.heights.get(SIZE, 1.0)
 	var dt: float = clip["duration"] / steps
+	var dir := travel_dir(rig, clip)
 	var P := []
 	var hmin := INF
 	for k in steps + 1:
@@ -686,7 +766,7 @@ static func natural_speed(rig: Rig, clip: Dictionary, steps := 96) -> float:
 				j = jj
 		if P[k][j].dot(f.up) - hmin > 0.02 * size:
 			continue
-		v.append(-(P[k + 1][j] - P[k][j]).dot(f.forward) / dt)
+		v.append(-(P[k + 1][j] - P[k][j]).dot(dir) / dt)
 	if v.is_empty():
 		return 0.0
 	v.sort()

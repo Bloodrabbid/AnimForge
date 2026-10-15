@@ -201,6 +201,16 @@ func natural_speed() -> float:
 	return _speed * _model_scale()
 
 
+## Куда идёт клип в мире (единичный, по полу): у прямой ходьбы — вперёд модели, у клипов clip.directions — под
+## их углом к взгляду. Двигай персонажа по нему со скоростью natural_speed() — и ноги не скользят.
+func travel_direction() -> Vector3:
+	if rig == null or _clip_eff.is_empty():
+		return Vector3.ZERO
+	var d := _to_global().basis * AFCore.travel_dir(rig, _clip_eff)
+	d.y = 0
+	return d.normalized()
+
+
 func _to_global() -> Transform3D:
 	var sk := get_skeleton()
 	return sk.global_transform * _K if sk else _K

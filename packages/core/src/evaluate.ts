@@ -2,7 +2,7 @@
 // Работает одинаково в браузере и в Node.
 import { evalKeys } from "./curves.ts";
 import { DEG, QI, Quat, Vec3, angVel, qaxis, qinv, qmul, qnorm, qrot, qscale, vadd, vcross, vdot, vmul, vnorm, vscale, vsub } from "./math.ts";
-import type { Channel, Clip, Constraint, ConstraintTarget, PoseLayer, Project, RecipeLayer, SemanticAxis, Skeleton } from "./project.ts";
+import type { Channel, Clip, Constraint, ConstraintTarget, PoseLayer, Project, RecipeLayer, SemanticAxis, Skeleton, Travel } from "./project.ts";
 import { RECIPES, withDefaults, type ClipEvent } from "./recipes.ts";
 import { clampRotation, decompose, limitFrame } from "./limits.ts";
 
@@ -236,8 +236,56 @@ export interface LiveOpts {
   targets?: Record<string, Vec3>;
 }
 
+/** Куда идёт клип: вперёд тела, повёрнутое на travel.angle вокруг up. По нему меряются опора и скорость. */
+export function travelDir(project: Project, clip: Clip): Vec3 {
+  const f = bodyFrame(project);
+  return clip.travel?.angle ? vnorm(qrot(qaxis(f.up, clip.travel.angle * DEG), f.forward)) : f.forward;
+}
+
+const isAncestor = (rig: Rig, a: number, i: number) => { for (let p = rig.parent[i]; p >= 0; p = rig.parent[p]) if (p === a) return true; return false; };
+
+/** Ход под углом (Travel): таз к ходу, грудь и голова — обратно к цели; у каждой ноги (цепочки leg_*) мах её
+ * основания поворачивается вокруг вертикали (сопряжение: R·m·R⁻¹ — ось маха вертится, колено гнётся как было),
+ * потом стопа доворачивается по ходу и нога отводится вбок. Углы итоговые: плоскость маха = angle, стопы = feet —
+ * с учётом того, что ноги — дети таза и уже повернулись вместе с ним. */
+function applyTravel(acc: Acc, rig: Rig, project: Project, tr: Travel) {
+  const f = bodyFrame(project);
+  const hips = tr.hips ?? 0, feet = tr.feet ?? 0;
+  const pelvis = project.chains.pelvis?.[0], chest = project.chains.chest?.[0], head = project.chains.head?.[0];
+  const pi = pelvis != null ? rig.index.get(pelvis) : undefined;
+  const ci = chest != null ? rig.index.get(chest) : undefined;
+  const hi = head != null ? rig.index.get(head) : undefined;
+  const under = (i: number | undefined) => (pi != null && i != null && isAncestor(rig, pi, i) ? 1 : 0);
+  if (pi != null && hips) acc.turn(pelvis!, localDelta(rig, pi, f.up, hips * DEG));
+  // плечи на цель: грудь гасит долю поворота таза, голова — долю оставшегося
+  const chestBack = (tr.chest ?? 0) * hips * under(ci);
+  if (ci != null && chestBack) acc.turn(chest!, localDelta(rig, ci, f.up, -chestBack * DEG));
+  const rest = hips * under(hi) - (ci != null && hi != null && isAncestor(rig, ci, hi) ? chestBack : 0);
+  if (hi != null && tr.look && rest) acc.turn(head!, localDelta(rig, hi, f.up, -(tr.look ?? 0) * rest * DEG));
+  for (const [name, chain] of Object.entries(project.chains)) {
+    if (!/^leg_/.test(name) || !chain.length) continue;
+    const i = rig.index.get(chain[0]);
+    if (i == null) continue;
+    const bone = chain[0];
+    const base = acc.base.get(bone) ?? QI;
+    const m = qscale(qmul(acc.rot.get(bone) ?? QI, qinv(base)), tr.stride ?? 1);
+    // мах — в плоскость angle: стопы потом довернутся на (feet − то, что дал таз), и плоскость повернётся с ними
+    const A = localDelta(rig, i, f.up, ((tr.swing ?? tr.angle) - feet) * DEG);
+    acc.rot.set(bone, qnorm(qmul(qmul(qmul(A, m), qinv(A)), base)));
+    const twist = feet - hips * under(i);
+    if (twist) acc.turn(bone, localDelta(rig, i, f.up, twist * DEG));
+    if (tr.width) {
+      // отвести наружу: в какую сторону от таза нога, туда и стопа (знак — от того, куда поворот вокруг forward уводит низ)
+      const side = Math.sign(vdot(vsub(rig.worldT[i], pi != null ? rig.worldT[pi] : [0, 0, 0]), f.side)) || 1;
+      const k = Math.sign(vdot(vcross(f.forward, vscale(f.up, -1)), f.side)) || 1;
+      acc.turn(bone, localDelta(rig, i, f.forward, tr.width * side * k * DEG));
+    }
+  }
+}
+
 /** Основные слои (без вторичной динамики) и постановка на пол. */
 function primary(project: Project, rig: Rig, clip: Clip, t: number, opts: LiveOpts = {}): Acc {
+  if (clip.travel?.reverse) t = clip.duration - t;
   const acc = new Acc(rig, project);
   let heights = heightCache.get(rig);
   if (!heights) heightCache.set(rig, (heights = restHeights(rig, project)));
@@ -271,6 +319,7 @@ function primary(project: Project, rig: Rig, clip: Clip, t: number, opts: LiveOp
       }
     }
   }
+  if (clip.travel) applyTravel(acc, rig, project, clip.travel);
   // ограничения — до постановки на пол: ноги встают на пол уже в разрешённой позе
   if (project.limits) acc.applyLimits();
   const g = clip.ground;
@@ -797,11 +846,12 @@ function stance(project: Project, rig: Rig, clip: Clip, steps: number) {
     return idx.map((i) => w.T[i]);
   });
   const hmin = Math.min(...P.flatMap((row) => row.map((p) => vdot(p, f.up))));
+  const dir = travelDir(project, clip);
   for (let k = 0; k < steps; k++) {
     const hs = P[k].map((p) => vdot(p, f.up));
     const j = hs.indexOf(Math.min(...hs));
     if (hs[j] - hmin > 0.02 * size) continue;
-    out.push({ k, j, v: -vdot(vsub(P[k + 1][j], P[k][j]), f.forward) / dt, p: P[k][j] });
+    out.push({ k, j, v: -vdot(vsub(P[k + 1][j], P[k][j]), dir) / dt, p: P[k][j] });
   }
   return { frames: out, dt, size };
 }
@@ -817,6 +867,43 @@ export function naturalSpeed(project: Project, rig: Rig, clip: Clip, steps = 96)
   return Math.max(0, v[Math.floor(v.length / 2)]);
 }
 
+/** Куда на самом деле идёт походка, ° от вперёд (+ — влево, как Travel.angle): против хода стоп по полу, пока они
+ * на полу. Вес стопы плавный — 1 у самой низкой точки клипа и 0 на 2 % роста выше, и у самой низкой в кадре больше
+ * (размытый минимум): жёсткий выбор «опорной» прыгает от кадра к кадру, угол шумит на ±3°, и подбор плоскости маха
+ * по нему не сходится. NaN — у клипа нет опоры. */
+export function gaitHeading(project: Project, rig: Rig, clip: Clip, steps = 96): number {
+  const g = clip.ground;
+  if (!clip.loop || !g?.bones.length || clip.duration <= 0) return NaN;
+  const f = bodyFrame(project);
+  const idx = g.bones.map((b) => rig.index.get(b)).filter((i): i is number => i != null);
+  if (!idx.length) return NaN;
+  const size = (heightCache.get(rig) ?? restHeights(rig, project)).get(SIZE) ?? 1;
+  const dt = clip.duration / steps;
+  const P = Array.from({ length: steps + 1 }, (_, k) => { const w = worldPose(rig, posePartsAt(project, rig, clip, k * dt)); return idx.map((i) => w.T[i]); });
+  const hmin = Math.min(...P.flatMap((row) => row.map((p) => vdot(p, f.up))));
+  const S: { w: number; x: number; y: number }[] = [];
+  for (let k = 0; k < steps; k++) {
+    // опора — самая низкая стопа кадра, но мягко: вторая стопа, почти вровень, тоже весит (переход шага плавный);
+    // перенос низко над полом (короткие ноги вразвалку) — не опора, иначе быстрая стопа в воздухе перевешивает
+    const hs = P[k].map((p) => vdot(p, f.up));
+    const lo = Math.min(...hs);
+    for (let j = 0; j < idx.length; j++) {
+      const w = Math.max(0, 1 - (hs[j] - hmin) / (0.02 * size)) * Math.exp(-(hs[j] - lo) / (0.005 * size));
+      if (w < 1e-6) continue;
+      const d = vsub(P[k][j], P[k + 1][j]); // тело идёт против стопы
+      S.push({ w, x: vdot(d, f.forward), y: vdot(d, f.side) });
+    }
+  }
+  // стопа, что едет по полу не туда (в двойной опоре одна держит, другую IK тащит по полу вперёд), — меньшинство:
+  // направление большинства — по медиане, потом среднее только по согласным с ним
+  const med = (a: number[]) => { const b = [...a].sort((p, q) => p - q); return b.length ? b[Math.floor(b.length / 2)] : 0; };
+  const core = S.filter((s) => s.w >= 0.25);
+  const mx = med(core.map((s) => s.x)), my = med(core.map((s) => s.y));
+  let x = 0, y = 0;
+  for (const s of S) if (s.x * mx + s.y * my > 0) { x += s.w * s.x; y += s.w * s.y; }
+  return x || y ? (Math.atan2(y, x) * 180) / Math.PI : NaN;
+}
+
 /** Скольжение походки: персонаж идёт в игре с естественной скоростью — на сколько каждая опорная стопа проезжает
  * по полу за свой шаг (наибольший разнос её точек на полу), в долях роста; mean — в среднем по шагам, max — худший.
  * backward — доля кадров опоры, где стопа уезжает назад, как надо. null — у клипа нет походки. */
@@ -829,7 +916,7 @@ export function gaitSlide(project: Project, rig: Rig, clip: Clip, steps = 96): {
   // шаги — подряд идущие кадры опоры одной стопы; на полу стопа там, где она в теле, плюс путь тела
   const segs: Vec3[][] = [];
   frames.forEach((s, n) => {
-    const onFloor = vadd(s.p, vscale(f.forward, speed * s.k * dt));
+    const onFloor = vadd(s.p, vscale(travelDir(project, clip), speed * s.k * dt));
     const flat = vsub(onFloor, vscale(f.up, vdot(onFloor, f.up)));
     const prev = frames[n - 1];
     if (prev && prev.j === s.j && prev.k === s.k - 1) segs[segs.length - 1].push(flat);

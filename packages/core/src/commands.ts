@@ -7,6 +7,9 @@ import { addPoseDelta, buildRig, frameTimes, motionAt, reach } from "./evaluate.
 import { LIMIT_AXES, boneAngles, limitFrame, type BoneLimit, type LimitAxis } from "./limits.ts";
 import { DEG, qaxis, qrot, vdot, vsub } from "./math.ts";
 import { bodyFrame } from "./evaluate.ts";
+import { DIRECTION_NAMES, DIRECTIONS_SOURCE, directionClip } from "./directions.ts";
+
+const wrapAngle = (x: number) => { const w = ((((x + 180) % 360) + 360) % 360) - 180; return w === -180 ? 180 : w; };
 
 export interface Ctx {
   project: Project;
@@ -710,6 +713,54 @@ const defs: CommandDef[] = [
       });
       for (const l of layers) if (+a.weight === 1) delete l.weight; else l.weight = +a.weight;
       return { layers: ids, weight: +a.weight };
+    },
+  },
+  {
+    name: "clip.directions",
+    help: "8 направлений из прямой ходьбы (стрейф, назад, диагонали): копии клипа <clip>_fwd, _fwd_l, _left, _back_l, _back, _back_r, _right, _fwd_r с ходом под углом (travel). face=aim — взгляд вперёд, таз доворачивает к ходу, грудь держит плечи на цели; face=travel — всё тело поворачивается по ходу. Плоскость маха подбирается замером, чтобы тело шло точно под углом; все — с той же фазы шага, для смешивания в движке.",
+    args: {
+      clip: { type: "string", required: true, help: "прямая ходьба или бег (цикл, лучше с clip.ground)" },
+      face: { type: "string", help: "aim (по умолчанию) | travel" },
+      angles: { type: "string", help: "свои углы через запятую, ° (+ — влево); по умолчанию 8 направлений через 45°" },
+      replace: { type: "boolean", help: "перезаписать клипы направлений, если уже есть" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const base = clipOf(ctx, a.clip);
+      need(base.loop, `«${a.clip}» не цикл — направления делаются из цикла ходьбы`);
+      need(!base.travel, `«${a.clip}» уже под углом — нужна прямая ходьба`);
+      const face = a.face === "travel" ? "travel" : "aim";
+      const angles: number[] = a.angles ? String(a.angles).split(",").map((x) => Number(x.trim())) : [0, 45, 90, 135, 180, -135, -90, -45];
+      for (const x of angles) need(Number.isFinite(x), `угол «${x}» — не число`);
+      const rig = buildRig(ctx.skeleton);
+      const made = angles.map((angle) => {
+        const w = wrapAngle(angle);
+        const name = `${base.name}_${DIRECTION_NAMES[w] ?? `d${w < 0 ? "m" : ""}${Math.abs(w).toFixed(0).padStart(3, "0")}`}`;
+        const old = ctx.project.clips.findIndex((c) => c.name === name);
+        need(old < 0 || a.replace, `клип «${name}» уже есть (replace=true — перезаписать)`);
+        const c = directionClip(ctx.project, rig, base, w, name, face);
+        if (old >= 0) ctx.project.clips[old] = c;
+        else ctx.project.clips.push(c);
+        return { clip: name, angle: w, travel: c.travel, duration: c.duration };
+      });
+      return { face, source: DIRECTIONS_SOURCE, clips: made };
+    },
+  },
+  {
+    name: "clip.travel",
+    help: "Ход под углом для одного клипа (поля Travel: angle, hips, chest, look, feet, width, stride, swing, reverse). Без angle — убрать.",
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      travel: { type: "json", help: "например {\"angle\":90,\"hips\":25,\"chest\":0.8,\"look\":1,\"feet\":25,\"width\":6,\"stride\":0.8}; без него — убрать" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const clip = clipOf(ctx, a.clip);
+      if (!a.travel || a.travel.angle === undefined) { delete clip.travel; return { travel: null }; }
+      const keys = ["angle", "hips", "chest", "look", "feet", "width", "stride", "swing", "reverse"];
+      for (const [k, v] of Object.entries(a.travel)) need(keys.includes(k) && (k === "reverse" ? typeof v === "boolean" : Number.isFinite(Number(v))), `travel.${k}: есть поля ${keys.join(", ")}; числа, reverse — true/false`);
+      clip.travel = Object.fromEntries(Object.entries(a.travel).map(([k, v]) => [k, k === "reverse" ? v : Number(v)])) as unknown as Clip["travel"];
+      return clip.travel;
     },
   },
   {

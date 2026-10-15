@@ -54,6 +54,14 @@ export const SYNTHETIC: Clip = {
   ],
 };
 
+/** Ход под углом (clip.directions): мах ног повёрнут, таз к ходу, грудь и голова обратно, колея шире, шаг короче. */
+export const SYNTHETIC_TRAVEL: Clip = {
+  name: "synthetic_travel", duration: 0.958, fps: 30, loop: true,
+  layers: ["pelvis", "chest", "head", "arm_l", "arm_r", "leg_l", "leg_r"].map((role) => ({ id: `${role}_w`, type: "recipe" as const, recipe: "waddle-walk", target: { chain: role }, params: { role, legPhase: 180, pelvisYaw: 12 } })),
+  ground: { bones: ["foot_l", "foot_r"], mode: "floor", ik: true, flat: true },
+  travel: { angle: 120, swing: -40, hips: 25, chest: 0.7, look: 0.65, feet: 30, width: 6, stride: 0.8, reverse: true },
+};
+
 /** Моменты сверки: края, середина и точки между кадрами (живой рецепт считается в любой момент, не по кадрам). */
 const checkTimes = (d: number) => [0, 0.013, 0.137, 0.29, 0.5, 0.731, 0.97, 1].map((u) => +(u * d).toFixed(6));
 
@@ -68,7 +76,7 @@ export async function liveVerify(dirs?: string[]) {
     const syn = structuredClone(worker);
     syn.project.name = "worker-synthetic";
     syn.project.align = { arm_l: { to: "down", abduct: 8 } };
-    syn.project.clips = [SYNTHETIC];
+    syn.project.clips = [SYNTHETIC, SYNTHETIC_TRAVEL];
     ctxs.push(syn);
   }
   for (const ctx of ctxs) {
