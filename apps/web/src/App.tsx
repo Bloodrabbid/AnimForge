@@ -421,6 +421,21 @@ export function App() {
           <a className="btn accent" href={downloadUrl(DIR)} title="запечь все клипы в glb — для Godot, Blender, Unity, Unreal">
             <Icon name="download" /> Скачать GLB
           </a>
+          <Menu label="FBX" title="FBX с именами костей стандартного скелета — авто-ретаргет в движке" align="right">
+            {(close) => (
+              <>
+                {([
+                  ["Unreal (UE5 Manny: pelvis, thigh_l…)", { units: "unreal", names: "unreal" }],
+                  ["Unity / Mixamo (mixamorig:Hips…)", { units: "unity", names: "mixamo" }],
+                  ["Blender / Godot, свои имена", { units: "blender" }],
+                ] as const).map(([label, o]) => (
+                  <a key={label} className="menu-item" href={downloadUrl(DIR, { format: "fbx", ...o })} onClick={close}>
+                    {label}
+                  </a>
+                ))}
+              </>
+            )}
+          </Menu>
         </div>
       </header>
 

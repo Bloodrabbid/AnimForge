@@ -8,7 +8,7 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer as createVite } from "vite";
 import { libRoles } from "../../packages/core/src/index.ts";
-import { RECIPES, ROOT, call, dryRun, exportGlb, loadCtx, loadPresets, projectFile } from "../../packages/cli/src/node.ts";
+import { RECIPES, ROOT, call, dryRun, exportFile, loadCtx, loadPresets, projectFile } from "../../packages/cli/src/node.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 5178);
@@ -209,16 +209,19 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     return sendJson(res, 200, found);
   }
   if (req.method === "GET" && path === "/api/download") {
-    // запечь все клипы в glb и отдать файлом
+    // запечь все клипы в glb или FBX (format=fbx, units, names — как у команды export) и отдать файлом
     const dir = projectDir(url.searchParams.get("dir"));
+    const fbx = url.searchParams.get("format") === "fbx";
+    const names = url.searchParams.get("names") || undefined;
     const tmp = mkdtempSync(join(tmpdir(), "af-dl-"));
     try {
       const ctx = await loadCtx(dir);
-      const out = join(tmp, `${ctx.project.name || "animforge"}.glb`);
-      await serial(() => exportGlb(ctx, out));
+      const base = `${ctx.project.name || "animforge"}${names ? "_" + names : ""}.${fbx ? "fbx" : "glb"}`;
+      const out = join(tmp, base);
+      await serial(() => exportFile(ctx, out, names, fbx ? url.searchParams.get("units") || undefined : undefined));
       res.writeHead(200, {
-        "content-type": "model/gltf-binary",
-        "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(ctx.project.name || "animforge")}.glb`,
+        "content-type": fbx ? "application/octet-stream" : "model/gltf-binary",
+        "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(base)}`,
         "cache-control": "no-store",
       });
       res.end(readFileSync(out));

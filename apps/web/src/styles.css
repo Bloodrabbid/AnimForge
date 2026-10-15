@@ -1746,6 +1746,8 @@ table.keys tbody tr:hover {
 .menu-list.right {
   right: 0;
 }
+.menu-list > a { text-decoration: none; }
+.menu-list > a,
 .menu-list > button,
 .menu-list > label {
   display: flex;

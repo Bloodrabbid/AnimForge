@@ -14,7 +14,7 @@ pnpm af preset.list --project $P               # пресеты библиоте
 pnpm af recipe.set --clip swim --layer wave --params '{"period":1.6}' --project $P
 pnpm af key.set --clip swim --bone spine_5 --axis lateral --t 1.0 --v 25 --project $P
 pnpm af sheet --clip swim --view top --out out/swim.png --project $P   # «глаза»: лист кадров через Blender
-pnpm af export --out out/fish.glb --project $P                         # glTF для Blender/Godot/любого движка
+pnpm af export --out out/fish.glb --project $P                         # glTF для Blender/Godot/любого движка (.fbx — FBX)
 pnpm af verify --project $P                                            # проверка в Godot без окна
 ```
 
@@ -134,6 +134,11 @@ AF_URL=https://… pnpm web:shot x out/web/other.png              # снять �
   Правка веса одной кости — `setBoneWeight` в ядре: остальные кости делят остаток пропорционально, сумма 1.
 - **Простой режим** (по умолчанию): справа — 3–5 главных ручек рецепта клипа (`RecipeDef.main`) и «Проверить / Починить» (та же `check`). Слои, ключи, цели, пределы и веса — под переключателем «Расширенное». «В Godot» — `publish`: glb в `out/` и копия в папку игры.
 - **Скачать GLB** — все клипы, запечённые в glb (`/api/download`), для Godot, Blender и других движков.
+- **График** (кнопка у таймлайна или K): кривые каждой конечности за клип — вверх-вниз, вперёд-назад, вбок, сгиб
+  колена/локтя, высота стопы над полом. У каждой — размах в см или градусах, полосы опоры стоп, линия времени;
+  клик и перетаскивание по графику перематывают, наведение подсвечивает цепочку во вьюпорте. Считает ядро
+  (`motionGraph`: конец цепочки по осям тела, сгиб, опора по правилу `lockPlan`). **Следы** (меню «глаз» или T) —
+  траектории стоп, кистей и таза за цикл прямо во вьюпорте.
 
 Поза во вьюпорте считается вживую ядром (`poseAt`) на каждом кадре; любое действие в интерфейсе — команда ядра
 через `POST /api/command` (тот же `call()`, что у CLI). Если `animforge.json` поменять снаружи (`pnpm af key.set …`),
@@ -279,6 +284,31 @@ pnpm af clip.directions --project out/baker --clip walk --face travel   # всё
 - Вставки в idle по шансу и кулдауну (Witcher, TLJ): `AnimForge.idle_variety($AnimationPlayer, "witcher-geralt")`. Пресеты лежат в `library/idle/`.
 - `af tweens.verify` проверяет аддон целиком: твины, события и вставки в idle.
 - Шаблоны: детали тела слушаются только своих костей (`bodykit.restrict_weights`), поэтому взмах руки не мнёт туловище и голову.
+
+## Экспорт в FBX и на стандартные скелеты
+
+```sh
+pnpm af export --out out/hero.fbx --names unreal --units unreal --project $P   # FBX для Unreal, кости pelvis, thigh_l…
+pnpm af export --out out/hero.fbx --names mixamo --units unity --project $P    # для Unity / Mixamo: mixamorig:Hips…
+pnpm af export --out out/hero.glb --names mixamo --project $P                  # glb тоже можно переименовать
+pnpm af verify --out out/hero.fbx --names unreal --units unreal --project $P   # сверка FBX в Godot
+```
+
+- **Имена** (`--names`, `standardNames` в ядре) — по цепочкам проекта: таз, позвоночник и грудь
+  (`Spine, Spine1…` / `spine_01…`), шея, голова, руки (три кости — первая ключица), ноги; кисть, стопа и носок —
+  главные дети последних костей. У Unreal кость над тазом — `root`. Кости вне цепочек (пальцы, уши) остаются со
+  своими именами, имя, уже занятое другой костью, не ставится. С такими именами авто-сопоставление движка
+  (IK Retargeter в UE5, Humanoid в Unity, ретаргет Mixamo) узнаёт скелет само. Скелетов Epic и Adobe мы не возим —
+  только имена.
+- **FBX** собирает Blender из того же glb (`bridge/blender/export_fbx.py`): скин, каждый клип — тейк со своим именем.
+  Единицы `--units`: `blender` (по умолчанию; метры, Y вверх — так же для Godot и Maya), `unity` (масштаб вшит
+  в файл, объект в Unity с масштабом 1), `unreal` (то же, Z вверх, скелет называется `Armature`, чтобы UE не делал
+  из него лишнюю кость над `root`).
+- **Проверка** (`verify` с `.fbx`): Godot читает FBX сам (ufbx) и переводит единицы и оси файла в метры. Сверяются
+  положения всех суставов в мире на трёх моментах каждого клипа с ядром, допуск 0.5 % роста — так ловятся и оси,
+  и масштаб пресета, и выпавшие тейки. Повороты не сверяем: Blender меняет оси костей в rest, а движение то же.
+  У рабочего во всех пресетах расхождение 0.000 %. В самих Unreal и Unity файлы не открывали — их на этом маке нет.
+- С чужими именами `.af.json` для живых рецептов не пишется: аддон Godot ищет кости по именам проекта.
 
 ## Чужие модели: перенос на любой скелет
 

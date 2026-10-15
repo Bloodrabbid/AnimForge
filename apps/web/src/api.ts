@@ -73,7 +73,8 @@ export interface LibRecipe {
 
 export const fetchLibrary = (): Promise<LibRecipe[]> => fetch("/api/library").then((r) => r.json());
 export const fetchProjects = (): Promise<string[]> => fetch("/api/projects").then((r) => r.json());
-export const downloadUrl = (dir: string) => `/api/download?dir=${encodeURIComponent(dir)}`;
+export const downloadUrl = (dir: string, opts: { format?: "fbx"; units?: string; names?: string } = {}) =>
+  `/api/download?${new URLSearchParams({ dir, ...opts })}`;
 
 /** Своя модель → новый проект в out/uploads (импорт через Blender и rig.detect на сервере). */
 export async function uploadModel(file: File): Promise<{ dir: string; body?: string }> {

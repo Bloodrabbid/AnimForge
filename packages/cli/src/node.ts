@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { COMMANDS, Clip, type LibPreset, smoothJointWeights, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectFins, detectForward, detectMultiLeg, detectWings, detectQuadruped, detectRig, emptyProject, frameTimes, posePartsAt, readSkeleton, runCommand, samplePreset, suggestAlign, writeClips } from "../../core/src/index.ts";
+import { COMMANDS, Clip, type LibPreset, smoothJointWeights, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectFins, detectForward, detectMultiLeg, detectWings, detectQuadruped, detectRig, emptyProject, frameTimes, posePartsAt, readSkeleton, runCommand, samplePreset, standardNames, suggestAlign, worldPose, writeClips, type NameScheme } from "../../core/src/index.ts";
 import { loadSkinScene, restVerts, skinFrame, skinTopology } from "./skin.ts";
 import { recipeVectors } from "./recipe-vectors.ts";
 
@@ -50,10 +50,16 @@ export function findPreset(name: string) {
 }
 
 /** Запекает все клипы в glb. Рядом кладёт <out>.samples.json — эталонные повороты для проверки в Godot. */
-export async function exportGlb(ctx: Ctx & { dir: string }, out: string) {
+export async function exportGlb(ctx: Ctx & { dir: string }, out: string, names?: NameScheme) {
   const doc = await io.read(join(ctx.dir, ctx.project.model));
   const rig = buildRig(ctx.skeleton);
   const report = writeClips(doc, ctx.project, rig);
+  // стандартные имена костей (Mixamo / Unreal): узлы glb переименовываются уже после записи клипов — каналы
+  // анимации ссылаются на узлы, а не на имена
+  const rename = names ? standardNames(ctx.project, rig, names) : new Map<string, string>();
+  const joints = new Set(doc.getRoot().listSkins().flatMap((sk) => sk.listJoints().map((j) => j.getName())));
+  for (const n of doc.getRoot().listNodes()) if (rename.has(n.getName())) n.setName(rename.get(n.getName())!);
+  const nm = <T>(o: Map<string, T>) => Object.fromEntries([...o].map(([k, v]) => [rename.get(k) ?? k, v]));
   mkdirSync(dirname(out), { recursive: true });
   await io.write(out, doc);
   const samples = ctx.project.clips.map((clip) => ({
@@ -64,17 +70,46 @@ export async function exportGlb(ctx: Ctx & { dir: string }, out: string) {
       const times = frameTimes(clip);
       const t = times[Math.round(u * (times.length - 1))];
       const pose = posePartsAt(ctx.project, rig, clip, t);
-      return { t, rotations: Object.fromEntries(pose.rot), positions: Object.fromEntries(pose.pos), scales: Object.fromEntries(pose.scl) };
+      // мировые положения суставов — для сверки FBX: там повороты костей относительно своих осей, а суставы — те же
+      const w = worldPose(rig, pose).T;
+      const world = new Map(ctx.skeleton.nodes.flatMap((n, i) => (joints.has(n.name) ? [[n.name, w[i].map((x) => +x.toFixed(6))] as const] : [])));
+      return { t, rotations: nm(pose.rot), positions: nm(pose.pos), scales: nm(pose.scl), world: nm(world) };
     }),
   }));
   // живые рецепты: аддон Godot считает позу сам (AnimForgeLive) — ему нужны скелет, цепочки, пределы и слои клипов
-  writeFileSync(out.replace(/\.glb$/, ".af.json"), JSON.stringify((await import("./live.ts")).liveData(ctx)));
+  // (с чужими именами костей — не пишем: аддон ищет кости по именам проекта)
+  if (!rename.size) writeFileSync(out.replace(/\.glb$/, ".af.json"), JSON.stringify((await import("./live.ts")).liveData(ctx)));
   writeFileSync(out.replace(/\.glb$/, ".samples.json"), JSON.stringify(samples.filter((s) => report.find((r) => r.clip === s.clip)!.bones > 0), null, 1));
   // события — отдельным файлом рядом с glb: аддон Godot превращает их в вызовы методов (AnimForge.attach_events)
   const events = Object.fromEntries(ctx.project.clips.map((c) => [c.name, clipEvents(c).map(({ t, name }) => ({ t, name }))]).filter(([, e]) => (e as unknown[]).length));
   if (Object.keys(events).length) writeFileSync(out.replace(/\.glb$/, ".events.json"), JSON.stringify(events, null, 1));
   const empty = report.filter((r) => r.bones === 0).map((r) => r.clip);
-  return { out, clips: report, ...(empty.length ? { warning: `пустые клипы не записаны (нет слоёв, двигающих кости): ${empty.join(", ")}` } : {}) };
+  return { out, clips: report, ...(rename.size ? { renamed: Object.fromEntries(rename) } : {}), ...(empty.length ? { warning: `пустые клипы не записаны (нет слоёв, двигающих кости): ${empty.join(", ")}` } : {}) };
+}
+
+/** Экспорт в glb или FBX. FBX собирает Blender из того же glb: скин, клипы тейками, единицы под движок. */
+export async function exportFile(ctx: Ctx & { dir: string }, out: string, names?: string, units?: string) {
+  if (names && !["mixamo", "unreal"].includes(names)) throw new Error(`names: mixamo или unreal, а не «${names}»`);
+  if (!/\.fbx$/i.test(out)) {
+    if (units) throw new Error("units — только для FBX");
+    return exportGlb(ctx, out, names as NameScheme | undefined);
+  }
+  const u = units ?? "blender";
+  if (!["blender", "maya", "unity", "unreal"].includes(u)) throw new Error(`units: blender, maya, unity или unreal, а не «${u}»`);
+  const tmp = mkdtempSync(join(tmpdir(), "animforge-fbx-"));
+  try {
+    const r = await exportGlb(ctx, join(tmp, "clip.glb"), names as NameScheme | undefined);
+    mkdirSync(dirname(out), { recursive: true });
+    const log = execFileSync(BLENDER, ["-b", "--factory-startup", "--python", join(ROOT, "bridge/blender/export_fbx.py"), "--", join(tmp, "clip.glb"), out, u], { env: BLENDER_ENV, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 });
+    const ok = log.split("\n").find((l) => l.startsWith("FBX_OK"));
+    if (!ok) throw new Error("Blender не записал FBX:\n" + log.split("\n").filter((l) => /FBX|Error|Traceback/.test(l)).join("\n"));
+    // эталон для сверки и события — рядом с FBX, как у glb
+    for (const ext of [".samples.json", ".events.json"]) if (existsSync(join(tmp, "clip" + ext))) writeFileSync(out.replace(/\.fbx$/i, ext), readFileSync(join(tmp, "clip" + ext)));
+    const { out: _o, ...rest } = r;
+    return { out, units: u, ...rest, log: ok };
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
 }
 
 /** «Глаза»: кадры клипа. Позу считает ядро, кожу — skin.ts по спецификации glTF, Blender только рисует треугольники.
@@ -356,20 +391,29 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
     },
   },
   export: {
-    help: "Запечь все клипы в glb (+ .samples.json для проверки в Godot).",
-    args: { out: { type: "string", required: true, help: "путь к glb" } },
-    run: async (dir, a) => exportGlb(await loadCtx(dir), resolve(dir, a.out)),
+    help: "Запечь все клипы в glb (+ .samples.json для проверки в Godot) или FBX (через Blender, каждый клип — тейк). names — стандартные имена костей для авто-ретаргета в движке.",
+    args: {
+      out: { type: "string", required: true, help: "путь к .glb или .fbx" },
+      names: { type: "string", help: "mixamo | unreal — переименовать кости по цепочкам (иначе — свои имена)" },
+      units: { type: "string", help: "для FBX: blender (по умолчанию, метры, Y вверх; так же для Godot и Maya) | unity | unreal (сантиметры, Z вверх)" },
+    },
+    run: async (dir, a) => exportFile(await loadCtx(dir), resolve(dir, a.out), a.names, a.units),
   },
   verify: {
-    help: "Проверка в Godot без окна: экспорт → загрузка glb в Godot → сверка поворотов костей с ядром.",
-    args: { out: { type: "string", help: "куда экспортировать glb, по умолчанию out/<имя>.glb" } },
+    help: "Проверка в Godot без окна: экспорт → загрузка в Godot → сверка с ядром. glb — повороты костей; FBX — положения суставов в метрах (так проверяются и оси, и единицы пресета).",
+    args: {
+      out: { type: "string", help: "куда экспортировать (.glb или .fbx), по умолчанию out/<имя>.glb" },
+      names: { type: "string", help: "mixamo | unreal — как в export" },
+      units: { type: "string", help: "для FBX — как в export" },
+    },
     async run(dir, a) {
       const ctx = await loadCtx(dir);
-      const glb = resolve(dir, a.out ?? `out/${ctx.project.name}.glb`);
-      await exportGlb(ctx, glb);
+      const out = resolve(dir, a.out ?? `out/${ctx.project.name}.glb`);
+      const fbx = /\.fbx$/i.test(out);
+      await exportFile(ctx, out, a.names, a.units);
       let log = "";
       try {
-        log = execFileSync(GODOT, ["--headless", "--path", join(ROOT, "godot/verify"), "--script", "verify.gd", "--", glb, glb.replace(/\.glb$/, ".samples.json")], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+        log = execFileSync(GODOT, ["--headless", "--path", join(ROOT, "godot/verify"), "--script", fbx ? "verify_fbx.gd" : "verify.gd", "--", out, out.replace(/\.(glb|fbx)$/i, ".samples.json")], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 300_000 });
       } catch (e: any) {
         log = String(e.stdout ?? "") + String(e.stderr ?? "");
       }
