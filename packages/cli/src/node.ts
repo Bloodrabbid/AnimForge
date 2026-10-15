@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { COMMANDS, Clip, type LibPreset, smoothJointWeights, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectFins, detectForward, detectMultiLeg, detectWings, detectQuadruped, detectRig, emptyProject, frameTimes, posePartsAt, readSkeleton, runCommand, samplePreset, standardNames, suggestAlign, worldPose, writeClips, type NameScheme } from "../../core/src/index.ts";
+import { COMMANDS, Clip, type LibPreset, smoothJointWeights, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectFins, detectForward, detectMultiLeg, detectWings, detectQuadruped, detectRig, emptyProject, frameTimes, posePartsAt, readSkeleton, retargetClip, runCommand, samplePreset, standardNames, suggestAlign, worldPose, writeClips, type NameScheme } from "../../core/src/index.ts";
 import { loadSkinScene, restVerts, skinFrame, skinTopology } from "./skin.ts";
 import { recipeVectors } from "./recipe-vectors.ts";
 
@@ -671,6 +671,33 @@ NODE_COMMANDS["weights.smooth"] = {
     iters: { type: "number", help: "проходов сглаживания, по умолчанию 6" },
   },
   run: async (dir, a) => smoothWeights(dir, a.rings ?? 3, a.iters ?? 6),
+};
+
+NODE_COMMANDS["clip.copy"] = {
+  help: "Перенести клип из другого проекта на этот скелет: рецепты — по цепочкам, кости ключей, поз, целей и пола — по ролям, сдвиги — по росту. Клипы бывают любые: свои, из библиотеки на другом теле, с рабочего на Mixamo или Manny.",
+  args: {
+    from: { type: "string", required: true, help: "папка проекта-источника" },
+    clip: { type: "string", required: true, help: "клип источника; * — все" },
+    as: { type: "string", help: "имя клипа здесь (по умолчанию то же)" },
+    replace: { type: "boolean", help: "заменить клип с таким именем (иначе — ошибка)" },
+  },
+  async run(dir, a) {
+    const src = await loadCtx(resolve(process.env.INIT_CWD ?? process.cwd(), a.from));
+    const ctx = await loadCtx(dir);
+    const s = { project: src.project, rig: buildRig(src.skeleton) }, d = { project: ctx.project, rig: buildRig(ctx.skeleton) };
+    const clips = a.clip === "*" ? src.project.clips : src.project.clips.filter((c) => c.name === a.clip);
+    if (!clips.length) throw new Error(`в ${a.from} нет клипа «${a.clip}», есть: ${src.project.clips.map((c) => c.name).join(", ")}`);
+    if (a.as && clips.length > 1) throw new Error("as — только для одного клипа");
+    const out = clips.map((c) => retargetClip(s, d, c, a.as ?? c.name));
+    for (const r of out) {
+      const i = ctx.project.clips.findIndex((c) => c.name === r.clip.name);
+      if (i >= 0 && !a.replace) throw new Error(`клип «${r.clip.name}» уже есть — replace true или другое as`);
+      if (i >= 0) ctx.project.clips[i] = r.clip;
+      else ctx.project.clips.push(r.clip);
+    }
+    saveProject(dir, ctx.project);
+    return out.map((r) => ({ clip: r.clip.name, scale: r.scale, bones: r.map, ...(r.dropped.length ? { dropped: r.dropped } : {}) }));
+  },
 };
 
 NODE_COMMANDS.publish = {
