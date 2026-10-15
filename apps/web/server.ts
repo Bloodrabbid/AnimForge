@@ -8,7 +8,9 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer as createVite } from "vite";
 import { buildRig, libRoles } from "../../packages/core/src/index.ts";
-import { RECIPES, ROOT, call, dryRun, exportFile, loadCtx, loadPresets, projectFile } from "../../packages/cli/src/node.ts";
+import { RECIPES, ROOT, call, clipPacks, dryRun, exportFile, loadCtx, loadPresets, projectFile } from "../../packages/cli/src/node.ts";
+
+let clipCache: unknown[] | undefined;
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 5178);
@@ -189,6 +191,20 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
       return { recipe: l.recipe, help: RECIPES[l.recipe]?.help ?? "", roles: libRoles(l.recipe), presets: l.presets };
     });
     return sendJson(res, 200, lib);
+  }
+  if (req.method === "GET" && path === "/api/clips") {
+    // библиотека готовых клипов: паки с происхождением и дубли (имя, длина) — для clip.import
+    clipCache ??= await Promise.all(
+      clipPacks().map(async (p) => {
+        const doc = await new NodeIO().read(join(ROOT, "library/clips", p.file));
+        const takes = doc.getRoot().listAnimations().map((a) => ({
+          name: a.getName(),
+          duration: +Math.max(0, ...a.listSamplers().map((s) => s.getInput()?.getMax([])[0] ?? 0)).toFixed(3),
+        }));
+        return { ...p, takes };
+      }),
+    );
+    return sendJson(res, 200, clipCache);
   }
   if (req.method === "GET" && path === "/api/projects") {
     // все проекты внутри репозитория: projects/* и out/*/* (тестовые с чужими моделями)

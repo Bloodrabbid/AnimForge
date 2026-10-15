@@ -33,7 +33,7 @@ export function boneMap(src: Side, dst: Side): Map<string, string> {
 }
 
 /** Поворот, переводящий оси тела источника (бок, верх, вперёд) в оси тела цели. */
-function bodyTurn(src: Project, dst: Project): Quat {
+export function bodyTurn(src: Project, dst: Project): Quat {
   const a = bodyFrame(src), b = bodyFrame(dst);
   // матрица M = Σ b_i a_iᵀ — столбцы: куда уходят мировые x, y, z источника
   const m = [0, 1, 2].map((r) => [0, 1, 2].map((c) => b.side[r] * a.side[c] + b.up[r] * a.up[c] + b.forward[r] * a.forward[c]));
@@ -60,7 +60,7 @@ function quatFromMatrix(m: number[][]): Quat {
 }
 
 /** Рост скелета (по up, от нижнего сустава до верхнего) и точка пола под тазом — опора для переноса точек. */
-function measure(s: Side): { height: number; base: Vec3 } {
+export function measure(s: Side): { height: number; base: Vec3 } {
   const up = bodyFrame(s.project).up;
   const js = s.rig.skel.nodes.flatMap((n, i) => (n.isJoint ? [i] : []));
   const hs = js.map((i) => vdot(s.rig.worldT[i], up));

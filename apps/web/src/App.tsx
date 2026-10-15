@@ -13,6 +13,7 @@ import {
   modelUrl,
   preview,
   watchProject,
+  type ClipPackInfo,
   type LibRecipe,
   type Loaded,
   type Step,
@@ -30,6 +31,7 @@ import { KeysPanel } from "./KeysPanel.tsx";
 import { LayersPanel } from "./LayersPanel.tsx";
 import { SimplePanel } from "./SimplePanel.tsx";
 import { LibraryPanel, chainsFor, sourceOf, type Entry } from "./LibraryPanel.tsx";
+import { ClipsPanel } from "./ClipsPanel.tsx";
 import { Timeline } from "./Timeline.tsx";
 import { Viewport, type Trail, type ViewCmd } from "./Viewport.tsx";
 import { GraphPanel, isShown, limbColor, useMotionGraph } from "./GraphPanel.tsx";
@@ -45,7 +47,10 @@ export interface Status {
 }
 
 interface Trial {
-  entry: Entry;
+  entry?: Entry;
+  /** что примеряем: имя пресета или готового клипа, и подпись (рецепт · источник) */
+  label: string;
+  sub: string;
   chain?: string;
   clip: string;
   prevClip: string | null;
@@ -77,7 +82,9 @@ export function App() {
   const [graphShown, setGraphShown] = useState<Record<string, boolean>>(() => JSON.parse(localStorage.getItem("af.graph.shown") ?? "{}"));
   useEffect(() => localStorage.setItem("af.graph.shown", JSON.stringify(graphShown)), [graphShown]);
   const [hoverChain, setHoverChain] = useState<string | null>(query.get("hover"));
-  const [leftTab, setLeftTab] = useState<"library" | "bones">((query.get("left") as "bones") ?? "library");
+  const [leftTab, setLeftTab] = useState<"library" | "clips" | "bones">((query.get("left") as "bones") ?? "library");
+  // пресет из библиотеки — поверх текущего клипа (на готовую основу), а не новым клипом
+  const [overlayOn, setOverlayOn] = useState(false);
   // простой режим по умолчанию: модель, клипы, позинг, главные ручки и проверка; остальное — «Расширенное» (запоминается)
   const [advanced, setAdvanced] = useState(() => query.get("adv") === "1" || (query.get("adv") !== "0" && localStorage.getItem("af.advanced") === "1"));
   useEffect(() => localStorage.setItem("af.advanced", advanced ? "1" : "0"), [advanced]);
@@ -174,14 +181,17 @@ export function App() {
   const tryOn = useCallback(
     async (entry: Entry, chain?: string) => {
       if (!project) return;
-      let name = entry.preset.name;
-      for (let i = 2; project.clips.some((c) => c.name === name); i++) name = `${entry.preset.name}-${i}`;
+      // поверх: слои пресета — в текущий клип (тот, что был до примерки), без нового клипа
+      const overlay = overlayOn ? (trial ? trial.prevClip : clipName) : null;
+      let name = overlay ?? entry.preset.name;
+      if (!overlay) for (let i = 2; project.clips.some((c) => c.name === name); i++) name = `${entry.preset.name}-${i}`;
       const ch = entry.lib.roles ? undefined : (chain ?? chainsFor(entry.lib.recipe, project.chains)[0]);
-      const steps: Step[] = clipSteps({ recipe: entry.lib.recipe, preset: entry.preset, name, chains: project.chains, paws: body?.paws, chain: ch });
+      let steps: Step[] = clipSteps({ recipe: entry.lib.recipe, preset: entry.preset, name, chains: project.chains, paws: body?.paws, chain: ch });
+      if (overlay) steps = steps.filter((s) => s.name !== "clip.add");
       setBusy(true);
       try {
         const next = await preview(DIR, steps);
-        setTrial((old) => ({ entry, chain: ch, clip: name, prevClip: old ? old.prevClip : clipName, steps, project: next }));
+        setTrial((old) => ({ entry, label: entry.preset.name, sub: `${entry.lib.recipe} · ${sourceOf(entry.preset).join(", ")}${overlay ? ` · поверх ${overlay}` : ""}`, chain: ch, clip: name, prevClip: old ? old.prevClip : clipName, steps, project: next }));
         setClipName(name);
         setT(0);
         setPlaying(true);
@@ -192,7 +202,31 @@ export function App() {
         setBusy(false);
       }
     },
-    [project, clipName, body, say],
+    [project, clipName, body, say, overlayOn, trial],
+  );
+
+  /** Готовый клип из library/clips: примерка clip.import на копии проекта. */
+  const tryClip = useCallback(
+    async (pack: ClipPackInfo, take: string) => {
+      if (!project) return;
+      let name = take;
+      for (let i = 2; project.clips.some((c) => c.name === name); i++) name = `${take}-${i}`;
+      const steps: Step[] = [{ name: "clip.import", args: { pack: pack.id, take, as: name } }];
+      setBusy(true);
+      try {
+        const next = await preview(DIR, steps);
+        setTrial((old) => ({ label: take, sub: `${pack.name} · ${pack.license}`, clip: name, prevClip: old ? old.prevClip : clipName, steps, project: next }));
+        setClipName(name);
+        setT(0);
+        setPlaying(true);
+        say(`примерка ${take}: на диск не записано — «Применить» или Esc`);
+      } catch (e) {
+        say(`примерка ${take}: ${(e as Error).message}`, true);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [project, clipName, say],
   );
 
   /** Правки во время примерки идут на ту же копию — и запоминаются, чтобы «Применить» повторил их на диске. */
@@ -212,7 +246,7 @@ export function App() {
   const applyTrial = useCallback(async () => {
     if (!trial) return;
     const tr = trial;
-    await runMany(tr.steps, `пресет ${tr.entry.preset.name} → клип ${tr.clip}`);
+    await runMany(tr.steps, `${tr.label} → клип ${tr.clip}`);
     setTrial(null);
     setClipName(tr.clip);
   }, [trial, runMany]);
@@ -375,7 +409,7 @@ export function App() {
     );
   }
 
-  const trialChains = trial && !trial.entry.lib.roles ? chainsFor(trial.entry.lib.recipe, shown.chains) : [];
+  const trialChains = trial?.entry && !trial.entry.lib.roles ? chainsFor(trial.entry.lib.recipe, shown.chains) : [];
 
   return (
     <div className="app">
@@ -451,6 +485,9 @@ export function App() {
           <button className={leftTab === "library" ? "on" : ""} onClick={() => setLeftTab("library")}>
             <Icon name="library" size={14} /> Библиотека
           </button>
+          <button className={leftTab === "clips" ? "on" : ""} onClick={() => setLeftTab("clips")} title="готовые клипы CC0 — основой, поверх рецепты">
+            <Icon name="film" size={14} /> Клипы
+          </button>
           {advanced && (
             <button className={leftTab === "bones" ? "on" : ""} onClick={() => setLeftTab("bones")}>
               <Icon name="tree" size={14} /> Кости
@@ -458,8 +495,17 @@ export function App() {
           )}
         </div>
         <div className="tab-body">
-          {leftTab === "library" || !advanced ? (
-            <LibraryPanel library={library} chains={shown.chains} body={body?.body} active={trial?.entry.preset.name ?? null} onTry={(e) => tryOn(e)} />
+          {leftTab === "clips" ? (
+            <ClipsPanel active={trial?.label ?? null} onTry={tryClip} />
+          ) : leftTab === "library" || !advanced ? (
+            <>
+            {clip && (
+              <label className="fit-only overlay-on" title="слои пресета добавятся в текущий клип — например, уши и дыхание на готовую ходьбу">
+                <input type="checkbox" checked={overlayOn} onChange={(e) => setOverlayOn(e.target.checked)} /> поверх клипа «{trial && overlayOn ? trial.prevClip : clipName}»
+              </label>
+            )}
+            <LibraryPanel library={library} chains={shown.chains} body={body?.body} active={trial?.label ?? null} onTry={(e) => tryOn(e)} />
+            </>
           ) : (
             <BoneTree skeleton={data.skeleton} chains={shown.chains} selected={selectedBone} onSelect={setSelectedBone} />
           )}
@@ -615,15 +661,13 @@ export function App() {
             <div className="trybar">
               <div className="try-info">
                 <span className="try-tag">примерка</span>
-                <b>{trial.entry.preset.name}</b>
-                <span className="muted">
-                  {trial.entry.lib.recipe} · {sourceOf(trial.entry.preset).join(", ")}
-                </span>
+                <b>{trial.label}</b>
+                <span className="muted">{trial.sub}</span>
               </div>
               {trialChains.length > 1 && (
                 <label className="try-chain">
                   цепочка
-                  <select value={trial.chain} onChange={(e) => tryOn(trial.entry, e.target.value)}>
+                  <select value={trial.chain} onChange={(e) => tryOn(trial.entry!, e.target.value)}>
                     {trialChains.map((c) => (
                       <option key={c}>{c}</option>
                     ))}

@@ -1,0 +1,132 @@
+// Импорт готовых клипов (clip.import): свой запечённый glb обратно на тот же скелет — кость в кость; пак Quaternius
+// (CC0, library/clips) на рабочего Tools Up! — направления костей в осях тела те же, что у источника, ход таза — по росту.
+import assert from "node:assert/strict";
+import { cpSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { test } from "node:test";
+import { NodeIO } from "@gltf-transform/core";
+import { bodyFrame, buildRig, importClip, importPlan, posePartsAt, qaxis, qmul, qrot, vdot, vnorm, vsub, worldPose, type Vec3 } from "../../core/src/index.ts";
+import { animSkeleton, readTakes } from "./animfile.ts";
+import { BLENDER, NODE_COMMANDS, ROOT, detectSide, exportFile, exportGlb, loadCtx } from "./node.ts";
+
+const UAL = join(ROOT, "library/clips/quaternius-ual1.glb");
+
+test("clip.import своего glb на тот же скелет — кость в кость", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "af-imp-"));
+  cpSync(join(ROOT, "projects/worker-demo"), dir, { recursive: true });
+  // пределы суставов действуют и на основу; у запечённого клипа IK стопы мог выйти за них — здесь сверяем сам перенос
+  const pf = join(dir, "animforge.json");
+  const p = JSON.parse(readFileSync(pf, "utf8"));
+  delete p.limits;
+  writeFileSync(pf, JSON.stringify(p));
+  const ctx = await loadCtx(dir);
+  await exportGlb(ctx, join(dir, "all.glb"));
+  await NODE_COMMANDS["clip.import"].run(dir, { file: join(dir, "all.glb"), as: "imp_" });
+  const after = await loadCtx(dir);
+  const rig = buildRig(after.skeleton);
+  for (const c of ctx.project.clips) {
+    const m = after.project.clips.find((x) => x.name === "imp_" + c.name)!;
+    // цикл узнаётся по совпадению первого и последнего кадра: у удара, вернувшегося в стойку, — тоже цикл
+    if (c.loop) assert.ok(m.loop, `${c.name}: цикл не узнан`);
+    assert.ok(Math.abs(m.duration - c.duration) < 1e-4, `${c.name}: длина ${m.duration} ≠ ${c.duration}`);
+    // в кадрах запекания (между ними обе стороны — линейные ключи против живого расчёта)
+    for (let t = 0; t < c.duration; t += 2 / 30) {
+      const a = worldPose(rig, posePartsAt(ctx.project, rig, c, t)).T, b = worldPose(rig, posePartsAt(after.project, rig, m, t)).T;
+      a.forEach((v, i) => assert.ok(Math.hypot(...vsub(v, b[i])) < 5e-4, `${c.name} t=${t.toFixed(2)} ${rig.skel.nodes[i].name}: ${Math.hypot(...vsub(v, b[i])).toFixed(4)} м`));
+    }
+  }
+});
+
+test("Quaternius (Rigify, T-поза) → рабочий: направления костей и ход таза", async () => {
+  const doc = await new NodeIO().read(UAL);
+  const src = detectSide(animSkeleton(doc));
+  const ctx = await loadCtx(join(ROOT, "projects/worker-demo"));
+  // выравнивание покоя у цели (как у T-позы Mixamo): основа должна его учесть, а не прибавить к нему
+  const dst = { project: { ...ctx.project, align: { arm_l: { to: "down" as const, abduct: 8 }, arm_r: { to: "down" as const, abduct: 8 } } }, rig: buildRig(ctx.skeleton) };
+  const plan = importPlan(src, dst);
+  const names = new Map([...plan.from].map(([j, i]) => [dst.rig.skel.nodes[j].name, src.rig.skel.nodes[i].name]));
+  // руки, ноги, корпус и голова нашлись
+  for (const b of ["pelvis", "chest", "head", "arm_l_0", "arm_l_1", "arm_r_0", "leg_l_0", "leg_l_1", "leg_r_1", "foot_l"]) assert.ok(names.has(b), `нет пары у ${b}`);
+  const sf = bodyFrame(src.project), df = bodyFrame(dst.project);
+  const inBody = (v: Vec3, f: typeof sf): Vec3 => { const n = vnorm(v); return [vdot(n, f.side), vdot(n, f.up), vdot(n, f.forward)]; };
+  for (const take of ["Walk_Loop", "Sword_Attack", "Roll_RM"]) {
+    const tk = readTakes(doc, 30, [take])[0];
+    const r = importClip(src, dst, tk.frames, { name: take, loop: take.endsWith("Loop") });
+    const noLimits = { ...dst.project, limits: undefined };
+    let worst = 0, what = "";
+    for (const fi of [0, 7, 15, 23, 31]) {
+      const f = tk.frames[fi];
+      const S = worldPose(src.rig, { rot: new Map(Object.entries(f.rot)), pos: new Map(Object.entries(f.pos)), scl: new Map() }).T;
+      const D = worldPose(dst.rig, posePartsAt(noLimits, dst.rig, r.clip, f.t)).T;
+      // направление «кость → сопоставленный ребёнок» у источника и у цели, в осях своего тела
+      for (const [a, b] of [["arm_l_0", "arm_l_1"], ["arm_r_0", "arm_r_1"], ["leg_l_0", "leg_l_1"], ["leg_r_0", "leg_r_1"], ["leg_l_1", "foot_l"], ["pelvis", "chest"]]) {
+        const sa = src.rig.index.get(names.get(a)!)!, sb = src.rig.index.get(names.get(b)!)!;
+        const u = inBody(vsub(S[sb], S[sa]), sf), v = inBody(vsub(D[dst.rig.index.get(b)!], D[dst.rig.index.get(a)!]), df);
+        const e = (Math.acos(Math.min(1, vdot(u, v))) * 180) / Math.PI;
+        if (e > worst) { worst = e; what = `${a}→${b} кадр ${fi}`; }
+      }
+    }
+    assert.ok(worst < 1, `${take}: направление ${what} расходится на ${worst.toFixed(2)}°`);
+    // ход таза — путь источника в осях тела, умноженный на отношение ростов
+    const sp = src.rig.index.get(src.project.chains.pelvis![0])!;
+    const last = tk.frames[tk.frames.length - 1], f0 = tk.frames[0];
+    const P = (f: typeof f0) => worldPose(src.rig, { rot: new Map(Object.entries(f.rot)), pos: new Map(Object.entries(f.pos)), scl: new Map() }).T[sp];
+    const sMove = inBody(vsub(P(last), P(f0)), sf), sLen = Math.hypot(...vsub(P(last), P(f0)));
+    const k = r.clip.layers[0].type === "pose" ? r.clip.layers[0].keys : [];
+    const dm = vsub(k[k.length - 1].move!.pelvis, k[0].move!.pelvis);
+    if (sLen > 0.05) {
+      assert.ok(Math.abs(Math.hypot(...dm) - sLen * r.scale) < 1e-3, `${take}: путь таза ${Math.hypot(...dm).toFixed(3)} ≠ ${(sLen * r.scale).toFixed(3)}`);
+      assert.ok(vdot(inBody(dm, df), sMove) > 0.999, `${take}: путь таза не туда`);
+    }
+  }
+});
+
+test("Quaternius, повёрнутый на 90° и вдвое больше, — та же основа", async () => {
+  const doc = await new NodeIO().read(UAL);
+  const skel = animSkeleton(doc);
+  const ctx = await loadCtx(join(ROOT, "projects/worker-demo"));
+  const dst = { project: ctx.project, rig: buildRig(ctx.skeleton) };
+  const tk = readTakes(doc, 30, ["Roll_RM"])[0];
+  const a = importClip(detectSide(skel), dst, tk.frames, { name: "a", loop: false });
+  // тот же скелет: корень повёрнут вокруг вертикали и увеличен вдвое — кадры те же, иначе только оси и рост
+  const turn = qaxis([0, 1, 0], Math.PI / 2);
+  const top = skel.nodes.findIndex((n) => n.parent == null && skel.nodes.some((m) => m.isJoint));
+  const rot = { nodes: skel.nodes.map((n, i) => (i === top ? { ...n, restR: qmul(turn, n.restR), restS: n.restS.map((x) => x * 2) as Vec3, restT: qrot(turn, n.restT) } : n)) };
+  const frames = tk.frames.map((f) => ({ ...f, rot: { ...f.rot, ...(f.rot[skel.nodes[top].name] ? { [skel.nodes[top].name]: qmul(turn, f.rot[skel.nodes[top].name]) } : {}) } }));
+  const b = importClip(detectSide(rot), dst, frames, { name: "b", loop: false });
+  assert.ok(Math.abs(b.scale * 2 - a.scale) < 1e-3, `рост: ${b.scale} × 2 ≠ ${a.scale}`);
+  const ka = a.clip.layers[0].type === "pose" ? a.clip.layers[0].keys : [], kb = b.clip.layers[0].type === "pose" ? b.clip.layers[0].keys : [];
+  let worst = 0;
+  for (const t of [0.2, 0.7, 1.1]) {
+    const A = worldPose(dst.rig, posePartsAt(dst.project, dst.rig, a.clip, t)).T, B = worldPose(dst.rig, posePartsAt(dst.project, dst.rig, b.clip, t)).T;
+    A.forEach((v, i) => (worst = Math.max(worst, Math.hypot(...vsub(v, B[i])))));
+  }
+  assert.ok(worst < 2e-3, `повёрнутый источник дал другую позу: ${worst.toFixed(4)} м`);
+  assert.ok(Math.hypot(...vsub(ka[ka.length - 1].move!.pelvis, kb[kb.length - 1].move!.pelvis)) < 2e-3, "ход таза другой");
+});
+
+test("через FBX: имена Mixamo (Unity, сантиметры) и Unreal (Z вверх) — обратно кость в кость", { skip: !existsSync(BLENDER) && "нет Blender" }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "af-impfbx-"));
+  cpSync(join(ROOT, "projects/worker-demo"), dir, { recursive: true });
+  const pf = join(dir, "animforge.json");
+  const p = JSON.parse(readFileSync(pf, "utf8"));
+  delete p.limits;
+  p.clips = p.clips.filter((c: { name: string }) => ["walk_geralt", "hammer"].includes(c.name));
+  writeFileSync(pf, JSON.stringify(p));
+  const ctx = await loadCtx(dir);
+  for (const [names, units] of [["mixamo", "unity"], ["unreal", "unreal"]] as const) {
+    await exportFile(ctx, join(dir, `${names}.fbx`), names, units);
+    await NODE_COMMANDS["clip.import"].run(dir, { file: join(dir, `${names}.fbx`), as: `${names}_` });
+  }
+  const after = await loadCtx(dir);
+  const rig = buildRig(after.skeleton);
+  for (const c of ctx.project.clips) for (const pre of ["mixamo_", "unreal_"]) {
+    const m = after.project.clips.find((x) => x.name === pre + c.name)!;
+    assert.ok(m, `нет ${pre}${c.name}`);
+    for (let t = 0; t < c.duration; t += 3 / 30) {
+      const a = worldPose(rig, posePartsAt(ctx.project, rig, c, t)).T, b = worldPose(rig, posePartsAt(after.project, rig, m, t)).T;
+      a.forEach((v, i) => assert.ok(Math.hypot(...vsub(v, b[i])) < 5e-4, `${pre}${c.name} t=${t.toFixed(2)} ${rig.skel.nodes[i].name}: ${Math.hypot(...vsub(v, b[i])).toFixed(4)} м`));
+    }
+  }
+});

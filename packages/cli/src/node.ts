@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { COMMANDS, Clip, type LibPreset, smoothJointWeights, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectFins, detectForward, detectMultiLeg, detectWings, detectQuadruped, detectRig, emptyProject, frameTimes, posePartsAt, type Prop, readSkeleton, retargetClip, runCommand, samplePreset, standardNames, suggestAlign, worldPose, writeClips, type NameScheme } from "../../core/src/index.ts";
+import { COMMANDS, Clip, type LibPreset, smoothJointWeights, Ctx, Project, bodyFrame, RECIPES, TweenPreset, buildRig, clipEvents, detectFins, detectForward, detectMultiLeg, detectWings, detectQuadruped, detectRig, emptyProject, frameTimes, importClip, posePartsAt, type Skeleton, type Vec3, type Prop, readSkeleton, retargetClip, runCommand, samplePreset, standardNames, suggestAlign, worldPose, writeClips, type NameScheme } from "../../core/src/index.ts";
 import { loadSkinScene, restVerts, skinFrame, skinTopology } from "./skin.ts";
 import { recipeVectors } from "./recipe-vectors.ts";
 
@@ -748,6 +748,68 @@ NODE_COMMANDS["clip.copy"] = {
   },
 };
 
+export interface ClipPack { id: string; name: string; author: string; license: string; url: string; skeleton: string; file: string }
+export const clipPacks = (): ClipPack[] => JSON.parse(readFileSync(join(ROOT, "library/clips/packs.json"), "utf8")).packs;
+
+/** Скелет чужого файла как «сторона» переноса: цепочки и «вперёд» — тем же распознаванием, что rig.detect. */
+export function detectSide(skel: Skeleton, up: Vec3 = [0, 1, 0]): { project: Project; rig: ReturnType<typeof buildRig>; body: string } {
+  const quad = detectQuadruped(skel, up) ?? detectMultiLeg(skel, up);
+  const forward = quad ? quad.forward : detectForward(skel, up).forward;
+  const project = { ...emptyProject("source", ""), up, forward } as Project;
+  project.chains = (quad ? quad.chains : detectRig(skel, project).chains) as Project["chains"];
+  return { project, rig: buildRig(skel), body: quad ? "quadruped" : project.chains.leg_l ? "biped" : "other" };
+}
+
+NODE_COMMANDS["clip.import"] = {
+  help: "Импорт готовых клипов (Mixamo, Unreal, Quaternius, свой FBX/glb/BVH) основой: слой поз «base» с ключом на кадр, поверх — рецепты, ключи, цели. Кости — по ролям (как clip.copy), разница поз покоя (T/A) снимается, ход таза — по росту.",
+  args: {
+    file: { type: "string", help: "FBX, glb, gltf, BVH или DAE с анимациями" },
+    pack: { type: "string", help: "пак из библиотеки готовых клипов (library/clips/packs.json), например quaternius-ual1" },
+    take: { type: "string", help: "дубли через запятую (по умолчанию все)" },
+    as: { type: "string", help: "имя клипа (для одного дубля) или префикс (для нескольких)" },
+    fps: { type: "number", help: "частота ключей, по умолчанию 30" },
+    loop: { type: "string", help: "auto (по умолчанию: «loop» в имени или первый кадр = последнему), true, false" },
+    replace: { type: "boolean", help: "заменить клип с таким именем" },
+    author: { type: "string", help: "автор (для происхождения)" },
+    license: { type: "string", help: "лицензия (для происхождения), например CC0" },
+    list: { type: "boolean", help: "только показать дубли файла" },
+  },
+  async run(dir, a) {
+    const { readAnimDoc, animSkeleton, readTakes } = await import("./animfile.ts");
+    const pack = a.pack ? clipPacks().find((p) => p.id === a.pack) : undefined;
+    if (a.pack && !pack) throw new Error(`нет пака «${a.pack}», есть: ${clipPacks().map((p) => p.id).join(", ")}`);
+    if (!pack && !a.file) throw new Error("нужен file или pack");
+    const file = pack ? join(ROOT, "library/clips", pack.file) : resolve(process.env.INIT_CWD ?? process.cwd(), a.file);
+    if (pack) { a.author ??= pack.author; a.license ??= pack.license; }
+    const doc = await readAnimDoc(file, BLENDER, BLENDER_ENV, join(ROOT, "bridge/blender/import_anim.py"));
+    const fps = a.fps ?? 30;
+    const only = a.take ? String(a.take).split(",").map((x: string) => x.trim()) : undefined;
+    if (a.list) return doc.getRoot().listAnimations().map((x) => x.getName());
+    const takes = readTakes(doc, fps, only);
+    if (!takes.length) throw new Error(`в файле нет дублей${only ? ` ${only.join(", ")}` : ""}; есть: ${doc.getRoot().listAnimations().map((x) => x.getName()).join(", ")}`);
+    const src = detectSide(animSkeleton(doc));
+    if (!src.project.chains.pelvis) throw new Error("у скелета файла не распознан таз — переносить не от чего");
+    const ctx = await loadCtx(dir);
+    const dst = { project: ctx.project, rig: buildRig(ctx.skeleton) };
+    const out = [];
+    for (const tk of takes) {
+      const base = tk.name.replace(/^.*\|/, "");
+      const name = a.as ? (takes.length > 1 ? `${a.as}${base}` : a.as) : base;
+      const f0 = tk.frames[0], f1 = tk.frames[tk.frames.length - 1];
+      const same = Object.keys(f0.rot).every((b) => { const p = f0.rot[b], q = f1.rot[b] ?? p; return Math.abs(p[0] * q[0] + p[1] * q[1] + p[2] * q[2] + p[3] * q[3]) > Math.cos((3 * Math.PI) / 360); });
+      const loop = a.loop === "true" ? true : a.loop === "false" ? false : /loop|cycle|idle/i.test(base) || (same && tk.frames.length > 4);
+      const r = importClip(src, dst, tk.frames, { name, loop, fps, source: { file: file.replace(/^.*\//, ""), take: tk.name, ...(a.author ? { author: a.author } : {}), ...(a.license ? { license: a.license } : {}) } });
+      const i = ctx.project.clips.findIndex((c) => c.name === name);
+      if (i >= 0 && !a.replace) throw new Error(`клип «${name}» уже есть — replace true или другое as`);
+      if (i >= 0) ctx.project.clips[i] = r.clip;
+      else ctx.project.clips.push(r.clip);
+      out.push({ clip: name, duration: r.clip.duration, loop, keys: tk.frames.length, scale: r.scale, bones: Object.keys(r.mapped).length, ...(r.unmapped.length ? { unmapped: r.unmapped } : {}) });
+    }
+    saveProject(dir, ctx.project);
+    return { source: src.body, clips: out };
+  },
+};
+
 NODE_COMMANDS.publish = {
   help: "Запечь все клипы в glb (out/<имя>.glb) и положить копию в игру на Godot — в папку, записанную в проекте (make --godot).",
   args: { out: { type: "string", help: "куда glb, по умолчанию out/<имя>.glb" } },
@@ -845,7 +907,7 @@ export async function call(dir: string, name: string, args: Record<string, any>)
 }
 
 /** Команды, которые меняют только animforge.json, — их можно примерять (рендер и экспорт пишут другие файлы). */
-export const DRY_OK = new Set(["clip.add", "recipe.add", "recipe.set", "recipe.rig", "preset.apply", "clip.ground", "key.set", "key.clear", "chain.set", "layer.remove", "layer.set", "clip.remove"]);
+export const DRY_OK = new Set(["clip.import", "clip.add", "recipe.add", "recipe.set", "recipe.rig", "preset.apply", "clip.ground", "key.set", "key.clear", "chain.set", "layer.remove", "layer.set", "clip.remove"]);
 
 /** Выполнить шаги на копии проекта (base или с диска) и вернуть, что получилось, ничего не записывая.
  * Вызывать строго по очереди (как и call): песочница одна на процесс. */

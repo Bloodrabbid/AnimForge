@@ -1036,6 +1036,13 @@ function flatFoot(acc: Acc, rig: Rig, project: Project, foot: string, off = 0) {
 }
 
 /** Выравнивание позы покоя: первая кость цепочки разворачивается так, чтобы цепочка смотрела вниз (с отведением abduct). */
+/** Повороты выравнивания позы покоя (project.align) — дельты в локальных осях rest, с которых начинают все слои. */
+export function restAlign(project: Project, rig: Rig): Map<string, Quat> {
+  const acc = new Acc(rig, project);
+  if (project.align) alignRest(acc, rig, project);
+  return acc.rot;
+}
+
 function alignRest(acc: Acc, rig: Rig, project: Project) {
   const f = bodyFrame(project);
   for (const [chainName, a] of Object.entries(project.align ?? {})) {

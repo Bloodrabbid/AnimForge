@@ -19,6 +19,7 @@ const PATHS: Record<string, string> = {
   search: "M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM20 20l-4.8-4.8",
   library: "M4 5h4v14H4zM10 5h4v14h-4zM16.5 5.5l3.5-1 3 13.5-3.5 1z",
   tree: "M6 4v16M6 8h6M6 14h6M12 6h6v4h-6zM12 12h6v4h-6z",
+  film: "M4 5h16v14H4zM8 5v14M16 5v14M4 9h4M4 15h4M16 9h4M16 15h4",
   trash: "M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13M10.5 11v5M13.5 11v5",
   check: "M5 12.5l4.5 4.5L19 7.5",
   x: "M6 6l12 12M18 6 6 18",

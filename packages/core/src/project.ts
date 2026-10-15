@@ -84,6 +84,8 @@ export interface PoseLayer {
   muted?: boolean;
   /** соло: пока у какого-то слоя поз стоит solo, остальные слои поз молчат */
   solo?: boolean;
+  /** откуда поза: импортированный готовый клип (clip.import) — файл, дубль, автор и лицензия */
+  source?: { file: string; take: string; author?: string; license?: string };
 }
 
 export type Layer = RecipeLayer | KeyLayer | PoseLayer;

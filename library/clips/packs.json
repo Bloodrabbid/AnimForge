@@ -1,0 +1,23 @@
+{
+  "note": "Готовые клипы для clip.import: только свободные (CC0 / общественное достояние). Меш убран — скелет и анимации; глядеть на своей модели.",
+  "packs": [
+    {
+      "id": "quaternius-ual1",
+      "name": "Quaternius · Universal Animation Library",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/universal-animation-library",
+      "skeleton": "Rigify (DEF-), T-поза, 53 кости с пальцами",
+      "file": "quaternius-ual1.glb"
+    },
+    {
+      "id": "quaternius-ual2",
+      "name": "Quaternius · Universal Animation Library 2",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/universal-animation-library-2",
+      "skeleton": "имена Unreal (Manny), 65 костей с пальцами",
+      "file": "quaternius-ual2.glb"
+    }
+  ]
+}

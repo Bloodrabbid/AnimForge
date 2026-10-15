@@ -94,3 +94,15 @@ export async function saveWeights(dir: string, parts: unknown[] | null): Promise
   const body = await r.json();
   if (!body.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
 }
+
+/** Пак готовых клипов (library/clips): происхождение и дубли. */
+export interface ClipPackInfo {
+  id: string;
+  name: string;
+  author: string;
+  license: string;
+  url: string;
+  skeleton: string;
+  takes: { name: string; duration: number }[];
+}
+export const fetchClips = (): Promise<ClipPackInfo[]> => fetch("/api/clips").then((r) => r.json());
