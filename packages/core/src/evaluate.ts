@@ -2,7 +2,7 @@
 // Работает одинаково в браузере и в Node.
 import { evalKeys } from "./curves.ts";
 import { DEG, QI, Quat, Vec3, angVel, qaxis, qinv, qmul, qnorm, qrot, qscale, vadd, vcross, vdot, vmul, vnorm, vscale, vsub } from "./math.ts";
-import type { Channel, Clip, Constraint, ConstraintTarget, PoseLayer, Project, RecipeLayer, SemanticAxis, Skeleton, Travel } from "./project.ts";
+import type { Channel, Clip, Constraint, ConstraintTarget, GaitStyle, PoseLayer, Project, RecipeLayer, SemanticAxis, Skeleton, Travel } from "./project.ts";
 import { RECIPES, withDefaults, type ClipEvent } from "./recipes.ts";
 import { clampRotation, decompose, limitFrame } from "./limits.ts";
 
@@ -236,6 +236,104 @@ export interface LiveOpts {
   targets?: Record<string, Vec3>;
 }
 
+// ── стиль походки (clip.gait) ────────────────────────────────────────────────────────────────────────────────
+/** Частота шагов от скорости: speed^0.6, длина шага — speed^0.4. The Witcher, шаг → бег у 13 наборов: скорость
+ * ×1.98, период ×0.65 (частота ×1.54 = 1.98^0.63), шаг ×1.32 (= 1.98^0.41) — research/directions.md. */
+export const gaitCadence = (g?: GaitStyle) => (g?.speed && g.speed !== 1 ? g.speed ** 0.6 : 1);
+const gaitStride = (g?: GaitStyle) => (g?.speed && g.speed !== 1 ? g.speed ** 0.4 : 1);
+
+/** Средние за цикл повороты и сдвиги костей, которые стиль масштабирует (клип без стиля). */
+const gaitCache = new WeakMap<Rig, Map<string, { rot: Map<string, Vec3>; up: Map<string, number> }>>();
+const rotvec = (q: Quat): Vec3 => {
+  const d: Quat = q[3] < 0 ? [-q[0], -q[1], -q[2], -q[3]] : q;
+  const s = Math.hypot(d[0], d[1], d[2]);
+  if (s < 1e-12) return [0, 0, 0];
+  const a = 2 * Math.atan2(s, d[3]);
+  return [(d[0] / s) * a, (d[1] / s) * a, (d[2] / s) * a];
+};
+const fromvec = (v: Vec3): Quat => { const a = Math.hypot(...v); return a < 1e-12 ? QI : qaxis(vscale(v, 1 / a), a); };
+
+function gaitBones(project: Project) {
+  const first = (c?: string[]) => (c?.length ? [c[0]] : []);
+  const legs = Object.entries(project.chains).filter(([n]) => /^leg_/.test(n)).map(([, c]) => c);
+  const arms = Object.entries(project.chains).filter(([n]) => /^arm_/.test(n)).map(([, c]) => c);
+  return { pelvis: first(project.chains.pelvis), hips: legs.flatMap((c) => first(c)), knees: legs.flatMap((c) => (c.length > 1 ? [c[1]] : [])), arms: arms.flat() };
+}
+
+function gaitMeans(project: Project, rig: Rig, clip: Clip) {
+  let cache = gaitCache.get(rig);
+  if (!cache) gaitCache.set(rig, (cache = new Map()));
+  const base: Clip = { ...clip, gait: undefined, travel: undefined, ground: undefined, constraints: undefined };
+  const key = JSON.stringify(base);
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const b = gaitBones(project);
+  const bones = [...b.pelvis, ...b.hips, ...b.knees, ...b.arms];
+  const up = bodyFrame(project).up;
+  const rot = new Map<string, Vec3>(bones.map((x) => [x, [0, 0, 0] as Vec3]));
+  const lift = new Map<string, number>(b.pelvis.map((x) => [x, 0]));
+  const N = 48;
+  for (let k = 0; k < N; k++) {
+    const acc = primary(project, rig, base, (base.duration * k) / N);
+    for (const x of bones) rot.set(x, vadd(rot.get(x)!, vscale(rotvec(qmul(acc.rot.get(x) ?? QI, qinv(acc.base.get(x) ?? QI))), 1 / N)));
+    for (const x of b.pelvis) lift.set(x, lift.get(x)! + vdot(acc.move.get(x) ?? [0, 0, 0], up) / N);
+  }
+  const out = { rot, up: lift };
+  if (cache.size > 256) cache.clear();
+  cache.set(key, out);
+  return out;
+}
+
+/** Стиль походки поверх слоёв: размахи — вокруг своего среднего за цикл (подскок ×0 — таз на средней высоте),
+ * постоянные — наклон, сутулость, колея, таз ниже. */
+function applyGait(acc: Acc, rig: Rig, project: Project, clip: Clip, size: number) {
+  const g = clip.gait!;
+  const f = bodyFrame(project);
+  const b = gaitBones(project);
+  const mean = gaitMeans(project, rig, clip);
+  // поворот кости — вокруг среднего: m' = exp(k·log(m·μ⁻¹))·μ
+  const scale = (bone: string, k: number) => {
+    if (k === 1 || !acc.rot.has(bone)) return;
+    const base = acc.base.get(bone) ?? QI;
+    const mu = fromvec(mean.rot.get(bone) ?? [0, 0, 0]);
+    const m = qmul(acc.rot.get(bone)!, qinv(base));
+    const dev = qmul(m, qinv(mu));
+    acc.rot.set(bone, qnorm(qmul(qmul(fromvec(vscale(rotvec(dev), k)), mu), base)));
+  };
+  for (const x of b.pelvis) {
+    scale(x, g.sway ?? 1);
+    const k = g.bounce ?? 1;
+    // сдвига нет — это тоже значение (подскок рецепта ровно 0 в этот миг), а не «нечего масштабировать»
+    const mv = acc.move.get(x) ?? [0, 0, 0];
+    if (k !== 1 && Math.abs(mean.up.get(x) ?? 0) + Math.hypot(...mv) > 1e-12) {
+      const h = vdot(mv, f.up), mu = mean.up.get(x) ?? 0;
+      acc.move.set(x, vadd(mv, vscale(f.up, (mu + k * (h - mu)) - h)));
+    }
+  }
+  for (const x of b.arms) scale(x, g.arms ?? 1);
+  for (const x of b.hips) scale(x, gaitStride(g));
+  for (const x of b.knees) scale(x, g.lift ?? 1);
+  if (g.width) {
+    const pi = b.pelvis.length ? rig.index.get(b.pelvis[0]) : undefined;
+    const k = Math.sign(vdot(vcross(f.forward, vscale(f.up, -1)), f.side)) || 1;
+    for (const x of b.hips) {
+      const i = rig.index.get(x);
+      if (i == null) continue;
+      const side = Math.sign(vdot(vsub(rig.worldT[i], pi != null ? rig.worldT[pi] : [0, 0, 0]), f.side)) || 1;
+      acc.turn(x, localDelta(rig, i, f.forward, g.width * side * k * DEG));
+    }
+  }
+  if (g.lower && b.pelvis.length) {
+    const ri = rig.index.get(b.pelvis[0]);
+    if (ri != null) acc.add(rig.skel.nodes[skeletonRoot(rig, ri)].name, "move_up", -g.lower * size, () => ({ lateral: f.up, vertical: f.up, roll: f.up }));
+  }
+  // наклон и сутулость — грудью (вперёд — плюс pitch: верх цепочки уходит по ходу); сутулость голова возвращает
+  const chest = project.chains.chest?.[0], head = project.chains.head?.[0];
+  const bend = (g.lean ?? 0) + (g.posture ?? 0);
+  if (chest && bend && rig.index.has(chest)) acc.turn(chest, localDelta(rig, rig.index.get(chest)!, f.side, bend * DEG));
+  if (head && g.posture && rig.index.has(head)) acc.turn(head, localDelta(rig, rig.index.get(head)!, f.side, -g.posture * DEG));
+}
+
 /** Куда идёт клип: вперёд тела, повёрнутое на travel.angle вокруг up. По нему меряются опора и скорость. */
 export function travelDir(project: Project, clip: Clip): Vec3 {
   const f = bodyFrame(project);
@@ -287,6 +385,10 @@ function applyTravel(acc: Acc, rig: Rig, project: Project, tr: Travel) {
 function primary(project: Project, rig: Rig, clip: Clip, t: number, opts: LiveOpts = {}): Acc {
   const tClip = t; // фиксация стопы — по времени клипа, как её план (реверс уже внутри плана)
   if (clip.travel?.reverse) t = clip.duration - t;
+  // стиль походки: быстрее — слои идут быстрее, клип (его длину clip.gait уже поделил) — вмещает те же шаги
+  const cad = gaitCadence(clip.gait);
+  const src = clip;
+  if (cad !== 1) { t *= cad; clip = { ...clip, duration: clip.duration * cad }; }
   const acc = new Acc(rig, project);
   let heights = heightCache.get(rig);
   if (!heights) heightCache.set(rig, (heights = restHeights(rig, project)));
@@ -320,6 +422,8 @@ function primary(project: Project, rig: Rig, clip: Clip, t: number, opts: LiveOp
       }
     }
   }
+  if (src.gait) applyGait(acc, rig, project, src, heights.get(SIZE) ?? 1);
+  clip = src;
   if (clip.travel) applyTravel(acc, rig, project, clip.travel);
   // ограничения — до постановки на пол: ноги встают на пол уже в разрешённой позе
   if (project.limits) acc.applyLimits();

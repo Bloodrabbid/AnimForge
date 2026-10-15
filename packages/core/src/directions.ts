@@ -2,7 +2,7 @@
 // ActionForge Motion Lab, но для любого тела с цепочками leg_* и с проверкой по замеру: плоскость маха подбирается
 // так, чтобы тело на самом деле шло под нужным углом (таз в рецептах рыщет и кренится — это тоже возит стопы).
 // Все направления — с той же фазы шага, что и прямая ходьба: в движке их смешивают (Godot BlendSpace2D) без рывка.
-import type { Clip, Project, Travel } from "./project.ts";
+import type { Clip, GaitStyle, Project, Travel } from "./project.ts";
 import { RECIPES } from "./recipes.ts";
 import { gaitHeading, gaitSlide, type Rig } from "./evaluate.ts";
 
@@ -103,3 +103,12 @@ export function directionClip(project: Project, rig: Rig, base: Clip, angle: num
   }
   return c;
 }
+
+/** Стили походки — наборы ручек clip.gait (как пресеты Stroll / Brisk / Heavy / Sneak в ActionForge Motion Lab).
+ * Все — на глаз; скорость → частота и шаг — по замеру Witcher (gaitCadence). */
+export const GAIT_STYLES: Record<string, { help: string; gait: GaitStyle }> = {
+  stroll: { help: "прогулка: медленнее, руки и подскок мягче", gait: { speed: 0.8, arms: 0.8, bounce: 0.85, sway: 0.9 } },
+  brisk: { help: "быстрым шагом: чаще и шире, руки активнее, корпус чуть вперёд", gait: { speed: 1.3, arms: 1.3, bounce: 1.1, lean: 4 } },
+  heavy: { help: "тяжело: медленно, ниже, больше раскачки, меньше подскока, корпус вперёд", gait: { speed: 0.75, lower: 0.02, bounce: 0.7, sway: 1.35, arms: 0.7, lean: 6, width: 2 } },
+  sneak: { help: "крадётся: медленно, низко, стопы выше, руки почти не машут, сутулится", gait: { speed: 0.6, lower: 0.05, lift: 1.35, bounce: 0.4, arms: 0.4, sway: 0.6, posture: 12 } },
+};

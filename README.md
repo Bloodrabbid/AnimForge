@@ -212,6 +212,26 @@ pnpm af tweens.verify      # синхронизирует пресеты в ад
 - `af video --clip walk1 --out out/walk.mp4 --view front_3q` — видео клипа; `sheet --view front|profile|front_3q` — виды для персонажей.
 - Шаблоны тел: `fish | snake | tentacle | quadruped | biped | worker`.
 
+## Стиль походки
+
+```sh
+pnpm af clip.gait --project out/baker --clip walk --style sneak                 # stroll | brisk | heavy | sneak
+pnpm af clip.gait --project out/baker --clip walk --gait '{"speed":1.2,"bounce":0.5,"posture":8}'
+```
+
+Ручки — поверх любых слоёв цикла, от рецепта не зависят (`applyGait` в evaluate.ts, то же в аддоне Godot):
+
+| ручка | что делает |
+|---|---|
+| `speed` × | частота шагов растёт как speed^0.6, длина шага — как speed^0.4. Так у 13 наборов The Witcher при переходе от шага к бегу: скорость ×1.98, частота ×1.54, шаг ×1.32. Длину клипа команда меняет сама |
+| `bounce`, `sway`, `arms`, `lift` × | подскок таза, его раскачка, мах рук, сгиб колена в переносе — каждый вокруг своего среднего за цикл. ×0 — таз на средней высоте, а не в покое; рука с постоянным отводом остаётся отведённой |
+| `width` ° | ноги наружу |
+| `lower` | таз ниже на долю роста (нужен `clip.ground` с `ik`) |
+| `lean` ° | корпус вперёд вместе с головой |
+| `posture` ° | грудь вперёд, голова обратно — смотрит прямо |
+
+Стили (`GAIT_STYLES`) — наборы ручек, на глаз. Идея — пресеты Motion Lab в ActionForge. Демо — `godot/sandbox/demo/gait_demo.tscn`.
+
 ## Фиксация опорной стопы
 
 ```sh

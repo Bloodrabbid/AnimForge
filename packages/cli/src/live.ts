@@ -62,6 +62,14 @@ export const SYNTHETIC_TRAVEL: Clip = {
   travel: { angle: 120, swing: -40, hips: 25, chest: 0.7, look: 0.65, feet: 30, width: 6, stride: 0.8, reverse: true },
 };
 
+/** Стиль походки поверх рецептов: темп, подскок, раскачка, руки, колени, колея, таз ниже, наклон, сутулость. */
+export const SYNTHETIC_GAIT: Clip = {
+  name: "synthetic_gait", duration: +(0.958 / 1.3 ** 0.6).toFixed(4), fps: 30, loop: true,
+  layers: SYNTHETIC_TRAVEL.layers,
+  ground: { bones: ["foot_l", "foot_r"], mode: "floor", ik: true, flat: true },
+  gait: { speed: 1.3, bounce: 0.6, sway: 1.4, arms: 1.5, lift: 1.3, width: 3, lower: 0.02, lean: 5, posture: 8 },
+};
+
 /** Моменты сверки: края, середина и точки между кадрами (живой рецепт считается в любой момент, не по кадрам). */
 const checkTimes = (d: number) => [0, 0.013, 0.137, 0.29, 0.5, 0.731, 0.97, 1].map((u) => +(u * d).toFixed(6));
 
@@ -76,7 +84,7 @@ export async function liveVerify(dirs?: string[]) {
     const syn = structuredClone(worker);
     syn.project.name = "worker-synthetic";
     syn.project.align = { arm_l: { to: "down", abduct: 8 } };
-    syn.project.clips = [SYNTHETIC, SYNTHETIC_TRAVEL];
+    syn.project.clips = [SYNTHETIC, SYNTHETIC_TRAVEL, SYNTHETIC_GAIT];
     ctxs.push(syn);
   }
   for (const ctx of ctxs) {

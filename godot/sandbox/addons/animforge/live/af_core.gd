@@ -650,6 +650,134 @@ static func foot_lock(acc: Acc, rig: Rig, clip: Dictionary, t: float, off) -> vo
 			flat_foot(acc, rig, b, off.get(b, 0.0) if off != null else 0.0)
 
 
+# ── стиль походки (applyGait ядра) ───────────────────────────────────────────────────────────────────────────
+static func gait_cadence(g) -> float:
+	if g == null or g.get("speed") == null or float(g["speed"]) == 1.0:
+		return 1.0
+	return pow(float(g["speed"]), 0.6)
+
+
+static func _rotvec(q: Quaternion) -> Vector3:
+	var d := q
+	if d.w < 0:
+		d = Quaternion(-d.x, -d.y, -d.z, -d.w)
+	var s := sqrt(d.x * d.x + d.y * d.y + d.z * d.z)
+	if s < 1e-12:
+		return Vector3.ZERO
+	return Vector3(d.x / s, d.y / s, d.z / s) * (2.0 * atan2(s, d.w))
+
+
+static func _fromvec(v: Vector3) -> Quaternion:
+	var a := v.length()
+	return QI if a < 1e-12 else qaxis(v / a, a)
+
+
+static func gait_bones(rig: Rig) -> Dictionary:
+	var out := {"pelvis": [], "hips": [], "knees": [], "arms": []}
+	var pc = rig.chains.get("pelvis")
+	if pc != null and not pc.is_empty():
+		out["pelvis"].append(pc[0])
+	for name in rig.chains:
+		var c: Array = rig.chains[name]
+		if String(name).begins_with("leg_") and not c.is_empty():
+			out["hips"].append(c[0])
+			if c.size() > 1:
+				out["knees"].append(c[1])
+		if String(name).begins_with("arm_"):
+			out["arms"].append_array(c)
+	return out
+
+
+static func gait_means(rig: Rig, clip: Dictionary) -> Dictionary:
+	var base := clip.duplicate()
+	for k in ["gait", "travel", "ground", "constraints"]:
+		base.erase(k)
+	var key := "gait|" + JSON.stringify(base)
+	if rig.lock_cache.has(key):
+		return rig.lock_cache[key]
+	var b := gait_bones(rig)
+	var bones: Array = b["pelvis"] + b["hips"] + b["knees"] + b["arms"]
+	var upv := body_frame(rig).up
+	var rot := {}
+	for x in bones:
+		rot[x] = Vector3.ZERO
+	var lift := {}
+	for x in b["pelvis"]:
+		lift[x] = 0.0
+	var N := 48
+	for k in N:
+		var acc := primary(rig, base, float(base["duration"]) * k / N)
+		for x in bones:
+			rot[x] += _rotvec(qnorm(acc.rot.get(x, QI) * qinv(acc.base.get(x, QI)))) / N
+		for x in b["pelvis"]:
+			lift[x] += acc.move.get(x, Vector3.ZERO).dot(upv) / N
+	var out := {"rot": rot, "up": lift}
+	if rig.lock_cache.size() > 64:
+		rig.lock_cache.clear()
+	rig.lock_cache[key] = out
+	return out
+
+
+static func _gait_scale(acc: Acc, mean: Dictionary, bone: String, k: float) -> void:
+	if k == 1.0 or not acc.rot.has(bone):
+		return
+	var base: Quaternion = acc.base.get(bone, QI)
+	var mu := _fromvec(mean["rot"].get(bone, Vector3.ZERO))
+	var m := qnorm(acc.rot[bone] * qinv(base))
+	var dev := qnorm(m * qinv(mu))
+	acc.rot[bone] = qnorm(_fromvec(_rotvec(dev) * k) * mu * base)
+
+
+static func apply_gait(acc: Acc, rig: Rig, clip: Dictionary, size: float) -> void:
+	var g: Dictionary = clip["gait"]
+	var f := body_frame(rig)
+	var b := gait_bones(rig)
+	var mean := gait_means(rig, clip)
+	for x in b["pelvis"]:
+		_gait_scale(acc, mean, x, _num(g, "sway", 1.0))
+		var k := _num(g, "bounce", 1.0)
+		var mv: Vector3 = acc.move.get(x, Vector3.ZERO)
+		if k != 1.0 and absf(mean["up"].get(x, 0.0)) + mv.length() > 1e-12:
+			var h := mv.dot(f.up)
+			var mu: float = mean["up"].get(x, 0.0)
+			acc.move[x] = mv + f.up * ((mu + k * (h - mu)) - h)
+	for x in b["arms"]:
+		_gait_scale(acc, mean, x, _num(g, "arms", 1.0))
+	var sp := _num(g, "speed", 1.0)
+	var stride := pow(sp, 0.4) if sp != 1.0 else 1.0
+	for x in b["hips"]:
+		_gait_scale(acc, mean, x, stride)
+	for x in b["knees"]:
+		_gait_scale(acc, mean, x, _num(g, "lift", 1.0))
+	var width := _num(g, "width", 0.0)
+	if width != 0.0:
+		var pi: int = rig.index[b["pelvis"][0]] if not b["pelvis"].is_empty() and rig.index.has(b["pelvis"][0]) else -1
+		var kk := signf(f.forward.cross(-f.up).dot(f.side))
+		if kk == 0.0:
+			kk = 1.0
+		for x in b["hips"]:
+			if not rig.index.has(x):
+				continue
+			var i: int = rig.index[x]
+			var origin: Vector3 = rig.world_t[pi] if pi >= 0 else Vector3.ZERO
+			var side := signf((rig.world_t[i] - origin).dot(f.side))
+			if side == 0.0:
+				side = 1.0
+			acc.turn(x, local_delta(rig, i, f.forward, width * side * kk * DEG))
+	var lower := _num(g, "lower", 0.0)
+	if lower != 0.0 and not b["pelvis"].is_empty() and rig.index.has(b["pelvis"][0]):
+		var upv := f.up
+		acc.add(rig.names[skeleton_root(rig, rig.index[b["pelvis"][0]])], "move_up", -lower * size, func(): return {"lateral": upv, "vertical": upv, "roll": upv})
+	var cc = rig.chains.get("chest")
+	var hc = rig.chains.get("head")
+	var bend := _num(g, "lean", 0.0) + _num(g, "posture", 0.0)
+	if cc != null and not cc.is_empty() and bend != 0.0 and rig.index.has(cc[0]):
+		acc.turn(cc[0], local_delta(rig, rig.index[cc[0]], f.side, bend * DEG))
+	var posture := _num(g, "posture", 0.0)
+	if hc != null and not hc.is_empty() and posture != 0.0 and rig.index.has(hc[0]):
+		acc.turn(hc[0], local_delta(rig, rig.index[hc[0]], f.side, -posture * DEG))
+
+
 # ── основные слои и пол (primary) ──────────────────────────────────────────────────────────────────────────────
 ## opts: { "floor": Callable(bone: String, F: Vector3, rest: float) -> float — высота пола под стопой (рельеф в игре),
 ##         "targets": { id констрейна: Vector3 } — живые цели } — всё в координатах модели, как LiveOpts ядра.
@@ -658,6 +786,13 @@ static func primary(rig: Rig, clip: Dictionary, t: float, opts := {}) -> Acc:
 	var trv = clip.get("travel")
 	if trv != null and trv.get("reverse", false):
 		t = float(clip["duration"]) - t
+	var src := clip
+	var gs = clip.get("gait")
+	var cad := gait_cadence(gs)
+	if cad != 1.0:
+		t *= cad
+		clip = clip.duplicate()
+		clip["duration"] = float(src["duration"]) * cad
 	var acc := Acc.new(rig)
 	if not rig.align.is_empty():
 		align_rest(acc, rig)
@@ -698,6 +833,9 @@ static func primary(rig: Rig, clip: Dictionary, t: float, opts := {}) -> Acc:
 					var ax_chain: Array = chain if chain.size() > 1 else [bone]
 					var axis: String = tr["axis"]
 					acc.add(bone, axis, 1.0 + v if axis.begins_with("scale_") else v, func(): return chain_axes(rig, ax_chain))
+	if gs != null:
+		apply_gait(acc, rig, src, rig.heights.get(SIZE, 1.0))
+	clip = src
 	if trv != null:
 		apply_travel(acc, rig, trv)
 	if not rig.limits.is_empty():

@@ -7,7 +7,8 @@ import { addPoseDelta, buildRig, frameTimes, motionAt, reach } from "./evaluate.
 import { LIMIT_AXES, boneAngles, limitFrame, type BoneLimit, type LimitAxis } from "./limits.ts";
 import { DEG, qaxis, qrot, vdot, vsub } from "./math.ts";
 import { bodyFrame } from "./evaluate.ts";
-import { DIRECTION_NAMES, DIRECTIONS_SOURCE, directionClip } from "./directions.ts";
+import { DIRECTION_NAMES, DIRECTIONS_SOURCE, GAIT_STYLES, directionClip } from "./directions.ts";
+import { gaitCadence } from "./evaluate.ts";
 
 const wrapAngle = (x: number) => { const w = ((((x + 180) % 360) + 360) % 360) - 180; return w === -180 ? 180 : w; };
 
@@ -745,6 +746,30 @@ const defs: CommandDef[] = [
         return { clip: name, angle: w, travel: c.travel, duration: c.duration };
       });
       return { face, source: DIRECTIONS_SOURCE, clips: made };
+    },
+  },
+  {
+    name: "clip.gait",
+    help: "Стиль походки поверх любых слоёв цикла: speed (×, частота ^0.6, шаг ^0.4 — длина клипа меняется сама), bounce, sway, arms, lift (× вокруг среднего за цикл), width (°), lower (доля роста), lean, posture (°). style — готовый набор: stroll | brisk | heavy | sneak; поля поверх него. Без style и gait — убрать.",
+    args: {
+      clip: { type: "string", required: true, help: "цикл ходьбы" },
+      style: { type: "string", help: "stroll | brisk | heavy | sneak" },
+      gait: { type: "json", help: "ручки, например {\"speed\":1.2,\"bounce\":0.5}" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const clip = clipOf(ctx, a.clip);
+      need(clip.loop, `«${a.clip}» не цикл — стиль походки ставится на цикл`);
+      const keys = ["speed", "bounce", "sway", "arms", "lift", "width", "lower", "lean", "posture"];
+      if (a.style) need(GAIT_STYLES[a.style], `нет стиля «${a.style}». Есть: ${Object.keys(GAIT_STYLES).join(", ")}`);
+      for (const [k, v] of Object.entries(a.gait ?? {})) need(keys.includes(k) && Number.isFinite(Number(v)), `gait.${k}: есть ${keys.join(", ")}, числа`);
+      const next = a.style || a.gait ? { ...(a.style ? GAIT_STYLES[a.style].gait : {}), ...Object.fromEntries(Object.entries(a.gait ?? {}).map(([k, v]) => [k, Number(v)])) } : undefined;
+      need(!next?.speed || next.speed > 0, "speed > 0");
+      // длина клипа — под новую частоту шагов: в цикле те же шаги
+      clip.duration = +((clip.duration * gaitCadence(clip.gait)) / gaitCadence(next)).toFixed(4);
+      if (next) clip.gait = next;
+      else delete clip.gait;
+      return { gait: clip.gait ?? null, duration: clip.duration };
     },
   },
   {
