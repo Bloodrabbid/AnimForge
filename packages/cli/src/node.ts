@@ -748,7 +748,7 @@ NODE_COMMANDS["clip.copy"] = {
   },
 };
 
-export interface ClipPack { id: string; name: string; author: string; license: string; url: string; skeleton: string; file: string }
+export interface ClipPack { id: string; name: string; author: string; license: string; terms?: string; url: string; skeleton: string; body?: string; file: string }
 export const clipPacks = (): ClipPack[] => JSON.parse(readFileSync(join(ROOT, "library/clips/packs.json"), "utf8")).packs;
 
 /** Скелет чужого файла как «сторона» переноса: цепочки и «вперёд» — тем же распознаванием, что rig.detect. */
@@ -807,6 +807,46 @@ NODE_COMMANDS["clip.import"] = {
     }
     saveProject(dir, ctx.project);
     return { source: src.body, clips: out };
+  },
+};
+
+NODE_COMMANDS["clips.pack"] = {
+  help: "Положить свободный пак клипов в библиотеку (library/clips): файл с анимациями (FBX, glb, BVH) → glb без меша (скелет и дубли) и запись в packs.json с происхождением. Только CC0, общественное достояние или CMU.",
+  args: {
+    file: { type: "string", required: true, help: "файл с анимациями" },
+    id: { type: "string", required: true, help: "id пака (имя файла в library/clips)" },
+    name: { type: "string", required: true, help: "название" },
+    author: { type: "string", required: true, help: "автор" },
+    license: { type: "string", required: true, help: "лицензия: CC0, «public domain» или CMU (свободно, без перепродажи данных)" },
+    url: { type: "string", required: true, help: "откуда скачан" },
+    terms: { type: "string", help: "полный текст условий, если лицензия не CC0" },
+  },
+  async run(_dir, a) {
+    // CMU: «свободно для любых целей, нельзя перепродавать сами данные» — владелец разрешил брать (15.10.2026)
+    if (!/^(cc0|public domain|cmu)/i.test(a.license)) throw new Error("в библиотеку — только CC0, общественное достояние или CMU");
+    const { readAnimDoc, animSkeleton } = await import("./animfile.ts");
+    const { prune, dedup, resample } = await import("@gltf-transform/functions");
+    const file = resolve(process.env.INIT_CWD ?? process.cwd(), a.file);
+    const doc = await readAnimDoc(file, BLENDER, BLENDER_ENV, join(ROOT, "bridge/blender/import_anim.py"));
+    if (!doc.getRoot().listAnimations().length) throw new Error("в файле нет анимаций");
+    const side = detectSide(animSkeleton(doc));
+    for (const n of doc.getRoot().listNodes()) if (n.getMesh()) n.setMesh(null);
+    for (const m of doc.getRoot().listMeshes()) m.dispose();
+    for (const t of doc.getRoot().listTextures()) t.dispose();
+    await doc.transform(resample(), dedup(), prune({ keepLeaves: true, keepAttributes: false }));
+    // материалов нет — и расширений (unlit, texture_transform) не нужно: файл читается любым glTF-ридером
+    for (const e of doc.getRoot().listExtensionsUsed()) e.dispose();
+    const out = join(ROOT, "library/clips", `${a.id}.glb`);
+    const { ALL_EXTENSIONS } = await import("@gltf-transform/extensions");
+    await new NodeIO().registerExtensions(ALL_EXTENSIONS).write(out, doc);
+    const joints = side.rig.skel.nodes.filter((n) => n.isJoint).length;
+    const pf = join(ROOT, "library/clips/packs.json");
+    const j = JSON.parse(readFileSync(pf, "utf8"));
+    const BODY: Record<string, string> = { biped: "двуногое", quadruped: "четвероногое", other: "своё тело" };
+    const entry = { id: a.id, name: a.name, author: a.author, license: a.license, ...(a.terms ? { terms: a.terms } : {}), url: a.url, skeleton: `${BODY[side.body] ?? side.body}, ${joints} костей`, body: side.body, file: `${a.id}.glb` };
+    j.packs = [...j.packs.filter((p: ClipPack) => p.id !== a.id), entry];
+    writeFileSync(pf, JSON.stringify(j, null, 2) + "\n");
+    return { ...entry, takes: doc.getRoot().listAnimations().map((x) => x.getName()), bytes: readFileSync(out).length };
   },
 };
 

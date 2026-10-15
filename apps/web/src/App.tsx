@@ -31,7 +31,7 @@ import { KeysPanel } from "./KeysPanel.tsx";
 import { LayersPanel } from "./LayersPanel.tsx";
 import { SimplePanel } from "./SimplePanel.tsx";
 import { LibraryPanel, chainsFor, sourceOf, type Entry } from "./LibraryPanel.tsx";
-import { ClipsPanel } from "./ClipsPanel.tsx";
+import { ClipsPanel, takeLabel } from "./ClipsPanel.tsx";
 import { Timeline } from "./Timeline.tsx";
 import { Viewport, type Trail, type ViewCmd } from "./Viewport.tsx";
 import { GraphPanel, isShown, limbColor, useMotionGraph } from "./GraphPanel.tsx";
@@ -215,7 +215,7 @@ export function App() {
       setBusy(true);
       try {
         const next = await preview(DIR, steps);
-        setTrial((old) => ({ label: take, sub: `${pack.name} · ${pack.license}`, clip: name, prevClip: old ? old.prevClip : clipName, steps, project: next }));
+        setTrial((old) => ({ label: takeLabel(take), sub: `${pack.name} · ${pack.license}`, clip: name, prevClip: old ? old.prevClip : clipName, steps, project: next }));
         setClipName(name);
         setT(0);
         setPlaying(true);
@@ -496,7 +496,7 @@ export function App() {
         </div>
         <div className="tab-body">
           {leftTab === "clips" ? (
-            <ClipsPanel active={trial?.label ?? null} onTry={tryClip} />
+            <ClipsPanel active={trial?.label ?? null} body={body?.body} onTry={tryClip} />
           ) : leftTab === "library" || !advanced ? (
             <>
             {clip && (

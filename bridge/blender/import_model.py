@@ -6,6 +6,12 @@ src, out = a[0], a[1]
 bpy.ops.wm.read_factory_settings(use_empty=True)
 ext = os.path.splitext(src)[1].lower()
 if ext == ".fbx":
+    # импортёр FBX в Blender 5 падает на светильниках старых файлов (lamp.cycles.cast_shadow) — свет не нужен
+    try:
+        import io_scene_fbx.import_fbx as F
+        F.blen_read_light = lambda *a, **k: bpy.data.lights.new(name="light", type="POINT")
+    except Exception as e:
+        print("IMPORT_WARN", e)
     bpy.ops.import_scene.fbx(filepath=src, automatic_bone_orientation=True, ignore_leaf_bones=True)
 elif ext in (".glb", ".gltf"):
     bpy.ops.import_scene.gltf(filepath=src)

@@ -1,5 +1,5 @@
 {
-  "note": "Готовые клипы для clip.import: только свободные (CC0 / общественное достояние). Меш убран — скелет и анимации; глядеть на своей модели.",
+  "note": "Готовые клипы для clip.import: только свободные — CC0 / общественное достояние и CMU mocap (свободно для любых целей, кроме перепродажи самих данных). Меш убран — скелет и анимации; глядеть на своей модели.",
   "packs": [
     {
       "id": "quaternius-ual1",
@@ -18,6 +18,460 @@
       "url": "https://opengameart.org/content/universal-animation-library-2",
       "skeleton": "имена Unreal (Manny), 65 костей с пальцами",
       "file": "quaternius-ual2.glb"
+    },
+    {
+      "id": "cmu-acrobatics",
+      "name": "CMU · акробатика, удары, боевые искусства",
+      "author": "CMU Graphics Lab (mocap.cs.cmu.edu)",
+      "license": "CMU",
+      "url": "https://github.com/una-dinosauria/cmu-mocap",
+      "skeleton": "двуногое, 31 костей",
+      "body": "biped",
+      "file": "cmu-acrobatics.glb",
+      "terms": "CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu): free for all uses, may be used in commercial products; the data itself may not be resold, even in converted form. BVH conversion by B. Hahne (cgspeed). Взято с разрешения владельца AnimForge 15.10.2026."
+    },
+    {
+      "id": "cmu-action",
+      "name": "CMU · бег, прыжки, крадучись, подъём с земли",
+      "author": "CMU Graphics Lab (mocap.cs.cmu.edu)",
+      "license": "CMU",
+      "url": "https://github.com/una-dinosauria/cmu-mocap",
+      "skeleton": "двуногое, 31 костей",
+      "body": "biped",
+      "file": "cmu-action.glb",
+      "terms": "CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu): free for all uses, may be used in commercial products; the data itself may not be resold, even in converted form. BVH conversion by B. Hahne (cgspeed). Взято с разрешения владельца AnimForge 15.10.2026."
+    },
+    {
+      "id": "cmu-dance-animals",
+      "name": "CMU · танцы и звери в исполнении человека",
+      "author": "CMU Graphics Lab (mocap.cs.cmu.edu)",
+      "license": "CMU",
+      "url": "https://github.com/una-dinosauria/cmu-mocap",
+      "skeleton": "двуногое, 31 костей",
+      "body": "biped",
+      "file": "cmu-dance-animals.glb",
+      "terms": "CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu): free for all uses, may be used in commercial products; the data itself may not be resold, even in converted form. BVH conversion by B. Hahne (cgspeed). Взято с разрешения владельца AnimForge 15.10.2026."
+    },
+    {
+      "id": "cmu-walks",
+      "name": "CMU · походки и стили",
+      "author": "CMU Graphics Lab (mocap.cs.cmu.edu)",
+      "license": "CMU",
+      "url": "https://github.com/una-dinosauria/cmu-mocap",
+      "skeleton": "двуногое, 31 костей",
+      "body": "biped",
+      "file": "cmu-walks.glb",
+      "terms": "CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu): free for all uses, may be used in commercial products; the data itself may not be resold, even in converted form. BVH conversion by B. Hahne (cgspeed). Взято с разрешения владельца AnimForge 15.10.2026."
+    },
+    {
+      "id": "kaykit-skeletons",
+      "name": "KayKit · Skeletons (Rig_Medium)",
+      "author": "Kay Lousberg (KayKit)",
+      "license": "CC0",
+      "url": "https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0",
+      "skeleton": "двуногое, 41 костей",
+      "body": "biped",
+      "file": "kaykit-skeletons.glb"
+    },
+    {
+      "id": "quaternius-animals-chick",
+      "name": "Quaternius · Animals Pack · цыплёнок",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/5-low-poly-animals",
+      "skeleton": "двуногое, 10 костей",
+      "body": "biped",
+      "file": "quaternius-animals-chick.glb"
+    },
+    {
+      "id": "quaternius-chars-base",
+      "name": "Quaternius · Ultimate Animated Character · человек",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/animated-characters-pack",
+      "skeleton": "двуногое, 23 костей",
+      "body": "biped",
+      "file": "quaternius-chars-base.glb"
+    },
+    {
+      "id": "quaternius-monster-bat",
+      "name": "Quaternius · Animated Monsters · летучая мышь",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/lowpoly-animated-monsters",
+      "skeleton": "двуногое, 24 костей",
+      "body": "biped",
+      "file": "quaternius-monster-bat.glb"
+    },
+    {
+      "id": "quaternius-monster-dragon",
+      "name": "Quaternius · Animated Monsters · дракон",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/lowpoly-animated-monsters",
+      "skeleton": "двуногое, 28 костей",
+      "body": "biped",
+      "file": "quaternius-monster-dragon.glb"
+    },
+    {
+      "id": "quaternius-robot",
+      "name": "Quaternius · Animated Robot",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/animated-robot",
+      "skeleton": "двуногое, 43 костей",
+      "body": "biped",
+      "file": "quaternius-robot.glb"
+    },
+    {
+      "id": "quaternius-animals-fox",
+      "name": "Quaternius · Animals Pack · лиса",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/5-low-poly-animals",
+      "skeleton": "четвероногое, 17 костей",
+      "body": "quadruped",
+      "file": "quaternius-animals-fox.glb"
+    },
+    {
+      "id": "quaternius-animals2-cat",
+      "name": "Quaternius · Animal Pack Vol.2 · кот",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/animated-animales-low-poly",
+      "skeleton": "четвероногое, 20 костей",
+      "body": "quadruped",
+      "file": "quaternius-animals2-cat.glb"
+    },
+    {
+      "id": "quaternius-animals2-dog",
+      "name": "Quaternius · Animal Pack Vol.2 · собака",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/animated-animales-low-poly",
+      "skeleton": "четвероногое, 20 костей",
+      "body": "quadruped",
+      "file": "quaternius-animals2-dog.glb"
+    },
+    {
+      "id": "quaternius-animals2-wolf",
+      "name": "Quaternius · Animal Pack Vol.2 · волк",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/animated-animales-low-poly",
+      "skeleton": "четвероногое, 20 костей",
+      "body": "quadruped",
+      "file": "quaternius-animals2-wolf.glb"
+    },
+    {
+      "id": "kenney-blocky",
+      "name": "Kenney · Blocky Characters",
+      "author": "Kenney",
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/blocky-characters",
+      "skeleton": "своё тело, 7 костей",
+      "body": "other",
+      "file": "kenney-blocky.glb"
+    },
+    {
+      "id": "kenney-cubepets",
+      "name": "Kenney · Cube Pets",
+      "author": "Kenney",
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/cube-pets",
+      "skeleton": "своё тело, 7 костей",
+      "body": "other",
+      "file": "kenney-cubepets.glb"
+    },
+    {
+      "id": "kenney-mini",
+      "name": "Kenney · Mini Characters",
+      "author": "Kenney",
+      "license": "CC0",
+      "url": "https://kenney.nl/assets/mini-characters",
+      "skeleton": "своё тело, 7 костей",
+      "body": "other",
+      "file": "kenney-mini.glb"
+    },
+    {
+      "id": "quaternius-animals-bird",
+      "name": "Quaternius · Animals Pack · птица",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/5-low-poly-animals",
+      "skeleton": "своё тело, 11 костей",
+      "body": "other",
+      "file": "quaternius-animals-bird.glb"
+    },
+    {
+      "id": "quaternius-animals-fish",
+      "name": "Quaternius · Animals Pack · рыба",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/5-low-poly-animals",
+      "skeleton": "своё тело, 7 костей",
+      "body": "other",
+      "file": "quaternius-animals-fish.glb"
+    },
+    {
+      "id": "quaternius-animals-whale",
+      "name": "Quaternius · Animals Pack · кит",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/5-low-poly-animals",
+      "skeleton": "своё тело, 9 костей",
+      "body": "other",
+      "file": "quaternius-animals-whale.glb"
+    },
+    {
+      "id": "quaternius-animals2-eagle",
+      "name": "Quaternius · Animal Pack Vol.2 · орёл",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/animated-animales-low-poly",
+      "skeleton": "своё тело, 24 костей",
+      "body": "other",
+      "file": "quaternius-animals2-eagle.glb"
+    },
+    {
+      "id": "quaternius-animals2-piranha",
+      "name": "Quaternius · Animal Pack Vol.2 · пиранья",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/animated-animales-low-poly",
+      "skeleton": "своё тело, 9 костей",
+      "body": "other",
+      "file": "quaternius-animals2-piranha.glb"
+    },
+    {
+      "id": "quaternius-monster-skeleton",
+      "name": "Quaternius · Animated Monsters · скелет",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/lowpoly-animated-monsters",
+      "skeleton": "своё тело, 12 костей",
+      "body": "other",
+      "file": "quaternius-monster-skeleton.glb"
+    },
+    {
+      "id": "quaternius-monster-slime",
+      "name": "Quaternius · Animated Monsters · слизень",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/lowpoly-animated-monsters",
+      "skeleton": "своё тело, 12 костей",
+      "body": "other",
+      "file": "quaternius-monster-slime.glb"
+    },
+    {
+      "id": "quaternius-monsters-alien",
+      "name": "Quaternius · Cute Animated Monsters · Alien",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/textured-cute-monster-pack",
+      "skeleton": "своё тело, 7 костей",
+      "body": "other",
+      "file": "quaternius-monsters-alien.glb"
+    },
+    {
+      "id": "quaternius-monsters-alien-tall",
+      "name": "Quaternius · Cute Animated Monsters · Alien_Tall",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/textured-cute-monster-pack",
+      "skeleton": "своё тело, 5 костей",
+      "body": "other",
+      "file": "quaternius-monsters-alien-tall.glb"
+    },
+    {
+      "id": "quaternius-monsters-bat",
+      "name": "Quaternius · Cute Animated Monsters · Bat",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/textured-cute-monster-pack",
+      "skeleton": "своё тело, 15 костей",
+      "body": "other",
+      "file": "quaternius-monsters-bat.glb"
+    },
+    {
+      "id": "quaternius-monsters-bee",
+      "name": "Quaternius · Cute Animated Monsters · Bee",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/textured-cute-monster-pack",
+      "skeleton": "своё тело, 9 костей",
+      "body": "other",
+      "file": "quaternius-monsters-bee.glb"
+    },
+    {
+      "id": "quaternius-monsters-cactus",
+      "name": "Quaternius · Cute Animated Monsters · Cactus",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/textured-cute-monster-pack",
+      "skeleton": "своё тело, 7 костей",
+      "body": "other",
+      "file": "quaternius-monsters-cactus.glb"
+    },
+    {
+      "id": "quaternius-monsters-chicken",
+      "name": "Quaternius · Cute Animated Monsters · Chicken",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/textured-cute-monster-pack",
+      "skeleton": "своё тело, 6 костей",
+      "body": "other",
+      "file": "quaternius-monsters-chicken.glb"
+    },
+    {
+      "id": "quaternius-monsters-crab",
+      "name": "Quaternius · Cute Animated Monsters · Crab",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/textured-cute-monster-pack",
+      "skeleton": "своё тело, 8 костей",
+      "body": "other",
+      "file": "quaternius-monsters-crab.glb"
+    },
+    {
+      "id": "quaternius-monsters-cthulhu",
+      "name": "Quaternius · Cute Animated Monsters · Cthulhu",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/textured-cute-monster-pack",
+      "skeleton": "своё тело, 16 костей",
+      "body": "other",
+      "file": "quaternius-monsters-cthulhu.glb"
+    },
+    {
+      "id": "quaternius-monsters-cyclops",
+      "name": "Quaternius · Cute Animated Monsters · Cyclops",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/textured-cute-monster-pack",
+      "skeleton": "своё тело, 7 костей",
+      "body": "other",
+      "file": "quaternius-monsters-cyclops.glb"
+    },
+    {
+      "id": "quaternius-monsters-deer",
+      "name": "Quaternius · Cute Animated Monsters · Deer",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/textured-cute-monster-pack",
+      "skeleton": "своё тело, 5 костей",
+      "body": "other",
+      "file": "quaternius-monsters-deer.glb"
+    },
+    {
+      "id": "quaternius-monsters-demon",
+      "name": "Quaternius · Cute Animated Monsters · Demon",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/textured-cute-monster-pack",
+      "skeleton": "своё тело, 7 костей",
+      "body": "other",
+      "file": "quaternius-monsters-demon.glb"
+    },
+    {
+      "id": "quaternius-monsters-ghost",
+      "name": "Quaternius · Cute Animated Monsters · Ghost",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/textured-cute-monster-pack",
+      "skeleton": "своё тело, 7 костей",
+      "body": "other",
+      "file": "quaternius-monsters-ghost.glb"
+    },
+    {
+      "id": "quaternius-monsters-greendemon",
+      "name": "Quaternius · Cute Animated Monsters · GreenDemon",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/textured-cute-monster-pack",
+      "skeleton": "своё тело, 7 костей",
+      "body": "other",
+      "file": "quaternius-monsters-greendemon.glb"
+    },
+    {
+      "id": "quaternius-monsters-mushroom",
+      "name": "Quaternius · Cute Animated Monsters · Mushroom",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/textured-cute-monster-pack",
+      "skeleton": "своё тело, 5 костей",
+      "body": "other",
+      "file": "quaternius-monsters-mushroom.glb"
+    },
+    {
+      "id": "quaternius-monsters-panda",
+      "name": "Quaternius · Cute Animated Monsters · Panda",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/textured-cute-monster-pack",
+      "skeleton": "своё тело, 7 костей",
+      "body": "other",
+      "file": "quaternius-monsters-panda.glb"
+    },
+    {
+      "id": "quaternius-monsters-penguin",
+      "name": "Quaternius · Cute Animated Monsters · Penguin",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/textured-cute-monster-pack",
+      "skeleton": "своё тело, 6 костей",
+      "body": "other",
+      "file": "quaternius-monsters-penguin.glb"
+    },
+    {
+      "id": "quaternius-monsters-pig",
+      "name": "Quaternius · Cute Animated Monsters · Pig",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/textured-cute-monster-pack",
+      "skeleton": "своё тело, 5 костей",
+      "body": "other",
+      "file": "quaternius-monsters-pig.glb"
+    },
+    {
+      "id": "quaternius-monsters-skull",
+      "name": "Quaternius · Cute Animated Monsters · Skull",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/textured-cute-monster-pack",
+      "skeleton": "своё тело, 5 костей",
+      "body": "other",
+      "file": "quaternius-monsters-skull.glb"
+    },
+    {
+      "id": "quaternius-monsters-tree",
+      "name": "Quaternius · Cute Animated Monsters · Tree",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/textured-cute-monster-pack",
+      "skeleton": "своё тело, 7 костей",
+      "body": "other",
+      "file": "quaternius-monsters-tree.glb"
+    },
+    {
+      "id": "quaternius-monsters-yellowdragon",
+      "name": "Quaternius · Cute Animated Monsters · YellowDragon",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/textured-cute-monster-pack",
+      "skeleton": "своё тело, 17 костей",
+      "body": "other",
+      "file": "quaternius-monsters-yellowdragon.glb"
+    },
+    {
+      "id": "quaternius-monsters-yeti",
+      "name": "Quaternius · Cute Animated Monsters · Yeti",
+      "author": "Quaternius",
+      "license": "CC0",
+      "url": "https://opengameart.org/content/textured-cute-monster-pack",
+      "skeleton": "своё тело, 7 костей",
+      "body": "other",
+      "file": "quaternius-monsters-yeti.glb"
     }
   ]
 }

@@ -130,3 +130,47 @@ test("через FBX: имена Mixamo (Unity, сантиметры) и Unreal 
     }
   }
 });
+
+test("волк Quaternius (с IK-костями ног и концевыми метками) → четвероногое демо: ноги туда же", async () => {
+  const doc = await new NodeIO().read(join(ROOT, "library/clips/quaternius-animals2-wolf.glb"));
+  const src = detectSide(animSkeleton(doc));
+  assert.equal(src.body, "quadruped", "волк должен распознаться четвероногим");
+  const ctx = await loadCtx(join(ROOT, "projects/quadruped-demo"));
+  const dst = { project: { ...ctx.project, limits: undefined }, rig: buildRig(ctx.skeleton) };
+  const plan = importPlan(src, dst);
+  const names = new Map([...plan.from].map(([j, i]) => [dst.rig.skel.nodes[j].name, src.rig.skel.nodes[i].name]));
+  const tk = readTakes(doc, 30, [doc.getRoot().listAnimations().find((a) => /walk/i.test(a.getName()))!.getName()])[0];
+  const r = importClip(src, dst, tk.frames, { name: "w", loop: true });
+  const sf = bodyFrame(src.project), df = bodyFrame(dst.project);
+  const inBody = (v: Vec3, f: typeof sf): Vec3 => { const n = vnorm(v); return [vdot(n, f.side), vdot(n, f.up), vdot(n, f.forward)]; };
+  let worst = 0, what = "";
+  for (const fi of [0, 5, 10, 15]) {
+    const f = tk.frames[fi];
+    const S = worldPose(src.rig, { rot: new Map(Object.entries(f.rot)), pos: new Map(Object.entries(f.pos)), scl: new Map() }).T;
+    const D = worldPose(dst.rig, posePartsAt(dst.project, dst.rig, r.clip, f.t)).T;
+    for (const ch of ["arm_l", "arm_r", "leg_l", "leg_r"]) {
+      const c = dst.project.chains[ch]!;
+      const [a, b] = [c[0], c[1]];
+      if (!names.has(a) || !names.has(b)) { assert.fail(`нет пары у ${a} или ${b}`); }
+      const u = inBody(vsub(S[src.rig.index.get(names.get(b)!)!], S[src.rig.index.get(names.get(a)!)!]), sf);
+      const v = inBody(vsub(D[dst.rig.index.get(b)!], D[dst.rig.index.get(a)!]), df);
+      const e = (Math.acos(Math.min(1, vdot(u, v))) * 180) / Math.PI;
+      if (e > worst) { worst = e; what = `${ch} кадр ${fi}`; }
+    }
+  }
+  assert.ok(worst < 1, `направление ${what} расходится на ${worst.toFixed(2)}°`);
+});
+
+test("робот Quaternius: меш и кость с одним именем не ломают скелет", async () => {
+  const doc = await new NodeIO().read(join(ROOT, "library/clips/quaternius-robot.glb"));
+  const raw = doc.getRoot().listNodes().map((n) => n.getName());
+  assert.ok(raw.length > new Set(raw).size, "в файле должны быть повторы имён — иначе тест ничего не проверяет");
+  const sk = animSkeleton(doc);
+  assert.equal(new Set(sk.nodes.map((n) => n.name)).size, sk.nodes.length);
+  const s = detectSide(sk);
+  assert.equal(s.body, "biped");
+  const tk = readTakes(doc, 30)[0];
+  const ctx = await loadCtx(join(ROOT, "projects/worker-demo"));
+  const r = importClip(s, { project: ctx.project, rig: buildRig(ctx.skeleton) }, tk.frames, { name: "r", loop: false });
+  assert.ok(r.clip.layers[0].type === "pose" && r.clip.layers[0].keys.length === tk.frames.length);
+});

@@ -7,6 +7,13 @@ bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.context.scene.render.fps = 30
 ext = os.path.splitext(src)[1].lower()
 if ext == ".fbx":
+    # импортёр FBX в Blender 5 падает на светильниках старых файлов (lamp.cycles.cast_shadow) — свет нам не нужен:
+    # подменяем чтение света простой лампой
+    try:
+        import io_scene_fbx.import_fbx as F
+        F.blen_read_light = lambda *a, **k: bpy.data.lights.new(name="light", type="POINT")
+    except Exception as e:
+        print("ANIM_WARN", e)
     # концевые кости не выбрасываем: у своих скелетов (кисть-варежка, ухо) это настоящие кости со своими поворотами
     bpy.ops.import_scene.fbx(filepath=src, automatic_bone_orientation=True, ignore_leaf_bones=False)
 elif ext == ".bvh":

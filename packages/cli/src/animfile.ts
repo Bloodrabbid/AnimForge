@@ -2,6 +2,7 @@
 // узлов с частотой fps (сэмплеры glTF: LINEAR, STEP, CUBICSPLINE). Скелет без скина (BVH) — узлы с анимацией и их
 // потомки считаются костями.
 import { NodeIO, type Document, type Node } from "@gltf-transform/core";
+import { ALL_EXTENSIONS } from "@gltf-transform/extensions";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -25,7 +26,8 @@ function slerp(a: number[], b: number[], u: number): number[] {
 }
 
 export async function readAnimDoc(file: string, blender: string, env: NodeJS.ProcessEnv, bridge: string): Promise<Document> {
-  const io = new NodeIO();
+  // расширения glTF (unlit, texture_transform…) — у чужих файлов они бывают обязательными
+  const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
   const ext = extname(file).toLowerCase();
   if (ext === ".glb" || ext === ".gltf") return io.read(file);
   const out = join(mkdtempSync(join(tmpdir(), "af-anim-")), "anim.glb");
@@ -36,13 +38,55 @@ export async function readAnimDoc(file: string, blender: string, env: NodeJS.Pro
 
 /** Скелет файла клипов: со скином — как у модели; без скина — анимированные узлы и их потомки. */
 export function animSkeleton(doc: Document): Skeleton {
-  const skel = readSkeleton(doc);
-  if (skel.nodes.some((n) => n.isJoint)) return skel;
+  const skel = uniqueNames(readSkeleton(doc));
+  if (skel.nodes.some((n) => n.isJoint)) return mainTree(skel);
   const animated = new Set<string>();
   for (const a of doc.getRoot().listAnimations()) for (const c of a.listChannels()) { const n = c.getTargetNode(); if (n) animated.add(n.getName()); }
   const joint = new Set<string>();
   for (const n of skel.nodes) if (animated.has(n.name) || (n.parent && joint.has(n.parent))) joint.add(n.name);
-  return { nodes: skel.nodes.map((n) => ({ ...n, isJoint: joint.has(n.name) })) };
+  return mainTree({ nodes: skel.nodes.map((n) => ({ ...n, isJoint: joint.has(n.name) })) });
+}
+
+/** Одинаковые имена (меш и кость «Head», у роботов Quaternius) ломают поиск по имени: повторы не-костей — с суффиксом. */
+function uniqueNames(skel: Skeleton): Skeleton {
+  const par = skel.nodes.map((n, i) => {
+    if (n.parent == null) return -1;
+    for (let j = i - 1; j >= 0; j--) if (skel.nodes[j].name === n.parent) return j;
+    return -1;
+  });
+  const count = new Map<string, number>();
+  skel.nodes.forEach((n) => count.set(n.name, (count.get(n.name) ?? 0) + 1));
+  if ([...count.values()].every((c) => c === 1)) return skel;
+  const seen = new Map<string, number>();
+  const names = skel.nodes.map((n) => {
+    if (count.get(n.name)! === 1) return n.name;
+    // кость сохраняет имя (на неё ссылаются анимации), остальные — с суффиксом
+    const firstJoint = skel.nodes.find((m) => m.name === n.name && m.isJoint);
+    if (firstJoint === n || (!firstJoint && !seen.has(n.name))) { seen.set(n.name, 1); return n.name; }
+    const k = (seen.get(n.name) ?? 0) + 1;
+    seen.set(n.name, k);
+    return `${n.name}#${k}`;
+  });
+  return { nodes: skel.nodes.map((n, i) => ({ ...n, name: names[i], parent: par[i] >= 0 ? names[par[i]] : null })) };
+}
+
+/** Кости для распознавания: без управляющих корней — IK-цели ног у зверей Quaternius, полюса, контроллеры висят
+ * отдельными корнями скелета, и с ними четвероногое не узнаётся. */
+function mainTree(skel: Skeleton): Skeleton {
+  // родитель — ближайший предыдущий узел с его именем (узлы идут в глубину, родитель раньше ребёнка): с одинаковыми
+  // именами у меша и кости поиск по имени зациклился бы
+  const par = skel.nodes.map((n, i) => {
+    if (n.parent == null) return -1;
+    for (let j = i - 1; j >= 0; j--) if (skel.nodes[j].name === n.parent) return j;
+    return -1;
+  });
+  const jointParent = (i: number): number => {
+    for (let p = par[i]; p >= 0; p = par[p]) if (skel.nodes[p].isJoint) return p;
+    return -1;
+  };
+  const root = (i: number): number => { let r = i; for (let p = jointParent(i); p >= 0; p = jointParent(p)) r = p; return r; };
+  const control = (i: number) => /(^|[^a-z])(ik|pole|target|ctrl|control)/i.test(skel.nodes[root(i)].name);
+  return { nodes: skel.nodes.map((n, i) => ({ ...n, isJoint: n.isJoint && !control(i) })) };
 }
 
 /** Дубли файла: кадры с шагом 1/fps от 0 до конца дубля включительно. */

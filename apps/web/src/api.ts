@@ -101,8 +101,10 @@ export interface ClipPackInfo {
   name: string;
   author: string;
   license: string;
+  terms?: string;
   url: string;
   skeleton: string;
+  body?: string;
   takes: { name: string; duration: number }[];
 }
 export const fetchClips = (): Promise<ClipPackInfo[]> => fetch("/api/clips").then((r) => r.json());
