@@ -83,6 +83,10 @@ export const SYNTHETIC_SHAPE_ONCE: Clip = {
   layers: [{ id: "hit", type: "recipe", recipe: "melee-strike", target: { chain: "arm_r" }, params: { role: "arm", hits: 1 }, shape: { late: 0.1, amount: 0.7 } }],
 };
 
+/** Догоняющее движение (clip.follow): грудь за тазом, голова и руки за грудью; цикл и разовый клип. */
+export const SYNTHETIC_FOLLOW: Clip = { ...SYNTHETIC_TRAVEL, name: "synthetic_follow", travel: undefined, ground: { bones: ["foot_l", "foot_r"], mode: "floor", ik: true }, follow: { lag: 0.12, bounce: 0.6, loosen: 0.8 } };
+export const SYNTHETIC_FOLLOW_ONCE: Clip = { ...SYNTHETIC_SHAPE_ONCE, name: "synthetic_follow_once", layers: [...SYNTHETIC_SHAPE_ONCE.layers, { id: "core", type: "recipe", recipe: "melee-strike", target: { chain: "pelvis" }, params: { role: "pelvis", hits: 1 } }], follow: { lag: 0.05, bounce: 0.2 } };
+
 /** Моменты сверки: края, середина и точки между кадрами (живой рецепт считается в любой момент, не по кадрам). */
 const checkTimes = (d: number) => [0, 0.013, 0.137, 0.29, 0.5, 0.731, 0.97, 1].map((u) => +(u * d).toFixed(6));
 
@@ -97,7 +101,7 @@ export async function liveVerify(dirs?: string[]) {
     const syn = structuredClone(worker);
     syn.project.name = "worker-synthetic";
     syn.project.align = { arm_l: { to: "down", abduct: 8 } };
-    syn.project.clips = [SYNTHETIC, SYNTHETIC_TRAVEL, SYNTHETIC_GAIT, SYNTHETIC_SHAPE, SYNTHETIC_SHAPE_ONCE];
+    syn.project.clips = [SYNTHETIC, SYNTHETIC_TRAVEL, SYNTHETIC_GAIT, SYNTHETIC_SHAPE, SYNTHETIC_SHAPE_ONCE, SYNTHETIC_FOLLOW, SYNTHETIC_FOLLOW_ONCE];
     ctxs.push(syn);
   }
   for (const ctx of ctxs) {

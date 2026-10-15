@@ -759,6 +759,7 @@ export function reach(project: Project, rig: Rig, clip: Clip, t: number, bone: s
   const fi = rig.index.get(bone);
   if (fi == null) throw new Error(`нет кости «${bone}»`);
   const acc = primary(project, rig, clip, t);
+  if (clip.follow) addFollow(acc, project, rig, clip, t);
   // end — тянут конец кости-листа (кисть-варежка, кончик хвоста): сгибается и она сама
   const chain = length > 0 ? ikChain(rig, fi, length, end) : [];
   if (!chain.length) {
@@ -1265,6 +1266,77 @@ function addSecondary(acc: Acc, project: Project, rig: Rig, clip: Clip, t: numbe
   }
 }
 
+// ── догоняющее движение (clip.follow) ──────────────────────────────────────────────────────────────────────
+/** Кто кого догоняет: грудь — таз, голова и руки — грудь. Корень следующего звена получает поправку
+ * loosen·(пружина − ведущий) к мировому повороту ведущего, так что он поворачивается с запаздыванием и перелётом. */
+export function followBones(project: Project): { lead: string; chase: string[] }[] {
+  const ch = project.chains;
+  const pelvis = ch.pelvis?.[0];
+  const trunk = [...(ch.spine ?? []), ...(ch.chest ?? [])].filter((b, i, a) => a.indexOf(b) === i && b !== pelvis);
+  const top = trunk[trunk.length - 1];
+  const out: { lead: string; chase: string[] }[] = [];
+  if (pelvis && trunk[0]) out.push({ lead: pelvis, chase: [trunk[0]] });
+  const upper = [ch.neck?.[0] ?? ch.head?.[0], ch.arm_l?.[0], ch.arm_r?.[0]].filter((b): b is string => !!b);
+  if (top && upper.length) out.push({ lead: top, chase: upper });
+  return out;
+}
+
+const followCache = new WeakMap<Rig, Map<string, { corr: Map<string, Vec3[]>; dur: number; steps: number }>>();
+/** План поправок за клип: ведущий — мировой поворот кости от покоя (вектор поворота), пружина ω = 2/lag, затухание
+ * ζ = 1 − 0.85·bounce; у цикла — пятый проход (установившийся), у разового — с покоя ведущего в начале. */
+function followPlan(project: Project, rig: Rig, clip: Clip) {
+  let cache = followCache.get(rig);
+  if (!cache) followCache.set(rig, (cache = new Map()));
+  const base = { ...clip, layers: clip.layers.filter((l) => !isSecondary(l)) };
+  delete base.follow;
+  const key = JSON.stringify([base, clip.follow, project.chains, project.up, project.forward]);
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const f = clip.follow!;
+  const lag = Math.max(0.01, f.lag ?? 0.08), zeta = 1 - 0.85 * Math.min(1, Math.max(0, f.bounce ?? 0.3)), loosen = f.loosen ?? 0.6;
+  const w0 = 2 / lag;
+  const steps = Math.max(2, Math.round(clip.duration / DT));
+  const h = clip.duration / steps;
+  const W = Array.from({ length: steps + 1 }, (_, k) => worldPose(rig, primary(project, rig, base, k * h).parts()).R);
+  const off = (R: Quat[], b: string) => { const i = rig.index.get(b)!; return rotvec(qmul(R[i], qinv(rig.worldR[i]))); };
+  const corr = new Map<string, Vec3[]>();
+  const extra: Vec3[] = Array.from({ length: steps + 1 }, () => [0, 0, 0]); // поправка, уже добавленная ведущему звену
+  for (const { lead, chase } of followBones(project)) {
+    if (!rig.index.has(lead)) continue;
+    const drv = W.map((R, k) => vadd(off(R, lead), extra[k]));
+    const sp: Vec3[] = new Array(steps + 1);
+    let x: Vec3 = [...drv[0]] as Vec3, v: Vec3 = [0, 0, 0];
+    const cycles = clip.loop ? 5 : 1;
+    for (let c = 0; c < cycles; c++)
+      for (let k = 0; k <= steps; k++) {
+        if (c === cycles - 1) sp[k] = [...x] as Vec3;
+        if (k === steps) break;
+        for (let j = 0; j < 3; j++) {
+          v[j] += (w0 * w0 * (drv[k][j] - x[j]) - 2 * zeta * w0 * v[j]) * h; // полунеявный Эйлер
+          x[j] += v[j] * h;
+        }
+      }
+    const d = sp.map((q, k) => vscale(vsub(q, drv[k]), loosen));
+    for (const b of chase) if (rig.index.has(b)) corr.set(b, d);
+    for (let k = 0; k <= steps; k++) extra[k] = vadd(extra[k], d[k]); // следующее звено догоняет уже запоздавшее
+  }
+  const plan = { corr, dur: clip.duration, steps };
+  if (cache.size > 64) cache.clear();
+  cache.set(key, plan);
+  return plan;
+}
+
+function addFollow(acc: Acc, project: Project, rig: Rig, clip: Clip, t: number) {
+  const pl = followPlan(project, rig, clip);
+  const tt = clip.loop ? ((t % pl.dur) + pl.dur) % pl.dur : Math.min(Math.max(t, 0), pl.dur);
+  const fk = (tt / pl.dur) * pl.steps, k = Math.min(pl.steps - 1, Math.floor(fk)), u = fk - k;
+  for (const [b, d] of pl.corr) {
+    const r = vadd(vscale(d[k], 1 - u), vscale(d[k + 1], u));
+    const a = Math.hypot(...r);
+    if (a > 1e-9) acc.turn(b, localDelta(rig, rig.index.get(b)!, vscale(r, 1 / a), a));
+  }
+}
+
 /** Кости, которые двигает вторичная динамика клипа. */
 function secondaryBones(project: Project, clip: Clip): Set<string> {
   return new Set(clip.layers.flatMap((l) => (isSecondary(l) && l.type === "recipe" ? (project.chains[l.target.chain] ?? []) : [])));
@@ -1273,6 +1345,7 @@ function secondaryBones(project: Project, clip: Clip): Set<string> {
 /** Полная поза в момент t: повороты, сдвиги и масштабы затронутых костей (в локальных осях, как в glTF). */
 export function posePartsAt(project: Project, rig: Rig, clip: Clip, t: number, opts?: LiveOpts): PoseParts {
   const acc = primary(project, rig, clip, t, opts);
+  if (clip.follow) addFollow(acc, project, rig, clip, t);
   if (clip.layers.some(isSecondary)) {
     addSecondary(acc, project, rig, clip, t);
     if (project.limits) acc.applyLimits(secondaryBones(project, clip)); // хвост и уши после пружины — тоже в своих пределах
@@ -1285,6 +1358,7 @@ export function posePartsAt(project: Project, rig: Rig, clip: Clip, t: number, o
 /** Повороты костей как дельты к позе покоя и база выравнивания — для ограничений (limit.fit, подсказки редактора). */
 export function motionAt(project: Project, rig: Rig, clip: Clip, t: number): { rot: Map<string, Quat>; base: Map<string, Quat>; limited: Set<string> } {
   const acc = primary(project, rig, clip, t);
+  if (clip.follow) addFollow(acc, project, rig, clip, t);
   if (clip.layers.some(isSecondary)) {
     addSecondary(acc, project, rig, clip, t);
     if (project.limits) acc.applyLimits(secondaryBones(project, clip));

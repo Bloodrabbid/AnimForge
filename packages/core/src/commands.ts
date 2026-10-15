@@ -3,7 +3,7 @@
 import { CHANNELS } from "./project.ts";
 import type { Channel, Clip, Constraint, ConstraintTarget, Interp, KeyLayer, PoseLayer, Project, RecipeLayer, Skeleton } from "./project.ts";
 import { RECIPES, withDefaults } from "./recipes.ts";
-import { addPoseDelta, buildRig, frameTimes, motionAt, reach } from "./evaluate.ts";
+import { addPoseDelta, buildRig, followBones, frameTimes, motionAt, reach } from "./evaluate.ts";
 import { LIMIT_AXES, boneAngles, limitFrame, type BoneLimit, type LimitAxis } from "./limits.ts";
 import { DEG, qaxis, qrot, vdot, vsub } from "./math.ts";
 import { bodyFrame } from "./evaluate.ts";
@@ -715,6 +715,31 @@ const defs: CommandDef[] = [
       });
       for (const l of layers) if (+a.weight === 1) delete l.weight; else l.weight = +a.weight;
       return { layers: ids, weight: +a.weight };
+    },
+  },
+  {
+    name: "clip.follow",
+    help: "Догоняющее движение (follow-through): грудь догоняет таз, голова и руки — грудь, через пружину. lag — запаздывание, с (0.08); bounce — перелёт 0…1 (0.3); loosen — доля 0…1 (0.6: 1 — грудь целиком отстаёт от таза, 0 — выключено). Без аргументов — убрать.",
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      lag: { type: "number", help: "0.01…0.5 с" },
+      bounce: { type: "number", help: "0…1" },
+      loosen: { type: "number", help: "0…1" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const clip = clipOf(ctx, a.clip);
+      if (a.lag == null && a.bounce == null && a.loosen == null) {
+        delete clip.follow;
+        return { clip: clip.name, follow: null };
+      }
+      const rng = (k: string, lo: number, hi: number) => a[k] == null || (Number.isFinite(+a[k]) && +a[k] >= lo && +a[k] <= hi);
+      need(rng("lag", 0.01, 0.5) && rng("bounce", 0, 1) && rng("loosen", 0, 1), "lag 0.01…0.5, bounce 0…1, loosen 0…1");
+      need(followBones(ctx.project).length, "нужны цепочки pelvis и spine или chest (rig.detect)");
+      const f = { ...clip.follow };
+      for (const k of ["lag", "bounce", "loosen"] as const) if (a[k] != null) f[k] = +a[k];
+      clip.follow = f;
+      return { clip: clip.name, follow: f, chase: followBones(ctx.project) };
     },
   },
   {

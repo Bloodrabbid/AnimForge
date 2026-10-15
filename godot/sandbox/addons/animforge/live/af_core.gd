@@ -1627,8 +1627,107 @@ static func live_secondary(acc: Acc, rig: Rig, clip: Dictionary, G: Transform3D,
 
 ## Полная поза в момент t (posePartsAt): локальные повороты, сдвиги и масштабы затронутых костей.
 ## opts.secondary — Callable(acc, rig, clip): вторичная динамика из игры (live_secondary) вместо записанной по клипу.
+# ── догоняющее движение (clip.follow), как followPlan в ядре ─────────────────────────────────────────────
+static func follow_bones(rig: Rig) -> Array:
+	var ch: Dictionary = rig.chains
+	var pelvis = ch["pelvis"][0] if ch.has("pelvis") and not ch["pelvis"].is_empty() else null
+	var trunk: Array = []
+	for b in (ch.get("spine", []) + ch.get("chest", [])):
+		if not trunk.has(b) and b != pelvis:
+			trunk.append(b)
+	var out: Array = []
+	if pelvis != null and not trunk.is_empty():
+		out.append({"lead": pelvis, "chase": [trunk[0]]})
+	var upper: Array = []
+	var first = func(name): return ch[name][0] if ch.has(name) and not ch[name].is_empty() else null
+	var nb = first.call("neck")
+	if nb == null:
+		nb = first.call("head")
+	for b in [nb, first.call("arm_l"), first.call("arm_r")]:
+		if b != null:
+			upper.append(b)
+	if not trunk.is_empty() and not upper.is_empty():
+		out.append({"lead": trunk[trunk.size() - 1], "chase": upper})
+	return out
+
+
+static func follow_plan(rig: Rig, clip: Dictionary) -> Dictionary:
+	var base := clip.duplicate()
+	base["layers"] = clip["layers"].filter(func(l): return not is_secondary(l))
+	base.erase("follow")
+	var key := "follow|" + JSON.stringify([base, clip["follow"]])
+	if rig.lock_cache.has(key):
+		return rig.lock_cache[key]
+	var f: Dictionary = clip["follow"]
+	var lag := maxf(0.01, float(f.get("lag", 0.08)))
+	var zeta := 1.0 - 0.85 * clampf(float(f.get("bounce", 0.3)), 0.0, 1.0)
+	var loosen := float(f.get("loosen", 0.6))
+	var w0 := 2.0 / lag
+	var dur := float(clip["duration"])
+	var steps := maxi(2, roundi(dur / DT))
+	var h := dur / steps
+	var W: Array = []
+	for k in steps + 1:
+		W.append(world_pose(rig, primary(rig, base, k * h).parts()).R)
+	var corr := {}
+	var extra: Array[Vector3] = []
+	extra.resize(steps + 1)
+	extra.fill(Vector3.ZERO)
+	for fb in follow_bones(rig):
+		if not rig.index.has(fb["lead"]):
+			continue
+		var li: int = rig.index[fb["lead"]]
+		var drv: Array[Vector3] = []
+		for k in steps + 1:
+			drv.append(_rotvec(W[k][li] * qinv(rig.world_r[li])) + extra[k])
+		var sp: Array[Vector3] = []
+		sp.resize(steps + 1)
+		var x: Vector3 = drv[0]
+		var v := Vector3.ZERO
+		var cycles := 5 if clip["loop"] else 1
+		for c in cycles:
+			for k in steps + 1:
+				if c == cycles - 1:
+					sp[k] = x
+				if k == steps:
+					break
+				v += (w0 * w0 * (drv[k] - x) - 2.0 * zeta * w0 * v) * h
+				x += v * h
+		var d: Array[Vector3] = []
+		for k in steps + 1:
+			d.append((sp[k] - drv[k]) * loosen)
+		for b in fb["chase"]:
+			if rig.index.has(b):
+				corr[b] = d
+		for k in steps + 1:
+			extra[k] += d[k]
+	var plan := {"corr": corr, "dur": dur, "steps": steps}
+	if rig.lock_cache.size() > 64:
+		rig.lock_cache.clear()
+	rig.lock_cache[key] = plan
+	return plan
+
+
+static func add_follow(acc: Acc, rig: Rig, clip: Dictionary, t: float) -> void:
+	var pl := follow_plan(rig, clip)
+	var dur: float = pl["dur"]
+	var steps: int = pl["steps"]
+	var tt := fposmod(t, dur) if clip["loop"] else clampf(t, 0.0, dur)
+	var fk := tt / dur * steps
+	var k := mini(steps - 1, int(floor(fk)))
+	var u := fk - k
+	for b in pl["corr"]:
+		var d: Array = pl["corr"][b]
+		var r: Vector3 = d[k] * (1.0 - u) + d[k + 1] * u
+		var a := r.length()
+		if a > 1e-9:
+			acc.turn(b, local_delta(rig, rig.index[b], r / a, a))
+
+
 static func pose_parts_at(rig: Rig, clip: Dictionary, t: float, opts := {}) -> Parts:
 	var acc := primary(rig, clip, t, opts)
+	if clip.get("follow") != null:
+		add_follow(acc, rig, clip, t)
 	if clip["layers"].any(func(l): return is_secondary(l)):
 		if opts.has("secondary"):
 			opts["secondary"].call(acc, rig, clip)
