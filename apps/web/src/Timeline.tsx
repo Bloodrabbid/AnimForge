@@ -16,11 +16,14 @@ interface Props {
   onPlay(p: boolean): void;
   onLoop(v: boolean): void;
   onSpeed(v: number): void;
+  /** панель «График» над временем: открыта ли */
+  graph?: boolean;
+  onGraph?(v: boolean): void;
 }
 
 const SPEEDS = [0.1, 0.25, 0.5, 1, 1.5, 2];
 
-export function Timeline({ clips, clip, t, playing, loop, speed, tryClip, onClip, onTime, onPlay, onLoop, onSpeed }: Props) {
+export function Timeline({ clips, clip, t, playing, loop, speed, tryClip, onClip, onTime, onPlay, onLoop, onSpeed, graph, onGraph }: Props) {
   const d = clip?.duration ?? 1;
   const fps = clip?.fps ?? 30;
   const frames = Math.max(1, Math.round(d * fps));
@@ -67,6 +70,11 @@ export function Timeline({ clips, clip, t, playing, loop, speed, tryClip, onClip
           <span>{frames} кадров</span>
         </div>
         <div className="tbtns">
+          {onGraph && (
+            <button className={`icon ${graph ? "on" : ""}`} onClick={() => onGraph(!graph)} disabled={!clip} title="график амплитуд конечностей (K)">
+              <Icon name="graph" />
+            </button>
+          )}
           <button className={`icon ${loop ? "on" : ""}`} onClick={() => onLoop(!loop)} title="играть по кругу (L)">
             <Icon name="loop" />
           </button>

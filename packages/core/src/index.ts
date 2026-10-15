@@ -11,3 +11,4 @@ export * from "./weights.ts";
 export * from "./limits.ts";
 export * from "./plan.ts";
 export * from "./directions.ts";
+export * from "./motionGraph.ts";

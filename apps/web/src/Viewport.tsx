@@ -38,6 +38,17 @@ interface Props {
   onPoseDrop?(bone: string, target: [number, number, number], length: number, end: boolean, endLength?: number): void;
   onPin?(bone: string, at: [number, number, number]): void;
   onStatus(msg: string, error?: boolean): void;
+  /** следы за цикл клипа (стопы, кисти, таз): точки по кадрам графика движения — только показ */
+  trails?: Trail[] | null;
+  /** подсветка цепочки (наведение на кривую графика): её кости и конец */
+  highlight?: { bones: string[]; color: string } | null;
+}
+
+export interface Trail {
+  color: string;
+  pts: [number, number, number][];
+  /** время каждой точки (для бегущей точки «сейчас») */
+  times: number[];
 }
 
 interface Loaded {
@@ -286,6 +297,40 @@ export function Viewport(props: Props) {
     const limMat = new THREE.MeshBasicMaterial({ color: 0xff4d4d, depthTest: false, transparent: true, opacity: 0.9 });
     const limPool: THREE.Mesh[] = [];
 
+    // следы конечностей за цикл: линия по кадрам и точка в текущем моменте, поверх меша
+    const trailGroup = new THREE.Group();
+    trailGroup.renderOrder = 9;
+    scene.add(trailGroup);
+    let trailsShown: Trail[] | null | undefined = null;
+    let trailDots: { dot: THREE.Mesh; tr: Trail }[] = [];
+    const buildTrails = (list: Trail[] | null | undefined) => {
+      for (const o of [...trailGroup.children]) {
+        trailGroup.remove(o);
+        const m = o as THREE.Line;
+        if (m.geometry !== limGeo) m.geometry?.dispose(); // у точек — общая сфера
+        (m.material as THREE.Material)?.dispose();
+      }
+      trailDots = [];
+      for (const tr of list ?? []) {
+        if (tr.pts.length < 2) continue;
+        const g = new THREE.BufferGeometry().setFromPoints(tr.pts.map((p) => new THREE.Vector3(p[0], p[1], p[2])));
+        const line = new THREE.Line(g, new THREE.LineBasicMaterial({ color: tr.color, depthTest: false, transparent: true, opacity: 0.85 }));
+        line.renderOrder = 9;
+        const dot = new THREE.Mesh(limGeo, new THREE.MeshBasicMaterial({ color: tr.color, depthTest: false }));
+        dot.renderOrder = 9;
+        trailGroup.add(line, dot);
+        trailDots.push({ dot, tr });
+      }
+    };
+    // подсветка цепочки: точки суставов и ломаная через них
+    const hlMat = new THREE.LineBasicMaterial({ depthTest: false, transparent: true, opacity: 0.95 });
+    const hlLine = new THREE.Line(new THREE.BufferGeometry(), hlMat);
+    hlLine.renderOrder = 14;
+    hlLine.frustumCulled = false; // геометрия меняется каждый кадр — границы не пересчитываем
+    const hlDotMat = new THREE.MeshBasicMaterial({ depthTest: false });
+    const hlDots: THREE.Mesh[] = [];
+    scene.add(hlLine);
+
     // цели констрейнов: шарик (IK — бирюзовый, взгляд — сиреневый) и линия от кончика или головы к цели
     const tgtGeo = new THREE.OctahedronGeometry(1, 1);
     const tgtPool: { mesh: THREE.Mesh; line: THREE.Line }[] = [];
@@ -393,6 +438,31 @@ export function Viewport(props: Props) {
             s.scale.setScalar(m.size * 0.011);
           }
         });
+        // следы
+        if (p.trails !== trailsShown) buildTrails((trailsShown = p.trails));
+        const dur = clipNow?.duration || 1;
+        for (const { dot, tr } of trailDots) {
+          const k = Math.max(0, Math.min(tr.pts.length - 1, Math.round(((((p.t % dur) + dur) % dur) / dur) * (tr.pts.length - 1))));
+          dot.position.set(...tr.pts[k]);
+          dot.scale.setScalar(m.size * 0.006);
+        }
+        // подсветка цепочки
+        const hl = p.highlight ? p.highlight.bones.map((b) => m.bones.get(b)?.obj).filter((o) => !!o) : [];
+        hlLine.visible = hl.length > 0;
+        while (hlDots.length < hl.length) {
+          const s = new THREE.Mesh(limGeo, hlDotMat);
+          s.renderOrder = 14;
+          scene.add(s);
+          hlDots.push(s);
+        }
+        hlDots.forEach((s, k) => (s.visible = k < hl.length));
+        if (hl.length && p.highlight) {
+          hlMat.color.set(p.highlight.color);
+          hlDotMat.color.set(p.highlight.color);
+          const pts = hl.map((o) => o!.getWorldPosition(new THREE.Vector3()));
+          pts.forEach((v, k) => (hlDots[k].position.copy(v), hlDots[k].scale.setScalar(m.size * 0.012)));
+          hlLine.geometry.setFromPoints(pts);
+        }
         // цели
         const cons = p.showTargets && clipNow?.constraints ? clipNow.constraints.filter((c) => c.type !== "copy") : [];
         while (tgtPool.length < cons.length) {

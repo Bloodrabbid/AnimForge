@@ -31,7 +31,8 @@ import { LayersPanel } from "./LayersPanel.tsx";
 import { SimplePanel } from "./SimplePanel.tsx";
 import { LibraryPanel, chainsFor, sourceOf, type Entry } from "./LibraryPanel.tsx";
 import { Timeline } from "./Timeline.tsx";
-import { Viewport, type ViewCmd } from "./Viewport.tsx";
+import { Viewport, type Trail, type ViewCmd } from "./Viewport.tsx";
+import { GraphPanel, isShown, limbColor, useMotionGraph } from "./GraphPanel.tsx";
 
 const query = new URLSearchParams(location.search);
 const DIR = query.get("dir") ?? "projects/fish-demo";
@@ -66,6 +67,14 @@ export function App() {
   const [wireframe, setWireframe] = useState(false);
   const [showFloor, setShowFloor] = useState(true);
   const [view, setView] = useState<ViewCmd>({ kind: "fit", n: 0 });
+  // график амплитуд под вьюпортом и следы конечностей во вьюпорте (запоминаются)
+  const [showGraph, setShowGraph] = useState(() => query.get("graph") === "1" || (query.get("graph") !== "0" && localStorage.getItem("af.graph") === "1"));
+  useEffect(() => localStorage.setItem("af.graph", showGraph ? "1" : "0"), [showGraph]);
+  const [showTrails, setShowTrails] = useState(() => query.get("trails") === "1" || (query.get("trails") !== "0" && localStorage.getItem("af.trails") === "1"));
+  useEffect(() => localStorage.setItem("af.trails", showTrails ? "1" : "0"), [showTrails]);
+  const [graphShown, setGraphShown] = useState<Record<string, boolean>>(() => JSON.parse(localStorage.getItem("af.graph.shown") ?? "{}"));
+  useEffect(() => localStorage.setItem("af.graph.shown", JSON.stringify(graphShown)), [graphShown]);
+  const [hoverChain, setHoverChain] = useState<string | null>(query.get("hover"));
   const [leftTab, setLeftTab] = useState<"library" | "bones">((query.get("left") as "bones") ?? "library");
   // простой режим по умолчанию: модель, клипы, позинг, главные ручки и проверка; остальное — «Расширенное» (запоминается)
   const [advanced, setAdvanced] = useState(() => query.get("adv") === "1" || (query.get("adv") !== "0" && localStorage.getItem("af.advanced") === "1"));
@@ -264,6 +273,24 @@ export function App() {
   const shown = trial?.project ?? project;
   const rig = useMemo(() => (data ? buildRig(data.skeleton) : null), [data?.skeleton]);
   const clip = shown?.clips.find((c) => c.name === clipName) ?? shown?.clips[0];
+  const graph = useMotionGraph(shown, rig, clip, showGraph || showTrails);
+  // следы — у стоп, кистей и таза, тех, что отмечены на графике
+  const trails = useMemo<Trail[] | null>(
+    () =>
+      showTrails && graph
+        ? graph.limbs
+            .filter((l) => (l.kind === "foot" || l.kind === "hand" || l.kind === "pelvis") && isShown(graphShown, l))
+            .map((l) => ({ color: limbColor(l.chain, graph.limbs.indexOf(l)), pts: l.pos, times: graph.times }))
+        : null,
+    [showTrails, graph, graphShown],
+  );
+  const highlight = useMemo(() => {
+    const l = hoverChain ? graph?.limbs.find((x) => x.chain === hoverChain) : undefined;
+    if (!l || !shown) return null;
+    const bones = [...(shown.chains[l.chain] ?? [])];
+    if (!l.tip.endsWith(">") && !bones.includes(l.tip)) bones.push(l.tip);
+    return { bones, color: limbColor(l.chain, graph!.limbs.indexOf(l)) };
+  }, [hoverChain, graph, shown]);
 
   // проигрывание: время двигает интерфейс, позу считает ядро во вьюпорте
   useEffect(() => {
@@ -307,6 +334,8 @@ export function App() {
         w: () => setWireframe((v) => !v),
         g: () => setShowFloor((v) => !v),
         p: () => (setPoseMode((v) => !v), setPlaying(false)),
+        k: () => setShowGraph((v) => !v),
+        t: () => setShowTrails((v) => !v),
         f: () => setView((v) => ({ kind: "fit", n: v.n + 1 })),
         "1": () => setView((v) => ({ kind: "front", n: v.n + 1 })),
         "2": () => setView((v) => ({ kind: "side", n: v.n + 1 })),
@@ -460,6 +489,8 @@ export function App() {
               runMany([{ name: "ik.add", args: { clip: clip.name, tip: bone, target: at.join(","), id: `pin_${bone}` } }], `закреплено: ${bone}`);
             }}
             onStatus={say}
+            trails={trails}
+            highlight={highlight}
           />
           <div className="overlay tl">
             <span className="clip-label">
@@ -523,6 +554,9 @@ export function App() {
                     <label>
                       <input type="checkbox" checked={showFloor} onChange={() => setShowFloor((v) => !v)} /> Пол и тень <span className="kbd">G</span>
                     </label>
+                    <label title="путь стоп, кистей и таза за цикл клипа — цвета как на графике">
+                      <input type="checkbox" checked={showTrails} onChange={() => setShowTrails((v) => !v)} /> Следы конечностей <span className="kbd">T</span>
+                    </label>
                   </>
                 )}
               </Menu>
@@ -564,6 +598,21 @@ export function App() {
           {busy && <div className="busy" />}
           {help && <Shortcuts onClose={() => setHelp(false)} />}
         </div>
+        {showGraph && clip && (
+          <GraphPanel
+            graph={graph && graph.clip === clip.name ? graph : null}
+            t={t}
+            duration={clip.duration}
+            hover={hoverChain}
+            onHover={setHoverChain}
+            onTime={(v) => {
+              setT(v);
+              setPlaying(false);
+            }}
+            shown={graphShown}
+            onShown={setGraphShown}
+          />
+        )}
         <Timeline
           clips={shown.clips}
           clip={clip}
@@ -583,6 +632,8 @@ export function App() {
           onPlay={setPlaying}
           onLoop={setLoopPlay}
           onSpeed={setSpeed}
+          graph={showGraph}
+          onGraph={setShowGraph}
         />
       </main>
 
@@ -798,6 +849,7 @@ function Shortcuts({ onClose }: { onClose(): void }) {
     ["L", "по кругу"],
     ["F · 1 · 2 · 3", "целиком · спереди · сбоку · сверху"],
     ["S · W · G", "скелет · каркас · пол"],
+    ["K · T", "график амплитуд · следы конечностей"],
     ["Enter / Esc", "применить / отменить примерку"],
   ];
   return (

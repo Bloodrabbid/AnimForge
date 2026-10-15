@@ -975,6 +975,97 @@ kbd {
   background: var(--err);
 }
 
+/* ——— график амплитуд ——— */
+.graph-panel {
+  flex: none;
+  height: 236px;
+  display: flex;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  min-height: 0;
+}
+.graph-side {
+  width: 250px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+  min-height: 0;
+}
+.graph-q {
+  margin: 8px 8px 4px;
+  flex-wrap: wrap;
+}
+.graph-q button {
+  flex: 1 0 auto;
+  font-size: 11px;
+  padding: 3px 5px;
+}
+.graph-legend {
+  flex: 1;
+  overflow: auto;
+  padding: 2px 6px 6px;
+}
+.gl-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  border-radius: 5px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.gl-row:hover,
+.gl-row.hot {
+  background: var(--raise);
+}
+.gl-row.na {
+  opacity: 0.45;
+}
+.gl-row .sw {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  flex: none;
+}
+.gl-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gl-amp {
+  font: 11px ui-monospace, "SF Mono", Menlo, monospace;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.graph-plot {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: block;
+  background: #121316;
+  cursor: crosshair;
+  touch-action: none;
+}
+.graph-plot .gg {
+  stroke: #26282e;
+  stroke-width: 1;
+}
+.graph-plot .gz {
+  stroke: #3b3e46;
+  stroke-width: 1;
+}
+.graph-plot .gt {
+  font: 10px ui-monospace, Menlo, monospace;
+  fill: var(--dim);
+}
+.graph-plot .gnow {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
 /* ——— слои ——— */
 .layers {
   padding: 8px;
