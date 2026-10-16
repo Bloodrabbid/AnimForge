@@ -16,3 +16,4 @@ export * from "./naming.ts";
 export * from "./retarget.ts";
 export * from "./hands.ts";
 export * from "./importclip.ts";
+export * from "./style.ts";

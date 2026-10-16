@@ -1,34 +1,11 @@
 // Русские названия клипов библиотеки: имена дублей в паках английские («walk_Zombie_loop», «Sword_Attack»,
 // «bow_not-confident_001»). Стили 100STYLE и Bandai — готовыми фразами (по описаниям наборов), остальное — по словам.
 // Поиск идёт и по русскому названию, и по исходному имени.
+import { STYLE100 } from "../../../packages/core/src/style.ts";
 
 /** Стили 100STYLE (по Dataset_List.csv) и Bandai Namco (по README набора). */
 export const STYLES: Record<string, string> = {
-  Aeroplane: "самолётик", Akimbo: "руки в боки", Angry: "сердито", ArmsAboveHead: "руки над головой",
-  ArmsBehindBack: "руки за спиной", ArmsBySide: "руки по швам", ArmsFolded: "руки скрещены", Balance: "балансируя",
-  BeatChest: "бьёт себя в грудь", BentForward: "наклонившись вперёд", BentKnees: "на согнутых коленях",
-  BigSteps: "широкими шагами", BouncyLeft: "пружиня на левой", BouncyRight: "пружиня на правой", Cat: "по-кошачьи",
-  Chicken: "курицей", CrossOver: "ноги накрест", Crouched: "пригнувшись", CrowdAvoidance: "в толпе, уворачиваясь",
-  Depressed: "подавленно", Dinosaur: "динозавром", DragLeftLeg: "волоча левую ногу", DragRightLeg: "волоча правую ногу",
-  Drunk: "пьяно", DuckFoot: "носки внутрь", Elated: "ликуя", FairySteps: "пятка к носку", Flapping: "машет крыльями",
-  FlickLegs: "вскидывая голени", Followed: "оглядываясь", GracefulArms: "изящно", HandsBetweenLegs: "руки между ног",
-  HandsInPockets: "руки в карманах", Heavyset: "качок", HighKnees: "высоко поднимая колени", InTheDark: "в темноте, на ощупь",
-  KarateChop: "карате", Kick: "пинок на каждом шаге", LawnMower: "газонокосилка", LeanBack: "откинувшись назад",
-  LeanLeft: "наклон влево", LeanRight: "наклон вправо", LeftHop: "прыжки на левой", LegsApart: "ноги врозь",
-  LimpLeft: "хромая на левую", LimpRight: "хромая на правую", LookUp: "глядя вверх", Lunge: "выпадами", March: "маршем",
-  Monk: "монах", Morris: "народный танец", Neutral: "обычно", Old: "старик", OnHeels: "на пятках",
-  OnPhoneLeft: "с телефоном в левой", OnPhoneRight: "с телефоном в правой", OnToesBentForward: "на цыпочках наклонившись",
-  OnToesCrouched: "на цыпочках пригнувшись", PendulumHands: "руки маятником", Penguin: "пингвином",
-  PigeonToed: "косолапо", Proud: "гордо", Punch: "удар кулаком на каждом шаге", Quail: "семеня", RaisedLeftArm: "левая рука поднята",
-  RaisedRightArm: "правая рука поднята", RightHop: "прыжки на правой", Roadrunner: "страусом", Robot: "робот",
-  Rocket: "ракетой", Rushed: "второпях", ShieldedLeft: "щит в левой", ShieldedRight: "щит в правой", Skip: "вприпрыжку",
-  SlideFeet: "шаркая", SpinAntiClock: "кружась против часовой", SpinClock: "кружась по часовой", Star: "звездой",
-  StartStop: "с остановками", Stiff: "скованно", Strutting: "важничая", Superman: "супергерой", Swat: "спецназ с винтовкой",
-  Sweep: "подметая", Swimming: "плывя брассом", SwingArmsRound: "крутя руками", SwingShoulders: "раскачивая плечами",
-  Teapot: "чайником", Tiptoe: "на цыпочках", TogetherStep: "приставным шагом", TwoFootJump: "прыжки на двух",
-  WalkingStickLeft: "с тростью в левой", WalkingStickRight: "с тростью в правой", Waving: "машет рукой",
-  WhirlArms: "руки мельницей", WideLegs: "широко расставив ноги", WiggleHips: "виляя бёдрами", WildArms: "размахивая руками",
-  WildLegs: "дрыгая ногами", Zombie: "зомби",
+  ...STYLE100,
   // Bandai Namco
   normal: "обычно", happy: "радостно", sad: "грустно", angry: "сердито", proud: "гордо", "not-confident": "неуверенно",
   masculinity: "по-мужски", masculine: "по-мужски", feminine: "по-женски", childish: "по-детски", children: "по-детски",

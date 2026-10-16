@@ -855,6 +855,46 @@ NODE_COMMANDS["clip.import"] = {
   },
 };
 
+NODE_COMMANDS["clip.style"] = {
+  help: "Стиль поверх клипа (100STYLE: зомби, руки в боки, старик, на цыпочках… — 100 стилей): разница «запись стиля − обычная запись» того же движения слоем поз «style» в такт шагам клипа (фаза — от удара пятки левой). У клипа без шага — средняя разница: поза стиля. CC BY — авторы в титрах.",
+  args: {
+    clip: { type: "string", required: true, help: "клип" },
+    style: { type: "string", help: "стиль: имя в 100STYLE (Zombie, Akimbo, Old…) или по-русски («зомби», «руки в боки»); без него — список" },
+    from: { type: "string", help: "чьи записи сравнивать: walk (по умолчанию), walk-back, strafe-walk, run, run-back, strafe-run, idle" },
+    amount: { type: "number", help: "доля разницы, 1 — как в записи (0…2)" },
+    off: { type: "boolean", help: "убрать стиль" },
+  },
+  async run(dir, a) {
+    const { STYLE100, styleLayer } = await import("../../core/src/style.ts");
+    const list = Object.entries(STYLE100).filter(([k]) => k !== "Neutral").map(([k, v]) => `${k} — ${v}`);
+    if (!a.style && !a.off) return { styles: list };
+    const ctx = await loadCtx(dir);
+    const clip = ctx.project.clips.find((c) => c.name === a.clip);
+    if (!clip) throw new Error(`нет клипа «${a.clip}»`);
+    clip.layers = clip.layers.filter((l) => l.id !== "style");
+    if (a.off) { saveProject(dir, ctx.project); return { clip: clip.name, style: null }; }
+    const q = String(a.style).trim().toLowerCase().replace(/ё/g, "е");
+    const key = Object.keys(STYLE100).find((k) => k.toLowerCase() === q || STYLE100[k].replace(/ё/g, "е") === q) ?? Object.keys(STYLE100).find((k) => STYLE100[k].replace(/ё/g, "е").includes(q));
+    if (!key || key === "Neutral") throw new Error(`нет стиля «${a.style}»; есть: ${list.join("; ")}`);
+    const from = a.from ?? "walk";
+    const pack = { walk: "walk", "walk-back": "walk", "strafe-walk": "walk", run: "run", "run-back": "run", "strafe-run": "run", idle: "idle" }[from as string];
+    if (!pack) throw new Error("from: walk, walk-back, strafe-walk, run, run-back, strafe-run или idle");
+    const amount = a.amount ?? 1;
+    if (!(amount >= 0 && amount <= 2)) throw new Error("amount 0…2");
+    const p = clipPacks().find((x) => x.id === `100style-${pack}`)!;
+    const { readAnimDoc, animSkeleton, readTakes } = await import("./animfile.ts");
+    const doc = await readAnimDoc(join(ROOT, "library/clips", p.file), BLENDER, BLENDER_ENV, join(ROOT, "bridge/blender/import_anim.py"));
+    const takes = readTakes(doc, 30, [`${from}_Neutral_loop`, `${from}_${key}_loop`]);
+    const src = detectSide(animSkeleton(doc));
+    const dst = { project: ctx.project, rig: buildRig(ctx.skeleton) };
+    const rec = (name: string) => importClip(src, dst, takes.find((t) => t.name.endsWith(name))!.frames, { name, loop: true, fps: 30, source: { file: p.file, take: name, author: p.author, license: p.license } }).clip;
+    const { layer, phased } = styleLayer(ctx.project, dst.rig, clip, { neutral: rec(`${from}_Neutral_loop`), style: rec(`${from}_${key}_loop`) }, amount);
+    clip.layers.push(layer);
+    saveProject(dir, ctx.project);
+    return { clip: clip.name, style: key, ru: STYLE100[key], from, amount, phased, keys: layer.keys.length, bones: Object.keys(layer.keys[0]?.rot ?? {}).length };
+  },
+};
+
 NODE_COMMANDS["clips.pack"] = {
   help: "Положить свободный пак клипов в библиотеку (library/clips): файл с анимациями (FBX, glb, BVH) → glb без меша (скелет и дубли) и запись в packs.json с происхождением. CC0, общественное достояние, CMU или CC BY / CC BY-NC (с условиями: кого указать в титрах, NC — только некоммерческое).",
   args: {
@@ -1105,7 +1145,7 @@ export async function call(dir: string, name: string, args: Record<string, any>)
 }
 
 /** Команды, которые меняют только animforge.json, — их можно примерять (рендер и экспорт пишут другие файлы). */
-export const DRY_OK = new Set(["clip.import", "clip.add", "recipe.add", "recipe.set", "recipe.rig", "preset.apply", "clip.ground", "key.set", "key.clear", "chain.set", "layer.remove", "layer.set", "clip.remove"]);
+export const DRY_OK = new Set(["clip.import", "clip.style", "clip.add", "recipe.add", "recipe.set", "recipe.rig", "preset.apply", "clip.ground", "key.set", "key.clear", "chain.set", "layer.remove", "layer.set", "clip.remove"]);
 
 /** Выполнить шаги на копии проекта (base или с диска) и вернуть, что получилось, ничего не записывая.
  * Вызывать строго по очереди (как и call): песочница одна на процесс. */

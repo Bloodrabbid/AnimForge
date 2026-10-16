@@ -12,6 +12,9 @@ def load(f):
 
 def pick(M, a, b, typ, lo, hi):
     rot = M[:, 6:]  # без корня: поза тела
+    v = np.r_[0, np.linalg.norm(np.diff(M[:, [0, 2]], axis=0), axis=1)]
+    v = np.convolve(v, np.ones(15) / 15, mode="same")  # скорость, сглаженная за четверть секунды
+    slow_cum = np.r_[0, np.cumsum(v < 0.5 * np.median(v[a:b]))]
     best = (1e9, a, a + lo)
     for s in range(a, max(a + 1, b - hi), 10):
         e = np.arange(s + lo, min(s + hi, b - 3))
@@ -19,6 +22,9 @@ def pick(M, a, b, typ, lo, hi):
         d = lambda x, y: np.abs((rot[x] - rot[y] + 180) % 360 - 180).mean(axis=-1)
         c = d(s, e) + d(s + 2, e + 2)
         if typ != "ID":
+            # остановки: доля кадров окна со скоростью меньше половины обычной для записи — актёр встал или
+            # разворачивается (поза в конце совпала бы с началом и у стоящего)
+            c = c + 60 * (slow_cum[e] - slow_cum[s]) / (e - s)
             q = M[s:e[-1] + 1, [0, 2]] - M[s, [0, 2]]          # путь корня от начала окна
             ch = q[e - s]; L = np.linalg.norm(ch, axis=1)       # хорда до каждого конца
             u = ch / np.maximum(L, 1e-6)[:, None]
