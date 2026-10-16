@@ -96,7 +96,21 @@ func _live_node() -> String:
 	var exp := Vector3(1 - 735, 7, 2)
 	if absf(n.rotation_degrees.y - 90) > 1e-3 or n.position.distance_to(exp) > 1e-2:
 		return "LIVE_FAIL узел yaw=%s pos=%s (ждали 90, %s)" % [n.rotation_degrees.y, n.position, exp]
-	return "LIVE_OK узел: yaw %.1f°, путь %.1f м" % [n.rotation_degrees.y, n.position.distance_to(Vector3(1, 7, 2))]
+	var msg := "узел: yaw %.1f°, путь %.1f м" % [n.rotation_degrees.y, n.position.distance_to(Vector3(1, 7, 2))]
+	# дуга: курс исходно 30°, за 15 с повернул ещё на 90° и прошёл 732 м по дуге — смещение из выборки, повёрнутое на 30°
+	var m := Node3D.new()
+	m.position = Vector3(1, 0, 2)
+	m.rotation_degrees.y = 30
+	root.add_child(m)
+	var tw2: Tween = AF.play(m, "breathedge-swarm-cruise")
+	tw2.pause()
+	tw2.custom_step(15.0)
+	var s := AF.sample(AF.preset("breathedge-swarm-cruise"), 15.0)
+	var b := deg_to_rad(30.0)
+	var exp2 := Vector3(1 + s["travel_x"] * cos(b) + s["travel_z"] * sin(b), 0, 2 - s["travel_x"] * sin(b) + s["travel_z"] * cos(b))
+	if absf(m.rotation_degrees.y - 120) > 1e-3 or m.position.distance_to(exp2) > 1e-2 or absf(s["travel_x"]) < 300 or absf(s["travel_z"]) < 300:
+		return "LIVE_FAIL дуга yaw=%s pos=%s (ждали 120, %s)" % [m.rotation_degrees.y, m.position, exp2]
+	return "LIVE_OK %s; дуга: смещение %.1f м по прямой" % [msg, m.position.distance_to(Vector3(1, 0, 2))]
 
 
 class Catcher extends Node:

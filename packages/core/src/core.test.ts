@@ -1537,6 +1537,34 @@ test("твин стаи Breathedge: выскок 7 м за 0.3 с, развор�
   assert.ok(vmax >= 600 && vmax <= 900, `пик ${vmax} м/с`);
 });
 
+test("круиз стаи Breathedge: 732 м за 15 с по дуге с поворотом на 90°, колокол скорости ≈ 70 м/с; travel идёт вдоль текущего курса", () => {
+  const lib = JSON.parse(readFileSync(new URL("../../../library/tweens/breathedge.json", import.meta.url), "utf8"));
+  const p = lib.presets.find((x: any) => x.name === "breathedge-swarm-cruise");
+  const s = (t: number) => sampleTween(p, t);
+  close(s(15).travel, 732, 1e-9, "путь");
+  close(s(15).yaw, 90, 1e-9, "курс");
+  let half = 0, vmax = 0;
+  for (let t = 0; t < 15; t += 0.01) { if (!half && s(t).travel >= 366) half = t; vmax = Math.max(vmax, (s(t + 0.01).travel - s(t).travel) / 0.01); }
+  assert.ok(half >= 7 && half <= 7.6, `половина пути к ${half}`);
+  assert.ok(vmax >= 65 && vmax <= 76, `пик ${vmax} м/с`);
+  close((s(1e-4).travel - s(0).travel) / 1e-4, 1.9, 0.02, "старт 1.9 м/с");
+  // дуга: курс и путь идут одной кривой, так что смещение — 732·2/π по обеим осям (−X и −Z), а не 732 по прямой
+  close(s(15).travel_x, (-732 * 2) / Math.PI, 5, "−X");
+  close(s(15).travel_z, (-732 * 2) / Math.PI, 5, "−Z");
+  // без поворота travel — путь прямо вперёд (−Z), на полпути — как forward
+  const straight = { ...p, tracks: p.tracks.filter((tr: any) => tr.prop !== "yaw") };
+  close(sampleTween(straight, 7.5).travel_z, -sampleTween(straight, 7.5).travel, 1e-9, "прямо");
+  close(sampleTween(straight, 7.5).travel_x, 0, 1e-12, "без сноса");
+  // шаг пути — вдоль курса в середине шага: поворот в первой половине уводит смещение в −X сильнее, чем во второй
+  const early = { ...p, tracks: [{ prop: "yaw", segments: [{ t0: 0, t1: 5, from: 0, to: 90, ease: "linear" }] }, p.tracks[1]] };
+  assert.ok(sampleTween(early, 15).travel_x < -600 && sampleTween(early, 15).travel_z > -150, "почти весь путь — уже после поворота");
+  // точность: равномерный ход по четверти окружности — ровно L·2/π по обеим осям (курс на конце шага ошибся бы на ≈ 1.4 м)
+  const arc = { ...p, tracks: [{ prop: "yaw", segments: [{ t0: 0, t1: 15, from: 0, to: 90 }] }, { prop: "travel", segments: [{ t0: 0, t1: 15, from: 0, to: 732 }] }] };
+  close(sampleTween(arc, 15).travel_x, (-732 * 2) / Math.PI, 0.05, "дуга по X");
+  close(sampleTween(arc, 15).travel_z, (-732 * 2) / Math.PI, 0.05, "дуга по Z");
+  assert.equal(s(3).forward, undefined, "travel не подменяет forward");
+});
+
 test("челюсть Haven: в таране открыта к концу замаха и закрыта к удару; в реакции распахнута к jawT, у смерти остаётся", () => {
   const ram = RECIPES["body-ram"], p = withDefaults(ram, { jawOpen: 53, role: "jaw" });
   const a = p.windupT, b = a + p.hold, c = b + p.strikeT;

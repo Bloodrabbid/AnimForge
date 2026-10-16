@@ -25,7 +25,8 @@ export interface ShakeSpec {
 export interface TweenTrack {
   // ui: alpha, scale, scale_x, scale_y, x, y (px, вниз = +), rotation (°) · camera: fov (°), yaw, pitch (°, вверх = +),
   // dolly (м вперёд по взгляду камеры), shake · node (любой Node3D): x, y, z (м, в осях родителя), yaw (°), forward (м по
-  // взгляду узла −Z после поворота). Оси — как в Godot; при переносе из Unity y и pitch меняют знак.
+  // взгляду узла −Z после поворота), travel (м пути по курсу: в каждый миг — вдоль текущего yaw, так что поворот во
+  // время хода даёт дугу; ядро интегрирует и отдаёт смещение travel_x/travel_z в осях исходного курса). Оси — как в Godot; при переносе из Unity y и pitch меняют знак.
   prop: string;
   mode?: "abs" | "add" | "mul"; // abs — значение как есть; add — к исходному; mul — множитель исходного
   segments?: Segment[];
@@ -93,6 +94,22 @@ export function shakeAt(sh: ShakeSpec, t: number): { x: number; y: number; roll:
   return { x: sh.amp * env * n(1), y: sh.amp * env * n(2), roll: (sh.roll ?? 0) * sh.amp * env * n(3) };
 }
 
+/** Шагов интегрирования пути travel: одинаково в ядре и в аддоне, чтобы выборки совпадали до 1e-4. */
+export const TRAVEL_STEPS = 256;
+
+/** Смещение по дуге к моменту t: приращения пути travel, каждое — вдоль курса yaw в середине шага (вперёд — −Z). */
+export function travelXZ(travel: Segment[], yaw: Segment[] | undefined, t: number): [number, number] {
+  let x = 0, z = 0, prev = segValue(travel, 0);
+  for (let k = 1; k <= TRAVEL_STEPS; k++) {
+    const cur = segValue(travel, (t * k) / TRAVEL_STEPS);
+    const a = yaw ? (segValue(yaw, (t * (k - 0.5)) / TRAVEL_STEPS) * Math.PI) / 180 : 0;
+    x -= (cur - prev) * Math.sin(a);
+    z -= (cur - prev) * Math.cos(a);
+    prev = cur;
+  }
+  return [x, z];
+}
+
 /** Значения всех свойств пресета в момент t (относительные — их смысл задаёт mode трека). */
 export function samplePreset(p: TweenPreset, t: number): Record<string, number> {
   if (p.loop && p.duration > 0) t = ((t % p.duration) + p.duration) % p.duration;
@@ -105,5 +122,7 @@ export function samplePreset(p: TweenPreset, t: number): Record<string, number> 
       out.shake_roll = s.roll;
     } else if (tr.segments?.length) out[tr.prop] = segValue(tr.segments, t);
   }
+  const tv = p.tracks.find((tr) => tr.prop === "travel" && tr.segments?.length);
+  if (tv) [out.travel_x, out.travel_z] = travelXZ(tv.segments!, p.tracks.find((tr) => tr.prop === "yaw" && tr.segments?.length)?.segments, t);
   return out;
 }

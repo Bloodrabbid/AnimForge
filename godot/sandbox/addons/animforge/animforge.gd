@@ -107,7 +107,36 @@ static func sample(p: Dictionary, t: float) -> Dictionary:
 			out["shake_roll"] = v.z
 		elif tr.get("segments", []).size() > 0:
 			out[tr["prop"]] = _seg_value(tr["segments"], t)
+	var tv: Array = []
+	var yw: Array = []
+	for tr in p["tracks"]:
+		if tr.get("segments", []).size() > 0:
+			if tr["prop"] == "travel" and tv.is_empty():
+				tv = tr["segments"]
+			elif tr["prop"] == "yaw" and yw.is_empty():
+				yw = tr["segments"]
+	if not tv.is_empty():
+		var xz := travel_xz(tv, yw, t)
+		out["travel_x"] = xz.x
+		out["travel_z"] = xz.y
 	return out
+
+
+const TRAVEL_STEPS := 256
+
+
+## Смещение по дуге к моменту t, как travelXZ в ядре: приращения travel вдоль курса yaw в середине шага (вперёд — −Z).
+static func travel_xz(travel: Array, yaw: Array, t: float) -> Vector2:
+	var x := 0.0
+	var z := 0.0
+	var prev := _seg_value(travel, 0.0)
+	for k in range(1, TRAVEL_STEPS + 1):
+		var cur := _seg_value(travel, (t * k) / TRAVEL_STEPS)
+		var a := 0.0 if yaw.is_empty() else deg_to_rad(_seg_value(yaw, (t * (k - 0.5)) / TRAVEL_STEPS))
+		x -= (cur - prev) * sin(a)
+		z -= (cur - prev) * cos(a)
+		prev = cur
+	return Vector2(x, z)
 
 
 ## Запускает пресет на Control, Camera3D, Camera2D или Node3D. opts: delay (с), loops (для циклов, 0 = бесконечно), speed.
@@ -192,6 +221,9 @@ static func apply(node: Node, base: Dictionary, modes: Dictionary, s: Dictionary
 		for k in [["x", 0], ["y", 1], ["z", 2]]:
 			if s.has(k[0]): pos[k[1]] = _mix(pos[k[1]], s[k[0]], modes[k[0]])
 		if s.has("forward"): pos += -n3.transform.basis.z * float(s["forward"])
+		if s.has("travel_x"):  # дуга посчитана в осях исходного курса; при абсолютном yaw курс уже в осях родителя
+			var b0 := 0.0 if modes.get("yaw", "add") == "abs" else deg_to_rad(base["yaw"])
+			pos += Vector3(s["travel_x"] * cos(b0) + s["travel_z"] * sin(b0), 0, -s["travel_x"] * sin(b0) + s["travel_z"] * cos(b0))
 		n3.position = pos
 
 
