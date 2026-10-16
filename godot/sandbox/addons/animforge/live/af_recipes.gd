@@ -6,7 +6,7 @@ extends RefCounted
 
 const RAD := PI / 180.0
 const SECONDARY := ["jiggle"]
-const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble", "hit-react", "idle-glance", "startle", "scare-pose", "zero-g-float", "power-down", "head-look-peck", "thrust-trail", "inspect-item"]
+const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble", "hit-react", "idle-glance", "startle", "scare-pose", "zero-g-float", "power-down", "head-look-peck", "thrust-trail", "inspect-item", "fp-aim-arms"]
 
 
 static func is_secondary(recipe: String) -> bool:
@@ -40,6 +40,7 @@ static func evaluate(recipe: String, p: Dictionary, i: int, n: int, t: float, in
 		"head-look-peck": return _head_look_peck(p, i, n, t)
 		"thrust-trail": return _thrust_trail(p, i)
 		"inspect-item": return _inspect_item(p, i, n, t)
+		"fp-aim-arms": return _fp_aim_arms(p, i)
 	push_error("AFRecipes: нет рецепта «%s»" % recipe)
 	return {}
 
@@ -1066,3 +1067,18 @@ static func _inspect_item(p: Dictionary, i: int, n: int, t: float) -> Dictionary
 	if i == mini(2, n - 1):
 		out["roll"] = (p["twist"] / 2.0) * sin(w)
 	return out
+
+
+# ── fp-aim-arms ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+static func _fp_aim_arms(p: Dictionary, i: int) -> Dictionary:
+	var up: bool = p["pitch"] >= 0
+	var k := 0.0
+	if i == 0:
+		k = p["kUp"] if up else p["kDown"]
+	elif p["tool"] != "tool":
+		if i == 1:
+			k = p["foreUp"] if up else p["foreDown"]
+		elif i == 2:
+			k = p["handUp"] if up else p["handDown"]
+	return {"pitch": -k * p["pitch"]} if k != 0 else {}

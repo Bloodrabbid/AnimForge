@@ -1,0 +1,79 @@
+{
+ "recipe": "fp-aim-arms",
+ "presets": [
+  {
+   "name": "breathedge-fp-look-up",
+   "help": "Поза aim offset «взгляд вверх 90°», пустые руки: плечо 59°, предплечье 16°, кисть 27°.",
+   "params": {
+    "pitch": 90
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/04-zero-g-first-person.md: §3 Aim offset — AO_Fly: плечо 59–61°, предплечье 14/19°, кисть 28/27° при +90, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: знак оси (рука вверх — минус тангажа), пальцы не трогаем (hand.pose)"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-fp-look-down",
+   "help": "Поза «взгляд вниз 90°», пустые руки: плечо 48°, предплечье 41°, кисть 55°.",
+   "params": {
+    "pitch": -90
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/04-zero-g-first-person.md: §3 Aim offset — AO_Fly: плечо 48°, предплечье 33/49°, кисть 70/40° при −90, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: знак оси (рука вверх — минус тангажа), пальцы не трогаем (hand.pose)"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-fp-tool-up",
+   "help": "С инструментом, взгляд вверх: только плечо, 0.53 тангажа.",
+   "params": {
+    "pitch": 90,
+    "tool": "tool",
+    "kUp": 0.53,
+    "kDown": 0.53
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/04-zero-g-first-person.md: §3 Aim offset — AO_StickTool_Fly / AO_Bomb: только плечо 45–50°, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: знак оси (рука вверх — минус тангажа), пальцы не трогаем (hand.pose)"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-fp-tool-down",
+   "help": "С инструментом, взгляд вниз: только плечо.",
+   "params": {
+    "pitch": -90,
+    "tool": "tool",
+    "kUp": 0.53,
+    "kDown": 0.53
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/04-zero-g-first-person.md: §3 Aim offset — AO_StickTool_Fly / AO_Bomb: только плечо 45–50°, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: знак оси (рука вверх — минус тангажа), пальцы не трогаем (hand.pose)"
+    }
+   ]
+  }
+ ]
+}

@@ -1313,7 +1313,33 @@ const inspectItem: RecipeDef = {
   },
 };
 
-export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact, "idle-glance": idleGlance, startle, "scare-pose": scarePose, "zero-g-float": zeroGFloat, "power-down": powerDown, "head-look-peck": headLookPeck, "thrust-trail": thrustTrail, "inspect-item": inspectItem };
+// ── руки от первого лица за тангажом камеры (Breathedge AO_Fly, AO_StickTool_Fly) ──────────────────────────────
+const fpAimArms: RecipeDef = {
+  name: "fp-aim-arms",
+  main: ["pitch", "kUp", "kDown"],
+  roles: { arm_l: { chain: "arm_l" }, arm_r: { chain: "arm_r" } },
+  help:
+    "Руки от первого лица следят за камерой (Breathedge aim offset): плечо поворачивается на 0.66 тангажа вверх и 0.53 вниз, " +
+    "предплечье и кисть добавляют своё — вниз сильнее; с инструментом в руке работает только плечо (0.5–0.55). Корпус и голова " +
+    "не участвуют. Статичная поза по тангажу — позы ±90° для смешивания в движке. Коэффициенты измерены, знаки осей — на глаз.",
+  params: {
+    pitch: { type: "number", default: 0, min: -90, max: 90, unit: "°", help: "тангаж камеры: + вверх, − вниз" },
+    tool: { type: "enum", default: "empty", options: ["empty", "tool"], help: "пустые руки — плечо, предплечье и кисть; с инструментом — только плечо" },
+    kUp: { type: "number", default: 0.66, min: 0, max: 1.5, help: "плечо к тангажу вверх (пустые 0.66, инструмент 0.5–0.55)" },
+    kDown: { type: "number", default: 0.53, min: 0, max: 1.5, help: "плечо к тангажу вниз (0.53)" },
+    foreUp: { type: "number", default: 0.18, min: 0, max: 1, help: "предплечье вверх (14–19° на 90)" },
+    foreDown: { type: "number", default: 0.46, min: 0, max: 1, help: "предплечье вниз (33–49° на 90)" },
+    handUp: { type: "number", default: 0.3, min: 0, max: 1, help: "кисть вверх (27–28° на 90)" },
+    handDown: { type: "number", default: 0.61, min: 0, max: 1, help: "кисть вниз (40–70° на 90)" },
+  },
+  evaluate(p, i) {
+    const up = p.pitch >= 0, k = i === 0 ? (up ? p.kUp : p.kDown) : p.tool === "tool" ? 0 : i === 1 ? (up ? p.foreUp : p.foreDown) : i === 2 ? (up ? p.handUp : p.handDown) : 0;
+    // «−» — рука вперёд и вверх (как у waddle-walk)
+    return k ? { pitch: -k * p.pitch } : {};
+  },
+};
+
+export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact, "idle-glance": idleGlance, startle, "scare-pose": scarePose, "zero-g-float": zeroGFloat, "power-down": powerDown, "head-look-peck": headLookPeck, "thrust-trail": thrustTrail, "inspect-item": inspectItem, "fp-aim-arms": fpAimArms };
 
 export { QUAD, STARTLE, glancePlan, emergeCurve, strikeCurve, flapProfile, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
 

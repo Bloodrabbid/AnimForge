@@ -378,6 +378,7 @@ pnpm af export.directions --clip walk --verify true                    # и св
 - `curl` секциями (`sections` 2–3): хвост пришельца Breathedge гнётся тремя секциями (звенья 0–2 / 3–9 / 10–14 из 15) — внутри секции синхронно, следующая секция запаздывает на `sectionPhase`, размах средней и концевой — `midAmp` / `tipAmp`. При `sections` 1 — прежний `curl`. Пресет `breathedge-xeno-tail-sections`.
 - `thrust-trail`: тело отстаёт от тяги в невесомости (Breathedge, 9 клипов полёта) — по углу тяги (`angle`: 0 вперёд, 90 вправо) таз ложится вперёд на 26.6° или откидывается на 38°, кренится вбок на 22.5°, на диагоналях поворачивается на 44°, бёдра отстают. Статичная поза поверх `zero-g-float`; восемь пресетов `breathedge-thrust-f/fr/r/br/b/bl/l/fl` ложатся на восемь направлений.
 - `inspect-item`: осмотр предмета в руке (Breathedge, инструменты) — рука держит предмет перед собой, кисть проворачивает его на 163° вокруг оси предплечья, предплечье ходит на 57°, плечо на 20°; петля 1.67–3.17 с. Без кисти в цепочке проворот ложится на предплечье (у рабочего его режут пределы ±15°). Пресеты `breathedge-inspect-tool`, `-quick`, `-slow`.
+- `fp-aim-arms`: руки от первого лица за тангажом камеры (Breathedge aim offset) — плечо 0.66 тангажа вверх и 0.53 вниз, предплечье и кисть добавляют, вниз сильнее; с инструментом — только плечо. Статичная поза по `pitch`; пресеты-позы `breathedge-fp-look-up/down` и `breathedge-fp-tool-up/down` для aim offset в движке. Пальцы — `hand.pose`.
 - `charge-release`: силовая атака — замах, удержание с пружинящим корнем, выпуск двумя ударами (`witcher-power`).
 - События рецептов: `hit`, `whoosh`, `effort`, `trail_on/off`, `window_open/close`.
   Посмотреть их: `af clip.events --clip combo`. При экспорте они пишутся в extras анимации и в `<glb>.events.json`.
@@ -785,6 +786,7 @@ pnpm af model.autorig --project out/uploads/bot --file assets/model.glb --out as
 | `head-look-peck` | птицы и мелкие звери: вертит головой | Breathedge: `breathedge-chicken-keeper`, `-alert`, `-calm` |
 | `thrust-trail` | полёт в невесомости, джетпак, плавание: поза по направлению тяги | Breathedge: `breathedge-thrust-f` … `-fl` |
 | `inspect-item` | осмотреть предмет, инструмент, находку | Breathedge: `breathedge-inspect-tool`, `-quick`, `-slow` |
+| `fp-aim-arms` | руки от первого лица: позы aim offset вверх и вниз | Breathedge: `breathedge-fp-look-up/down`, `breathedge-fp-tool-up/down` |
 | прочее | | `melee-strike`: `breathedge-guardian-hit`, `breathedge-fp-crowbar/jab`; `curl`: `haven-creature-breathe`, `breathedge-xeno-tail-walk/angry`; `jiggle`: `breathedge-cow-ragdoll-limb/tongue`; `blink`: `haven-toriko/daikon-blink`; `charge-release`: `gm-ghost-power`; твины камеры `breathedge-camera-hit/bump` |
 
 Шаблоны `template.make`: `quadruped`, `insect`, `spider`, `centipede`, `bird`, `ghost`, `plant`. Разборы, из которых взяты числа:

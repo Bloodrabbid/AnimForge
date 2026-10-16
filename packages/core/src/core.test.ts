@@ -1472,3 +1472,13 @@ test("inspect-item: размахи Breathedge (кисть 163°, предпле�
   assert.equal((def.evaluate(p, 1, 3, 0.3) as any).roll, undefined);
   close(def.evaluate(p, 2, 3, p.period).roll!, def.evaluate(p, 2, 3, 0).roll!, 1e-9, "шов");
 });
+
+test("fp-aim-arms: плечо 0.66 тангажа вверх и 0.53 вниз, предплечье и кисть сильнее вниз, с инструментом — только плечо", () => {
+  const def = RECIPES["fp-aim-arms"];
+  const at = (pitch: number, i: number, tool = "empty") => def.evaluate(withDefaults(def, { pitch, tool }), i, 3, 0).pitch ?? 0;
+  close(at(90, 0), -59.4, 1e-9, "плечо вверх ≈ 59–61°");
+  close(at(-90, 0), 47.7, 1e-9, "плечо вниз ≈ 48°");
+  assert.ok(Math.abs(at(-90, 1)) > Math.abs(at(90, 1)) && Math.abs(at(-90, 2)) > Math.abs(at(90, 2)), "вниз сильнее");
+  assert.deepEqual([at(90, 1, "tool"), at(90, 2, "tool")], [0, 0]);
+  close(at(45, 0), at(90, 0) / 2, 1e-9, "линейно по тангажу");
+});
