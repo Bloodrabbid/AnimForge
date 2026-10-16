@@ -1021,9 +1021,52 @@ const idleGlance: RecipeDef = {
   events: (p) => glancePlan(p).starts.map((t) => ({ t: +t.toFixed(4), name: "glance" })),
 };
 
-export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact, "idle-glance": idleGlance };
+// ── испуг смертного (Ghost Master: re1, maa_boo, dbltake, re18, re7) ───────────────────────────────────────────
+/** Ключевые позы по ролям: времена (с) — измерены, позы рук, ног и наклоны — на глаз по раскадровкам; сдвиги — доли
+ * высоты таза (H Ghost Master — рост головы 1.62 м, таз ≈ 0.59 H, так что 0.06 H ≈ 0.10 таза). Копия — в af_recipes.gd. */
+const STARTLE: Record<string, any> = {"flinch": {"t": [0, 0.1, 0.27, 0.53, 1.13], "ev": [[0.13, "surprise"]], "pelvis": {"move_up": [0, -0.05, -0.1, -0.1, 0], "move_forward": [0, -0.02, -0.05, -0.05, 0], "pitch": [0, 2, 6, 6, 0]}, "chest": {"pitch": [0, 4, 10, 10, 0]}, "head": {"pitch": [0, 4, 8, 8, 0]}, "arm0": {"pitch": [0, -10, -35, -35, 0]}, "arm1": {"pitch": [0, -20, -60, -60, 0]}, "leg0": {"pitch": [0, -5, -12, -12, 0]}, "leg1": {"pitch": [0, 8, 20, 20, 0]}}, "jump": {"t": [0, 0.39, 0.55, 0.63, 0.79, 1.0, 1.25, 2.0], "ev": [[0.39, "surprise"], [1.0, "land"]], "pelvis": {"move_up": [0, -0.14, 0.1, 0.16, 0.14, -0.1, -0.05, 0], "pitch": [0, 10, -4, -6, -5, 8, 3, 0]}, "chest": {"pitch": [0, 12, -8, -12, -10, 10, 4, 0]}, "head": {"pitch": [0, 14, -12, -20, -16, 8, 3, 0]}, "arm0": {"pitch": [0, 25, -120, -165, -160, -50, -20, 0]}, "arm1": {"pitch": [0, -30, -10, 0, 0, -40, -15, 0]}, "leg0": {"pitch": [0, -30, 5, 8, 6, -25, -10, 0]}, "leg1": {"pitch": [0, 55, 0, 0, 0, 45, 20, 0]}}, "doubletake": {"t": [0, 0.3, 0.55, 0.85, 1.28, 1.43, 1.75, 2.17], "ev": [[0.55, "surprise"], [1.75, "land"]], "pelvis": {"move_up": [0, 0, 0, -0.14, 0.08, 0.12, -0.08, -0.08], "pitch": [0, 0, 0, 10, -4, -6, 8, 8]}, "chest": {"pitch": [0, 0, 0, 12, -8, -10, 10, 10], "yaw": [0, 10, 0, 0, 0, 0, 0, 0]}, "head": {"pitch": [0, 0, 0, 8, -10, -14, 4, 4], "yaw": [0, 25, 0, 0, 0, 0, 0, 0]}, "arm0": {"pitch": [0, 0, 0, 15, -110, -140, -60, -60]}, "arm1": {"pitch": [0, 0, 0, -20, -10, 0, -30, -30]}, "leg0": {"pitch": [0, 0, 0, -28, 4, 6, -18, -18]}, "leg1": {"pitch": [0, 0, 0, 50, 0, 0, 35, 35]}}, "cower": {"t": [0, 0.25, 0.7, 0.9], "ev": [], "pelvis": {"move_up": [0, -0.15, -0.5, -0.475], "pitch": [0, 5, 12, 11]}, "chest": {"pitch": [0, 5, 15, 14]}, "head": {"pitch": [0, 5, 18, 17]}, "arm0": {"pitch": [0, -60, -165, -160]}, "arm1": {"pitch": [0, -40, -100, -95]}, "leg0": {"pitch": [0, -25, -70, -67]}, "leg1": {"pitch": [0, 45, 120, 115]}}, "faint": {"t": [0, 0.33, 0.65, 0.93, 1.08, 1.25, 1.67], "ev": [[1.08, "thud"]], "pelvis": {"pitch": [0, -5, -35, -82, -76, -80, -80], "move_up": [0, -0.18, -0.53, -1, -0.965, -1, -1], "move_forward": [0, -0.05, -0.35, -0.78, -0.78, -0.78, -0.78]}, "chest": {"pitch": [0, -4, -8, -13, -4, -8, -8]}, "head": {"pitch": [0, -12, -18, -2, 8, 4, 4]}, "arm0": {"pitch": [0, -20, -50, -30, -10, -20, -20]}, "arm1": {"pitch": [0, -20, -40, -20, -10, -15, -15]}, "leg0": {"pitch": [0, -20, -30, -10, -25, -5, -5]}, "leg1": {"pitch": [0, 40, 45, 15, 25, 10, 10]}}};
+/** Поза к позе: в каждом ключе скорость ноль (smoothstep), как кривая body-ram. */
+function keyCurve(T: number[], v: number[], t: number): number {
+  if (t <= 0) return v[0];
+  for (let k = 1; k < T.length; k++) if (t < T[k]) { const u = (t - T[k - 1]) / (T[k] - T[k - 1]); return v[k - 1] + (v[k] - v[k - 1]) * u * u * (3 - 2 * u); }
+  return v[v.length - 1];
+}
+const startle: RecipeDef = {
+  name: "startle",
+  main: ["amount", "speed", "lie"],
+  roles: Object.fromEntries(["pelvis", "chest", "head", "arm_l", "arm_r", "leg_l", "leg_r"].map((r) => [r, { chain: r, params: { role: r }, optional: r !== "pelvis" }])),
+  help:
+    "Испуг смертного (Ghost Master): flinch — вздрог, пик 0.27 с и полный возврат; jump — «выпрыгнуть из кожи»: присед 0.39 с, " +
+    "вытяжка с руками над головой к 0.63 с, приземление; doubletake — обернулся, присел, подскок, настороженная поза; " +
+    "cower — сжаться, руки на голову, к 0.7 с и остаться; faint — обморок: оседание, заваливание назад, падение плашмя с отскоком. " +
+    "Времена и ход таза измерены, позы конечностей — на глаз. Ноги на полу — clip.ground (кроме обморока).",
+  params: {
+    kind: { type: "enum", default: "flinch", options: ["flinch", "jump", "doubletake", "cower", "faint"], help: "что за испуг" },
+    role: { type: "enum", default: "pelvis", options: ["pelvis", "chest", "head", "arm_l", "arm_r", "leg_l", "leg_r"], help: "какую часть тела крутит слой (у рук и ног — две кости)" },
+    amount: { type: "number", default: 1, min: 0, max: 2, help: "сила: множитель всех углов и сдвигов" },
+    speed: { type: "number", default: 1, min: 0.3, max: 3, help: "темп: 1 — как в игре; 0.63 — «отпрянуть» re2 (пик 0.43 с вместо 0.27)" },
+    lie: { type: "number", default: 0.15, min: 0, max: 0.8, help: "обморок: таз лёжа — доля его высоты стоя (тонкий человек 0.15, толстяк — больше; подбирает проверка «в пол»)" },
+  },
+  length: (p) => +(STARTLE[p.kind].t[STARTLE[p.kind].t.length - 1] / p.speed).toFixed(3),
+  evaluate(p, i, n, t, info) {
+    const K = STARTLE[p.kind];
+    const limb = /^(arm|leg)_/.test(p.role);
+    if (limb ? i > 1 : i > 0) return {};
+    const ch: Record<string, number[]> | undefined = K[limb ? `${p.role.slice(0, 3)}${i}` : p.role];
+    if (!ch) return {};
+    const out: Partial<Record<Channel, number>> = {};
+    const H = info?.height ?? 1;
+    // у обморока подъём таза — доля полного опускания, глубина — lie
+    const drop = (c: string) => (p.kind === "faint" && p.role === "pelvis" && c === "move_up" ? 1 - p.lie : 1);
+    for (const [c, v] of Object.entries(ch)) out[c as Channel] = keyCurve(K.t, v, t * p.speed) * p.amount * drop(c) * (c.startsWith("move_") ? H : 1);
+    return out;
+  },
+  events: (p) => STARTLE[p.kind].ev.map(([t, name]: [number, string]) => ({ t: +(t / p.speed).toFixed(4), name })),
+};
 
-export { QUAD, glancePlan, emergeCurve, strikeCurve, flapProfile, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
+export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact, "idle-glance": idleGlance, startle };
+
+export { QUAD, STARTLE, glancePlan, emergeCurve, strikeCurve, flapProfile, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
 
 export function withDefaults(def: RecipeDef, params: Record<string, unknown>): Record<string, any> {
   const out: Record<string, any> = {};

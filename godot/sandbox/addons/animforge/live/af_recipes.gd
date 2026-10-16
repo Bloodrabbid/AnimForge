@@ -6,7 +6,7 @@ extends RefCounted
 
 const RAD := PI / 180.0
 const SECONDARY := ["jiggle"]
-const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble", "hit-react", "idle-glance"]
+const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble", "hit-react", "idle-glance", "startle"]
 
 
 static func is_secondary(recipe: String) -> bool:
@@ -33,6 +33,7 @@ static func evaluate(recipe: String, p: Dictionary, i: int, n: int, t: float, in
 		"tremble": return _tremble(p, i, n, t)
 		"hit-react": return _hit_react(p, i, t, info)
 		"idle-glance": return _idle_glance(p, n, t)
+		"startle": return _startle(p, i, t, info)
 	push_error("AFRecipes: нет рецепта «%s»" % recipe)
 	return {}
 
@@ -46,6 +47,11 @@ static func events(recipe: String, p: Dictionary) -> Array:
 			return [{"t": to_fixed(p["windupT"] + p["strikeT"], 4), "name": "hit"}]
 		"body-ram": return _ram_events(p)
 		"hit-react": return _react_events(p)
+		"startle":
+			var sev := []
+			for e in STARTLE[p["kind"]]["ev"]:
+				sev.append({"t": to_fixed(e[0] / p["speed"], 4), "name": e[1]})
+			return sev
 		"idle-glance":
 			var ev := []
 			for s0 in _glance_plan(p)["starts"]:
@@ -74,6 +80,9 @@ static func length(recipe: String, p: Dictionary) -> float:
 		"tentacle-strike": return to_fixed(p["windupT"] + p["strikeT"] + p["hold"] + p["returnT"] + 0.3, 3)
 		"body-ram": return to_fixed(_ram_keys(p)["ev"]["f"] + p["tail"], 3)
 		"hit-react": return p["duration"]
+		"startle":
+			var st: Array = STARTLE[p["kind"]]["t"]
+			return to_fixed(st[st.size() - 1] / p["speed"], 3)
 	return -1.0
 
 
@@ -847,3 +856,26 @@ static func _idle_glance(p: Dictionary, n: int, t: float) -> Dictionary:
 		var k := 1.0 / maxi(1, n)
 		return {"yaw": (g["from"][0] + (g["to"][0] - g["from"][0]) * u) * k, "pitch": (g["from"][1] + (g["to"][1] - g["from"][1]) * u) * k}
 	return {}
+
+
+# ── startle ─────────────────────────────────────────────────────────────────────────────────────────────────────
+# Позы испуга Ghost Master — та же таблица, что STARTLE в recipes.ts.
+const STARTLE := {"flinch": {"t": [0, 0.1, 0.27, 0.53, 1.13], "ev": [[0.13, "surprise"]], "pelvis": {"move_up": [0, -0.05, -0.1, -0.1, 0], "move_forward": [0, -0.02, -0.05, -0.05, 0], "pitch": [0, 2, 6, 6, 0]}, "chest": {"pitch": [0, 4, 10, 10, 0]}, "head": {"pitch": [0, 4, 8, 8, 0]}, "arm0": {"pitch": [0, -10, -35, -35, 0]}, "arm1": {"pitch": [0, -20, -60, -60, 0]}, "leg0": {"pitch": [0, -5, -12, -12, 0]}, "leg1": {"pitch": [0, 8, 20, 20, 0]}}, "jump": {"t": [0, 0.39, 0.55, 0.63, 0.79, 1.0, 1.25, 2.0], "ev": [[0.39, "surprise"], [1.0, "land"]], "pelvis": {"move_up": [0, -0.14, 0.1, 0.16, 0.14, -0.1, -0.05, 0], "pitch": [0, 10, -4, -6, -5, 8, 3, 0]}, "chest": {"pitch": [0, 12, -8, -12, -10, 10, 4, 0]}, "head": {"pitch": [0, 14, -12, -20, -16, 8, 3, 0]}, "arm0": {"pitch": [0, 25, -120, -165, -160, -50, -20, 0]}, "arm1": {"pitch": [0, -30, -10, 0, 0, -40, -15, 0]}, "leg0": {"pitch": [0, -30, 5, 8, 6, -25, -10, 0]}, "leg1": {"pitch": [0, 55, 0, 0, 0, 45, 20, 0]}}, "doubletake": {"t": [0, 0.3, 0.55, 0.85, 1.28, 1.43, 1.75, 2.17], "ev": [[0.55, "surprise"], [1.75, "land"]], "pelvis": {"move_up": [0, 0, 0, -0.14, 0.08, 0.12, -0.08, -0.08], "pitch": [0, 0, 0, 10, -4, -6, 8, 8]}, "chest": {"pitch": [0, 0, 0, 12, -8, -10, 10, 10], "yaw": [0, 10, 0, 0, 0, 0, 0, 0]}, "head": {"pitch": [0, 0, 0, 8, -10, -14, 4, 4], "yaw": [0, 25, 0, 0, 0, 0, 0, 0]}, "arm0": {"pitch": [0, 0, 0, 15, -110, -140, -60, -60]}, "arm1": {"pitch": [0, 0, 0, -20, -10, 0, -30, -30]}, "leg0": {"pitch": [0, 0, 0, -28, 4, 6, -18, -18]}, "leg1": {"pitch": [0, 0, 0, 50, 0, 0, 35, 35]}}, "cower": {"t": [0, 0.25, 0.7, 0.9], "ev": [], "pelvis": {"move_up": [0, -0.15, -0.5, -0.475], "pitch": [0, 5, 12, 11]}, "chest": {"pitch": [0, 5, 15, 14]}, "head": {"pitch": [0, 5, 18, 17]}, "arm0": {"pitch": [0, -60, -165, -160]}, "arm1": {"pitch": [0, -40, -100, -95]}, "leg0": {"pitch": [0, -25, -70, -67]}, "leg1": {"pitch": [0, 45, 120, 115]}}, "faint": {"t": [0, 0.33, 0.65, 0.93, 1.08, 1.25, 1.67], "ev": [[1.08, "thud"]], "pelvis": {"pitch": [0, -5, -35, -82, -76, -80, -80], "move_up": [0, -0.18, -0.53, -1, -0.965, -1, -1], "move_forward": [0, -0.05, -0.35, -0.78, -0.78, -0.78, -0.78]}, "chest": {"pitch": [0, -4, -8, -13, -4, -8, -8]}, "head": {"pitch": [0, -12, -18, -2, 8, 4, 4]}, "arm0": {"pitch": [0, -20, -50, -30, -10, -20, -20]}, "arm1": {"pitch": [0, -20, -40, -20, -10, -15, -15]}, "leg0": {"pitch": [0, -20, -30, -10, -25, -5, -5]}, "leg1": {"pitch": [0, 40, 45, 15, 25, 10, 10]}}}
+
+
+static func _startle(p: Dictionary, i: int, t: float, info: Dictionary) -> Dictionary:
+	var K: Dictionary = STARTLE[p["kind"]]
+	var role: String = p["role"]
+	var limb := role.begins_with("arm_") or role.begins_with("leg_")
+	if (i > 1) if limb else (i > 0):
+		return {}
+	var key: String = (role.substr(0, 3) + str(i)) if limb else role
+	if not K.has(key):
+		return {}
+	var H: float = info.get("height", 1.0)
+	var out := {}
+	for c in K[key]:
+		# у обморока подъём таза — доля полного опускания, глубина — lie
+		var drop: float = (1.0 - p["lie"]) if p["kind"] == "faint" and role == "pelvis" and c == "move_up" else 1.0
+		out[c] = _ram_curve(K["t"], K[key][c], t * p["speed"]) * p["amount"] * drop * (H if c.begins_with("move_") else 1.0)
+	return out

@@ -38,14 +38,14 @@ export const CATEGORIES: { id: string; title: string; recipes: string[] }[] = [
   { id: "swim", title: "Плавание и хвосты", recipes: ["wave", "curl"] },
   { id: "hover", title: "Парение", recipes: ["hover"] },
   { id: "fight", title: "Удары", recipes: ["melee-strike", "charge-release", "tentacle-strike", "body-ram"] },
-  { id: "react", title: "Реакции", recipes: ["hit-react"] },
+  { id: "react", title: "Реакции", recipes: ["hit-react", "startle"] },
   { id: "emerge", title: "Появление", recipes: ["emerge"] },
   { id: "small", title: "Мелочи", recipes: ["blink", "jiggle", "tremble", "idle-glance"] },
 ];
 export const categoryOf = (recipe: string) => CATEGORIES.find((c) => c.recipes.includes(recipe))?.id ?? "small";
 
 /** Рецепты на один раз (удар, появление) — клип не зациклен. */
-export const ONE_SHOT = new Set(["melee-strike", "charge-release", "tentacle-strike", "emerge", "body-ram", "hit-react"]);
+export const ONE_SHOT = new Set(["melee-strike", "charge-release", "tentacle-strike", "emerge", "body-ram", "hit-react", "startle"]);
 
 /** Цепочки, которые подходят рецепту без ролей, — в порядке предпочтения. */
 const CHAIN_PREF: Record<string, string[]> = {

@@ -238,3 +238,25 @@ test("waddle-walk: у каждого пресета фаза ног своя —
   }
   assert.deepEqual(bad, []);
 });
+
+test("startle на рабочем: пресеты Ghost Master проходят проверки; обморок тонкого человека у толстяка уходит в пол — lie чинит", async () => {
+  const dir = copy("startle");
+  await smoothWeights(dir);
+  const lib = JSON.parse(readFileSync(join(ROOT, "library/presets/startle.json"), "utf8"));
+  for (const pr of lib.presets) {
+    const p = withDefaults(RECIPES.startle, pr.params);
+    await call(dir, "clip.add", { name: pr.name, duration: RECIPES.startle.length!(p), loop: false });
+    await call(dir, "recipe.rig", { clip: pr.name, recipe: "startle", preset: pr.name });
+    await call(dir, "clip.ground", { clip: pr.name, bones: "foot_l,foot_r", mode: "floor", ik: true, flat: true });
+  }
+  const ctx = await loadCtx(dir), mesh = await loadMesh(ctx);
+  const fails = (name: string) => checkClip(ctx.project, ctx, mesh, ctx.project.clips.find((c) => c.name === name)!, false).report.findings.filter((f) => f.level === "fail").map((f) => f.check);
+  for (const pr of lib.presets) {
+    const c = ctx.project.clips.find((x) => x.name === pr.name)!;
+    assert.equal(c.layers.filter((l) => l.type === "recipe").length, 7, `${pr.name}: слой на каждую роль`);
+    // глубокий присед рвёт кожу бедра рабочего при любой позе — это меш, не рецепт (так же у hit-react)
+    const f = fails(pr.name).filter((x) => !(pr.name === "gm-cower" && x === "skin"));
+    if (pr.name === "gm-faint") assert.deepEqual(f, ["floor"], "таз лёжа 0.15 — толстяк в полу");
+    else assert.deepEqual(f, [], pr.name);
+  }
+});

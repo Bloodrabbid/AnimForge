@@ -1,0 +1,127 @@
+{
+ "recipe": "startle",
+ "presets": [
+  {
+   "name": "gm-flinch",
+   "help": "Вздрог (re1): пик 0.27 с, таз вниз, плечи вверх и руки к груди, полный возврат; звук на 0.13 с.",
+   "params": {
+    "kind": "flinch"
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/03-mortal-fear.md: §2 — maa_re1/faa_re1: длина 1.13, пик 0.27, таз вниз 0.06 H, звук 0.13 — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: позы рук, ног и наклоны по раскадровке"
+    }
+   ]
+  },
+  {
+   "name": "gm-recoil",
+   "help": "Отпрянуть (re2): медленнее и сильнее вздрога — пик 0.43 с, таз вниз 0.09–0.16 H.",
+   "params": {
+    "kind": "flinch",
+    "speed": 0.63,
+    "amount": 1.4
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/03-mortal-fear.md: §2 — maa_re2/faa_re2: пик 0.37–0.43, таз вниз 0.09–0.16 H — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: re2 как вздрог в темпе 0.63 и силе 1.4, без отдельной позы колена"
+    }
+   ]
+  },
+  {
+   "name": "gm-jump-out-of-skin",
+   "help": "«Выпрыгнуть из кожи» (maa_boo): присед-замах до 0.39 с, вытяжка с руками над головой к 0.63 с, приземление и долгий возврат.",
+   "params": {
+    "kind": "jump"
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/03-mortal-fear.md: §3 — maa_boo: фазы 0–0.39 / 0.39–0.79 / 0.79–1.97 с, таз −0.08 H, голова против хода 0.7, руки +0.10 H над головой — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: углы рук и ног, высота подскока"
+    }
+   ]
+  },
+  {
+   "name": "gm-double-take",
+   "help": "Двойной взгляд (dbltake): обернулся, присел к 0.85 с, подскок с руками к 1.43 с, остался в настороженной позе.",
+   "params": {
+    "kind": "doubletake"
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/03-mortal-fear.md: §3 — maa_dbltake: 2.17 с, присед 0.85, подскок 1.28, пик 1.43, конец/пик 0.64 — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: поворот головы, позы рук и ног"
+    }
+   ]
+  },
+  {
+   "name": "gm-cower",
+   "help": "Сжаться (re18): присесть, руки к голове к 0.7 с и остаться сжавшимся.",
+   "params": {
+    "kind": "cower"
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/03-mortal-fear.md: §6 — maa_re18/faa_re18: 0.9 с, таз вниз 0.28–0.30 H, пик 0.7, конец/пик 0.95 — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: руки к голове, наклоны"
+    }
+   ]
+  },
+  {
+   "name": "gm-faint",
+   "help": "Обморок (re7): оседание, заваливание назад, падение плашмя к 0.93 с, отскок груди, удар о пол на 1.08 с.",
+   "params": {
+    "kind": "faint"
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/03-mortal-fear.md: §5 — maa_re7: 1.67 с, пик 0.93, таз вниз 0.63 H, назад 0.47 H, перелёт груди 1.6, удар 1.08 — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: таз лёжа 0.15 его высоты (тонкий человек), позы рук и ног"
+    }
+   ]
+  },
+  {
+   "name": "gm-faint-chubby",
+   "help": "Обморок у круглого коротконогого персонажа: тот же ход, таз лёжа выше — тело не уходит в пол.",
+   "params": {
+    "kind": "faint",
+    "lie": 0.7
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/03-mortal-fear.md: §5 — maa_re7 — времена и ход, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: lie 0.7 подобран проверкой «в пол» на рабочем (при 0.15 провал 16 % роста)"
+    }
+   ]
+  }
+ ]
+}

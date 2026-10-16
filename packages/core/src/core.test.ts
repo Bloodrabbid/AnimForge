@@ -1321,3 +1321,36 @@ test("waddle-walk headNod: голова кивает в мире раз за ш�
   assert.equal(zc, 4, "два кивка за цикл — раз за шаг");
   assert.equal(def.evaluate({ ...withDefaults(def, {}), role: "head" }, 0, 1, 0.1).pitch, undefined, "без headNod голова не кивает");
 });
+
+test("startle: времена Ghost Master — пик вздрога 0.27 с и возврат, присед прыжка до 0.39 с, обморок лежит", () => {
+  const def = RECIPES.startle;
+  const at = (kind: string, role: string, t: number, extra: Record<string, unknown> = {}, i = 0) => def.evaluate(withDefaults(def, { kind, role, ...extra }), i, 2, t, { height: 1 });
+  const series = (kind: string, ch: string, role = "pelvis", extra = {}) => { const p = withDefaults(def, { kind, ...extra }), L = def.length!(p), out: [number, number][] = []; for (let t = 0; t <= L + 1e-9; t += 0.005) out.push([t, (at(kind, role, t, extra) as any)[ch] ?? 0]); return out; };
+  const argmin = (s: [number, number][]) => s.reduce((a, b) => (b[1] < a[1] ? b : a));
+  const argmax = (s: [number, number][]) => s.reduce((a, b) => (b[1] > a[1] ? b : a));
+  // вздрог: таз ниже всего с 0.27 с (дальше держит), к концу — в покое
+  const fl = series("flinch", "move_up");
+  close(argmin(fl)[0], 0.27, 0.006, "пик вздрога");
+  close(fl[fl.length - 1][1], 0, 1e-9, "полный возврат");
+  // темп 0.63 — пик позже: 0.27 / 0.63 ≈ 0.43 (re2)
+  close(argmin(series("flinch", "move_up", "pelvis", { speed: 0.63 }))[0], 0.43, 0.006, "re2");
+  // прыжок: присед к 0.39, подскок к 0.63; голова в приседе против хода — 0.7 главного
+  const jp = series("jump", "move_up");
+  close(argmin(jp.filter(([t]) => t < 0.6))[0], 0.39, 0.006, "присед");
+  close(argmax(jp)[0], 0.63, 0.006, "пик вытяжки");
+  const head = series("jump", "pitch", "head");
+  close(-argmax(head)[1] / argmin(head)[1], 0.7, 0.01, "замах головы 0.7");
+  // руки над головой в пике
+  assert.ok((at("jump", "arm_l", 0.63, {}, 0).pitch as number) < -150);
+  // сжаться: остаётся — конец/пик 0.95
+  const cw = series("cower", "move_up");
+  close(cw[cw.length - 1][1] / argmin(cw)[1], 0.95, 0.01, "остался сжавшимся");
+  // обморок: лежит, таз на высоте lie; удар об пол — событие thud
+  const p = withDefaults(def, { kind: "faint", lie: 0.3 });
+  close(at("faint", "pelvis", def.length!(p), { lie: 0.3 }).move_up as number, -0.7, 1e-9, "таз лёжа");
+  assert.ok((at("faint", "pelvis", def.length!(p)).pitch as number) < -70, "плашмя назад");
+  assert.deepEqual(def.events!(p), [{ t: 1.08, name: "thud" }]);
+  // кисть и третьи кости не трогаем
+  assert.deepEqual(at("jump", "arm_l", 0.63, {}, 2), {});
+  assert.deepEqual(at("jump", "pelvis", 0.63, {}, 1), {}, "у таза — только первая кость");
+});
