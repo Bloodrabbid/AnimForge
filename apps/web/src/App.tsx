@@ -33,6 +33,7 @@ import { SimplePanel } from "./SimplePanel.tsx";
 import { LibraryPanel, chainsFor, sourceOf, type Entry } from "./LibraryPanel.tsx";
 import { ClipsPanel, takeLabel } from "./ClipsPanel.tsx";
 import { ProjectMenu } from "./ProjectMenu.tsx";
+import { MappingPanel, type BoneMap } from "./MappingPanel.tsx";
 import { Timeline } from "./Timeline.tsx";
 import { Viewport, type Trail, type ViewCmd } from "./Viewport.tsx";
 import { GraphPanel, isShown, limbColor, useMotionGraph } from "./GraphPanel.tsx";
@@ -52,6 +53,8 @@ interface Trial {
   /** что примеряем: имя пресета или готового клипа, и подпись (рецепт · источник) */
   label: string;
   sub: string;
+  /** готовый клип: пак, дубль и ручные пары костей — для сопоставления бок о бок */
+  imported?: { pack: ClipPackInfo; take: string; map: BoneMap };
   chain?: string;
   clip: string;
   prevClip: string | null;
@@ -86,6 +89,7 @@ export function App() {
   const [leftTab, setLeftTab] = useState<"library" | "clips" | "bones">((query.get("left") as "bones") ?? "library");
   // пресет из библиотеки — поверх текущего клипа (на готовую основу), а не новым клипом
   const [overlayOn, setOverlayOn] = useState(false);
+  const [mapping, setMapping] = useState(false);
   // простой режим по умолчанию: модель, клипы, позинг, главные ручки и проверка; остальное — «Расширенное» (запоминается)
   const [advanced, setAdvanced] = useState(() => query.get("adv") === "1" || (query.get("adv") !== "0" && localStorage.getItem("af.advanced") === "1"));
   useEffect(() => localStorage.setItem("af.advanced", advanced ? "1" : "0"), [advanced]);
@@ -208,15 +212,15 @@ export function App() {
 
   /** Готовый клип из library/clips: примерка clip.import на копии проекта. */
   const tryClip = useCallback(
-    async (pack: ClipPackInfo, take: string) => {
+    async (pack: ClipPackInfo, take: string, map: BoneMap = {}) => {
       if (!project) return;
-      let name = take;
-      for (let i = 2; project.clips.some((c) => c.name === name); i++) name = `${take}-${i}`;
-      const steps: Step[] = [{ name: "clip.import", args: { pack: pack.id, take, as: name } }];
+      let name = takeLabel(take).replace(/ /g, "_");
+      for (let i = 2; project.clips.some((c) => c.name === name); i++) name = `${takeLabel(take).replace(/ /g, "_")}-${i}`;
+      const steps: Step[] = [{ name: "clip.import", args: { pack: pack.id, take, as: name, ...(Object.keys(map).length ? { map } : {}) } }];
       setBusy(true);
       try {
         const next = await preview(DIR, steps);
-        setTrial((old) => ({ label: takeLabel(take), sub: `${pack.name} · ${pack.license}`, clip: name, prevClip: old ? old.prevClip : clipName, steps, project: next }));
+        setTrial((old) => ({ label: takeLabel(take), sub: `${pack.name} · ${pack.license}`, imported: { pack, take, map }, clip: name, prevClip: old ? old.prevClip : clipName, steps, project: next }));
         setClipName(name);
         setT(0);
         setPlaying(true);
@@ -694,6 +698,11 @@ export function App() {
                   </select>
                 </label>
               )}
+              {trial.imported && (
+                <button className="ghost" onClick={() => setMapping(true)} title="скелет пака и вашей модели бок о бок: какие кости куда, поправить руками">
+                  Кости{Object.keys(trial.imported.map).length ? ` (${Object.keys(trial.imported.map).length})` : ""}
+                </button>
+              )}
               <button className="ghost" onClick={cancelTrial} title="Esc">
                 Отмена
               </button>
@@ -701,6 +710,18 @@ export function App() {
                 <Icon name="check" /> Применить
               </button>
             </div>
+          )}
+          {mapping && trial?.imported && (
+            <MappingPanel
+              dir={DIR}
+              pack={trial.imported.pack.id}
+              initial={trial.imported.map}
+              onClose={() => setMapping(false)}
+              onApply={(map) => {
+                setMapping(false);
+                tryClip(trial.imported!.pack, trial.imported!.take, map);
+              }}
+            />
           )}
           {busy && <div className="busy" />}
           {help && <Shortcuts onClose={() => setHelp(false)} />}

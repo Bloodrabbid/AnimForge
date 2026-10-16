@@ -174,3 +174,33 @@ test("робот Quaternius: меш и кость с одним именем н�
   const r = importClip(s, { project: ctx.project, rig: buildRig(ctx.skeleton) }, tk.frames, { name: "r", loop: false });
   assert.ok(r.clip.layers[0].type === "pose" && r.clip.layers[0].keys.length === tk.frames.length);
 });
+
+test("ручные пары костей: своя пара поверх найденной, null — не переносить", async () => {
+  const doc = await new NodeIO().read(UAL);
+  const src = detectSide(animSkeleton(doc));
+  const ctx = await loadCtx(join(ROOT, "projects/worker-demo"));
+  const dst = { project: ctx.project, rig: buildRig(ctx.skeleton) };
+  const name = (s: typeof src | typeof dst, i: number) => s.rig.skel.nodes[i].name;
+  const pairs = (m: Map<number, number>) => new Map([...m].map(([j, i]) => [name(dst, j), name(src, i)]));
+  const auto = pairs(importPlan(src, dst).from);
+  assert.equal(auto.get("arm_l_1"), "DEF-forearm.L");
+  const hand = pairs(importPlan(src, dst, { "DEF-hand.L": "arm_l_1" }).from);
+  assert.equal(hand.get("arm_l_1"), "DEF-hand.L", "ручная пара перекрывает найденную");
+  const off = pairs(importPlan(src, dst, { "DEF-forearm.L": null }).from);
+  assert.ok(![...off.values()].includes("DEF-forearm.L"), "null снимает кость источника");
+  assert.throws(() => importPlan(src, dst, { "нет-такой": "arm_l_1" }), /нет кости/);
+  // в клипе ручная пара и правда меняет позу предплечья
+  const tk = readTakes(doc, 30, ["Sword_Attack"])[0];
+  const a = importClip(src, dst, tk.frames, { name: "a", loop: false }), b = importClip(src, dst, tk.frames, { name: "b", loop: false, map: { "DEF-hand.L": "arm_l_1" } });
+  const ka = a.clip.layers[0].type === "pose" ? a.clip.layers[0].keys[10].rot!.arm_l_1 : undefined;
+  const kb = b.clip.layers[0].type === "pose" ? b.clip.layers[0].keys[10].rot!.arm_l_1 : undefined;
+  assert.notDeepEqual(ka, kb);
+});
+
+test("KayKit: IK и контроллеры (kneeIK, IK-foot, control-…) — не кости тела", async () => {
+  const doc = await new NodeIO().read(join(ROOT, "library/clips/kaykit-skeletons.glb"));
+  const sk = animSkeleton(doc);
+  const joints = sk.nodes.filter((n) => n.isJoint).map((n) => n.name);
+  assert.ok(joints.includes("hand.l") && joints.includes("upperleg.r"));
+  assert.deepEqual(joints.filter((n) => /ik|control/i.test(n)), []);
+});

@@ -7,7 +7,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer as createVite } from "vite";
-import { buildRig, clipSteps, libRoles } from "../../packages/core/src/index.ts";
+import { bodyFrame, buildRig, clipSteps, importPlan, libRoles, vdot } from "../../packages/core/src/index.ts";
 import { RECIPES, ROOT, call, clipPacks, dryRun, exportFile, findPreset, loadCtx, loadPresets, projectFile } from "../../packages/cli/src/node.ts";
 import { stickAnim } from "../../packages/cli/src/stickpreview.ts";
 
@@ -252,6 +252,45 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
       rmSync(tmp, { recursive: true, force: true });
     }
     return;
+  }
+  if (req.method === "POST" && path === "/api/mapping") {
+    // сопоставление костей бок о бок: скелет пака (источник) и модели проекта в покое (вид спереди, 2D), пары —
+    // найденные сами и ручные (body.map), как их увидит clip.import
+    const body = await readBody(req);
+    const dir = projectDir(body.dir);
+    const pack = clipPacks().find((p) => p.id === body.pack);
+    if (!pack) throw new HttpError(400, "нет пака");
+    const { NodeIO } = await import("@gltf-transform/core");
+    const { ALL_EXTENSIONS } = await import("@gltf-transform/extensions");
+    const { animSkeleton } = await import("../../packages/cli/src/animfile.ts");
+    const { detectSide } = await import("../../packages/cli/src/node.ts");
+    const doc = await new NodeIO().registerExtensions(ALL_EXTENSIONS).read(join(ROOT, "library/clips", pack.file));
+    const src = detectSide(animSkeleton(doc));
+    const ctx = await loadCtx(dir);
+    const dst = { project: ctx.project, rig: buildRig(ctx.skeleton) };
+    const auto = importPlan(src, dst).from;
+    let plan;
+    try {
+      plan = importPlan(src, dst, body.map ?? {}).from;
+    } catch (e: any) {
+      return sendJson(res, 400, { ok: false, error: String(e?.message ?? e) });
+    }
+    const view = (s: { project: any; rig: ReturnType<typeof buildRig> }) => {
+      const f = bodyFrame(s.project);
+      const js = s.rig.skel.nodes.flatMap((n, i) => (n.isJoint ? [i] : []));
+      const pts = js.map((i) => [vdot(s.rig.worldT[i], f.side), vdot(s.rig.worldT[i], f.up)]);
+      const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+      const sc = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 1e-6) * 1.1;
+      const cx = (Math.max(...xs) + Math.min(...xs)) / 2, cy = (Math.max(...ys) + Math.min(...ys)) / 2;
+      const slot = new Map(js.map((j, k) => [j, k]));
+      const parent = js.map((j) => { let p = s.rig.parent[j]; while (p >= 0 && !slot.has(p)) p = s.rig.parent[p]; return p >= 0 ? slot.get(p)! : -1; });
+      const chainOf = js.map((j) => Object.entries(s.project.chains as Record<string, string[]>).find(([, c]) => c.includes(s.rig.skel.nodes[j].name))?.[0] ?? null);
+      return { names: js.map((j) => s.rig.skel.nodes[j].name), parent, chain: chainOf, pos: pts.map(([x, y]) => [+(0.5 + (x - cx) / sc).toFixed(4), +(0.5 - (y - cy) / sc).toFixed(4)]), slot };
+    };
+    const S = view(src), D = view(dst);
+    const pairs = [...plan].flatMap(([j, i]) => (S.slot.has(i) && D.slot.has(j) ? [{ src: S.slot.get(i)!, dst: D.slot.get(j)!, manual: auto.get(j) !== i }] : []));
+    const strip = ({ slot, ...v }: ReturnType<typeof view>) => v;
+    return sendJson(res, 200, { ok: true, src: strip(S), dst: strip(D), pairs });
   }
   if (req.method === "GET" && path === "/api/stick") {
     // живое превью для карточки библиотеки: пресет (preset) или готовый клип (pack + take) на скелете модели проекта —

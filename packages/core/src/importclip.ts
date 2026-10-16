@@ -47,7 +47,10 @@ const ancestors = (rig: Rig, i: number) => {
 };
 
 /** Пары «кость цели ← кость источника» и поправка покоя O для каждой. */
-export function importPlan(src: Side, dst: Side) {
+/** Ручное сопоставление: кость источника → кость цели (null — не переносить). Перекрывает найденное само. */
+export type BoneOverrides = Record<string, string | null>;
+
+export function importPlan(src: Side, dst: Side, overrides: BoneOverrides = {}) {
   const map = boneMap(src, dst);
   const sp = src.project.chains.pelvis?.[0], dp = dst.project.chains.pelvis?.[0];
   const sAbove = sp && src.rig.index.has(sp) ? ancestors(src.rig, src.rig.index.get(sp)!) : new Set<number>();
@@ -109,6 +112,16 @@ export function importPlan(src: Side, dst: Side) {
   for (const [j, i] of [...from]) {
     for (let p = dst.rig.parent[j]; p >= 0; p = dst.rig.parent[p]) if (from.get(p) === i) { from.delete(j); break; }
   }
+  // ручные пары — поверх найденного: кость цели берёт указанный источник, «null» снимает источник отовсюду
+  for (const [b, d] of Object.entries(overrides)) {
+    const i = src.rig.index.get(b);
+    if (i == null) throw new Error(`в источнике нет кости «${b}»`);
+    for (const [j, x] of [...from]) if (x === i) from.delete(j);
+    if (d == null) continue;
+    const j = dst.rig.index.get(d);
+    if (j == null) throw new Error(`у модели нет кости «${d}»`);
+    from.set(j, i);
+  }
   const A = bodyTurn(src.project, dst.project);
   const side = bodyFrame(dst.project).side;
   const to = new Map([...from].map(([j, i]) => [i, j]));
@@ -141,9 +154,9 @@ export function importClip(
   src: Side,
   dst: Side,
   frames: SourceFrame[],
-  opts: { name: string; loop: boolean; fps?: number; source?: PoseLayer["source"] },
+  opts: { name: string; loop: boolean; fps?: number; source?: PoseLayer["source"]; map?: BoneOverrides },
 ): { clip: Clip; mapped: Record<string, string>; scale: number; unmapped: string[] } {
-  const { from, O, A } = importPlan(src, dst);
+  const { from, O, A } = importPlan(src, dst, opts.map);
   const ms = measure(src), md = measure(dst);
   const k = md.height / ms.height;
   const align = restAlign(dst.project, dst.rig);

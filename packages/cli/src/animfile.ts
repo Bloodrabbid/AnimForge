@@ -70,8 +70,8 @@ function uniqueNames(skel: Skeleton): Skeleton {
   return { nodes: skel.nodes.map((n, i) => ({ ...n, name: names[i], parent: par[i] >= 0 ? names[par[i]] : null })) };
 }
 
-/** Кости для распознавания: без управляющих корней — IK-цели ног у зверей Quaternius, полюса, контроллеры висят
- * отдельными корнями скелета, и с ними четвероногое не узнаётся. */
+/** Кости для распознавания: без управляющих — IK-цели ног у зверей Quaternius (отдельные корни: с ними четвероногое
+ * не узнаётся), IK и контроллеры KayKit (дети корня рядом с тазом). */
 function mainTree(skel: Skeleton): Skeleton {
   // родитель — ближайший предыдущий узел с его именем (узлы идут в глубину, родитель раньше ребёнка): с одинаковыми
   // именами у меша и кости поиск по имени зациклился бы
@@ -85,7 +85,10 @@ function mainTree(skel: Skeleton): Skeleton {
     return -1;
   };
   const root = (i: number): number => { let r = i; for (let p = jointParent(i); p >= 0; p = jointParent(p)) r = p; return r; };
-  const control = (i: number) => /(^|[^a-z])(ik|pole|target|ctrl|control)/i.test(skel.nodes[root(i)].name);
+  // управляющая кость — IK-цель, полюс, контроллер (kneeIK.l, IK-foot.l, control-toe-roll.l, handIK.l): сама она и
+  // всё под ней — не скелет тела
+  const isCtl = (n: string) => /(^|[^a-z])(pole|target|ctrl|control)|(^|[^a-z])ik|ik([^a-z]|$)/i.test(n);
+  const control = (i: number) => { for (let p = i; p >= 0; p = jointParent(p)) if (isCtl(skel.nodes[p].name)) return true; return false; };
   return { nodes: skel.nodes.map((n, i) => ({ ...n, isJoint: n.isJoint && !control(i) })) };
 }
 

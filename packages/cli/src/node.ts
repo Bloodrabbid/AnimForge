@@ -805,6 +805,7 @@ NODE_COMMANDS["clip.import"] = {
     author: { type: "string", help: "автор (для происхождения)" },
     license: { type: "string", help: "лицензия (для происхождения), например CC0" },
     list: { type: "boolean", help: "только показать дубли файла" },
+    map: { type: "json", help: "ручные пары костей {\"кость источника\": \"кость модели\" | null} — поверх найденных само" },
   },
   async run(dir, a) {
     const { readAnimDoc, animSkeleton, readTakes } = await import("./animfile.ts");
@@ -830,7 +831,7 @@ NODE_COMMANDS["clip.import"] = {
       const f0 = tk.frames[0], f1 = tk.frames[tk.frames.length - 1];
       const same = Object.keys(f0.rot).every((b) => { const p = f0.rot[b], q = f1.rot[b] ?? p; return Math.abs(p[0] * q[0] + p[1] * q[1] + p[2] * q[2] + p[3] * q[3]) > Math.cos((3 * Math.PI) / 360); });
       const loop = a.loop === "true" ? true : a.loop === "false" ? false : /loop|cycle|idle/i.test(base) || (same && tk.frames.length > 4);
-      const r = importClip(src, dst, tk.frames, { name, loop, fps, source: { file: file.replace(/^.*\//, ""), take: tk.name, ...(a.author ? { author: a.author } : {}), ...(a.license ? { license: a.license } : {}) } });
+      const r = importClip(src, dst, tk.frames, { name, loop, fps, ...(a.map ? { map: a.map } : {}), source: { file: file.replace(/^.*\//, ""), take: tk.name, ...(a.author ? { author: a.author } : {}), ...(a.license ? { license: a.license } : {}) } });
       const i = ctx.project.clips.findIndex((c) => c.name === name);
       if (i >= 0 && !a.replace) throw new Error(`клип «${name}» уже есть — replace true или другое as`);
       if (i >= 0) ctx.project.clips[i] = r.clip;
