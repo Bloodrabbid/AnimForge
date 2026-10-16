@@ -366,6 +366,7 @@ pnpm af export.directions --clip walk --verify true                    # и св
   Слои ставятся на роли `arm` (плечо→локоть), `core`, `pelvis`. Пресеты: стили Геральта, телеграфы NPC от собаки до голема, молоток Tools Up!.
 - `body-ram`: таран корпусом — замах назад с задержкой, бросок тазом вперёд, контакт, откат за нейтраль и затухающий отскок. Второй слой — на голове: она гасит часть наклона корпуса и догоняет его, так что удар ведёт тело, а не голова. Пресеты `ram-npc` (замах читается заранее) и `ram-player` (отзывчивый). Для персонажей, у которых мах руками рвёт меш.
 - `tremble`: дрожь страха или холода — почти синус по груди, голове и хвосту, частота округляется до целого числа колебаний за петлю. Пресеты Ghost Master: `gm-adult-tremble` (7.6 Гц, грудь ±3.2°, голова ±4.8°), `gm-kid-tremble` (3 Гц), `gm-sheep-fright` (5 Гц, хвост ±31°).
+- `hit-react`: реакция существа по замерам Haven (22–24 вида) — рывок без замаха с пиком скорости в первые 0.05 с, пик отклонения, мягкое успокоение без перелёта; `keep` — сколько позы остаётся (смерть — 1). Слои на таз и голову (голова отстаёт), события `impact`, `peak`, `recovered` или `thud`. Ноги на полу — `clip.ground`. Пресеты: `haven-hit-light` (1.0 с), `haven-hit-heavy` (2.0), `haven-hit-crouch` (присед крупных), `haven-dodge` (вбок), `haven-spot` («заметил», 20 кадров), `haven-death` (1.67). Времена измерены, амплитуды — на глаз; проверка на работнике показывает «рывок» ×3 в начале — так задумано.
 - `charge-release`: силовая атака — замах, удержание с пружинящим корнем, выпуск двумя ударами (`witcher-power`).
 - События рецептов: `hit`, `whoosh`, `effort`, `trail_on/off`, `window_open/close`.
   Посмотреть их: `af clip.events --clip combo`. При экспорте они пишутся в extras анимации и в `<glb>.events.json`.
@@ -764,6 +765,7 @@ pnpm af model.autorig --project out/uploads/bot --file assets/model.glb --out as
 | `wave` | рыбы, змеи, черви, хвосты | `dredge-ghost-shark-*`, `dredge-great-white`, `dredge-leviathan`, `dredge-twisted-strand`, `dredge-dog-tail-wag`, `tlj-mermaid-tail`, `tlj-snapjaw-idle`, `toolsup-dog-tail-*`, хвосты и тела Haven (`haven-*-tail`, `haven-fulare/fayasna/katefulai-body`), волосы и подол банши (`gm-banshee-hair/hem`), `gm-sheep-tail-flick` |
 | `body-ram` | тараны и выпады существ | Haven: `haven-heliga-lunge`, `haven-bodigado-rear`, `haven-dorago-ram`, `haven-shifuta-lunge`, `haven-sunatcha-ram` |
 | `tremble` | испуг, холод, ток | Ghost Master: `gm-adult-tremble`, `gm-kid-tremble`, `gm-sheep-fright` |
+| `hit-react` | удары, уклоны, «заметил», смерть существ | Haven: `haven-hit-light/heavy/crouch`, `haven-dodge`, `haven-spot`, `haven-death` |
 | прочее | | `melee-strike`: `breathedge-guardian-hit`, `breathedge-fp-crowbar/jab`; `curl`: `haven-creature-breathe`, `breathedge-xeno-tail-walk/angry`; `jiggle`: `breathedge-cow-ragdoll-limb/tongue`; `blink`: `haven-toriko/daikon-blink`; `charge-release`: `gm-ghost-power`; твины камеры `breathedge-camera-hit/bump` |
 
 Шаблоны `template.make`: `quadruped`, `insect`, `spider`, `centipede`, `bird`, `ghost`, `plant`. Разборы, из которых взяты числа:

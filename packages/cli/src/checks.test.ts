@@ -205,3 +205,20 @@ test("советы: правка по одной ручке с замером «
   const ctx3 = await loadCtx(dir);
   assert.equal(find(checkClip(ctx3.project, ctx3, m, ctx3.project.clips.find((c) => c.name === "walk_geralt")!, false, false).report, "floor"), undefined);
 });
+
+test("hit-react из библиотеки: recipe.rig ставит таз и голову, все пресеты с ногами на полу проходят проверки", async () => {
+  const dir = copy("react-rig");
+  const lib = JSON.parse(readFileSync(join(ROOT, "library/presets/hit-react.json"), "utf8"));
+  for (const pr of lib.presets) {
+    await call(dir, "clip.add", { name: pr.name, duration: pr.params.duration, loop: false });
+    await call(dir, "recipe.rig", { clip: pr.name, recipe: "hit-react", preset: pr.name });
+    await call(dir, "clip.ground", { clip: pr.name, bones: "foot_l,foot_r", mode: "floor", ik: true, flat: true });
+  }
+  const ctx = await loadCtx(dir), mesh = await loadMesh(ctx);
+  for (const pr of lib.presets) {
+    const c = ctx.project.clips.find((x) => x.name === pr.name)!;
+    assert.deepEqual(c.layers.filter((l) => l.type === "recipe").map((l) => (l as { params?: { role?: string } }).params?.role).sort(), ["head", "pelvis"], pr.name);
+    const fails = checkClip(ctx.project, ctx, mesh, c, false).report.findings.filter((f) => f.level === "fail");
+    assert.deepEqual(fails.map((f) => `${f.check}: ${(f as { msg?: string }).msg}`), [], pr.name);
+  }
+});

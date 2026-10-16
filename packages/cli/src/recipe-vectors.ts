@@ -46,6 +46,10 @@ function keyTimes(recipe: string, p: Record<string, any>): number[] {
       const pre = p.anticipation > 0 ? p.preT : 0;
       return [pre, pre + p.rise * (1 - pre), 1].map((u) => u * p.duration);
     }
+    case "hit-react": {
+      const T = [0, p.windupT, p.peakVelT, p.peakT, p.settleT, p.duration];
+      return [...T, ...T.map((x) => x + p.headLag)];
+    }
     case "body-ram": {
       const a = p.windupT, b = a + p.hold, c = b + p.strikeT, d = c + p.contact, e = d + p.recover;
       const T = [0, a, b, c, d, e, e + p.settle * 0.45, e + p.settle];

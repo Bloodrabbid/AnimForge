@@ -886,7 +886,65 @@ const tremble: RecipeDef = {
   },
 };
 
-export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble };
+// ── реакция существа: удар, уклон, «заметил», смерть (Haven, 22–24 вида) ───────────────────────────────────────
+/** Доля отклонения в момент t: замах против хода (если windup > 0), рывок к пику с пиком скорости в peakVelT,
+ * успокоение без перелёта до доли keep к settleT (keep = 1 — остаётся, как смерть). */
+function reactCurve(p: Record<string, any>, t: number): number {
+  const w0 = p.windup > 0 ? p.windupT : 0;
+  if (t <= 0) return 0;
+  if (t < w0) return -p.windup * smooth(t / w0);
+  if (t < p.peakT) {
+    const a = Math.min(0.95, Math.max(0.02, (p.peakVelT - w0) / (p.peakT - w0)));
+    return -p.windup + (1 + p.windup) * swingEase((t - w0) / (p.peakT - w0), a);
+  }
+  if (t < p.settleT) return 1 + (p.keep - 1) * smooth((t - p.peakT) / (p.settleT - p.peakT));
+  return p.keep;
+}
+const REACT_DIR: Record<string, [number, number]> = { back: [-1, 0], forward: [1, 0], left: [0, -1], right: [0, 1] };
+const hitReact: RecipeDef = {
+  name: "hit-react",
+  main: ["pitch", "push", "peakT", "settleT"],
+  roles: { pelvis: { chain: "pelvis", params: { role: "pelvis" } }, head: { chain: "head", params: { role: "head" }, optional: true } },
+  help:
+    "Реакция существа (Haven, 22–24 вида): удар, тяжёлый удар, уклон, «заметил», смерть. Рывок без замаха — пик скорости " +
+    "в первые 0.05 с, пик отклонения к 0.27 с, мягкое успокоение без перелёта к 0.78 с. Смерть — медленно, пик скорости к 0.7 с " +
+    "и остаётся (keep = 1). Ноги на полу держит clip.ground. Времена измерены, амплитуды — на глаз в измеренных пределах.",
+  params: {
+    role: { type: "enum", default: "pelvis", options: ["pelvis", "head"], help: "таз ведёт реакцию, голова добавляет свой кивок с запаздыванием" },
+    dir: { type: "enum", default: "back", options: ["back", "forward", "left", "right"], help: "куда отбрасывает тело (удар спереди — назад)" },
+    duration: { type: "number", default: 1, min: 0.3, max: 5, unit: "с", help: "длина клипа (Haven: удар 1.0, тяжёлый 2.0, уклон 1.13, «заметил» 0.667, смерть 1.67)" },
+    peakVelT: { type: "number", default: 0.05, min: 0.01, max: 2, unit: "с", help: "пик скорости (удар и уклон 0.05–0.06 — рывок, смерть 0.7)" },
+    peakT: { type: "number", default: 0.27, min: 0.05, max: 4, unit: "с", help: "пик отклонения (удар 0.27, тяжёлый 0.62, уклон 0.33, смерть 1.57)" },
+    settleT: { type: "number", default: 0.78, min: 0.1, max: 5, unit: "с", help: "успокоение к (удар 0.78, тяжёлый 1.41, уклон 0.94)" },
+    keep: { type: "number", default: 0, min: 0, max: 1, help: "доля отклонения, которая остаётся к концу (смерть — 1, «заметил» — настороженная поза)" },
+    windup: { type: "number", default: 0, min: 0, max: 0.7, help: "замах против хода — доля главного (медиана 0; присед крупных Babulardo, Chirulida, Heliga 0.36–0.43)" },
+    windupT: { type: "number", default: 0.1, min: 0.02, max: 1, unit: "с", help: "длина замаха (на глаз)" },
+    pitch: { type: "number", default: 25, min: 0, max: 90, unit: "°", help: "наклон таза в сторону отлёта (Haven ±13…58°)" },
+    push: { type: "number", default: 0.3, min: 0, max: 2, help: "отлёт таза — доля его высоты (голова Haven уходит на 0.4–1.5 h, у мелких до 3–4)" },
+    drop: { type: "number", default: 0, min: -0.5, max: 1.2, help: "оседание таза — доля высоты (смерть ~1 h у головы; минус — подскок)" },
+    headPitch: { type: "number", default: 10, min: -60, max: 60, unit: "°", help: "голова добавляет кивок в сторону отлёта (на глаз)" },
+    headLag: { type: "number", default: 0.04, min: 0, max: 0.3, unit: "с", help: "голова отстаёт от таза (Haven: таз к 0.1–0.3 с, голова к 0.27)" },
+  },
+  length: (p) => p.duration,
+  evaluate(p, i, n, t, info) {
+    if (i > 0) return {};
+    const [f, s] = REACT_DIR[p.dir as string] ?? REACT_DIR.back;
+    if (p.role === "head") { const c = p.headPitch * reactCurve(p, t - p.headLag); return f ? { pitch: f * c } : { bank: s * c }; }
+    const c = reactCurve(p, t), H = info?.height ?? 1;
+    return {
+      ...(f ? { pitch: f * p.pitch * c } : { bank: s * p.pitch * c }),
+      ...(f ? { move_forward: f * p.push * H * c } : { move_side: s * p.push * H * c }),
+      ...(p.drop ? { move_up: -p.drop * H * c } : {}),
+    };
+  },
+  events(p) {
+    // смерть: «thud» — тело легло (пик отклонения), успокоения нет
+    const impact = { t: p.windup > 0 ? p.windupT : 0, name: "impact" };
+    return p.keep >= 1 ? [impact, { t: p.peakT, name: "thud" }] : [impact, { t: p.peakT, name: "peak" }, { t: p.settleT, name: "recovered" }];
+  },
+};
+
+export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact };
 
 export { QUAD, emergeCurve, strikeCurve, flapProfile, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
 

@@ -1,0 +1,155 @@
+{
+ "recipe": "hit-react",
+ "presets": [
+  {
+   "name": "haven-hit-light",
+   "help": "Лёгкий удар: рывок назад без замаха, пик к 0.27 с, успокоение к 0.78 с без отскока.",
+   "params": {
+    "duration": 1.0,
+    "peakVelT": 0.05,
+    "peakT": 0.27,
+    "settleT": 0.78,
+    "pitch": 25,
+    "push": 0.3
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/04-creatures.md: §11.3, HitLight, 22 вида — времена измерены (медианы по видам)"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: наклон 25° — внутри измеренных ±13…58°, отлёт 0.3 h"
+    }
+   ]
+  },
+  {
+   "name": "haven-hit-heavy",
+   "help": "Тяжёлый удар: дольше и глубже — пик к 0.62 с, успокоение к 1.41 с, клип 2 с.",
+   "params": {
+    "duration": 2.0,
+    "peakVelT": 0.05,
+    "peakT": 0.62,
+    "settleT": 1.41,
+    "pitch": 40,
+    "push": 0.5,
+    "headPitch": 18
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/04-creatures.md: §11.3, HitHeavy, 21 вид — времена измерены (медианы по видам)"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: наклон 40° и отлёт 0.5 h; оседание таза убрано — на работнике рвёт кожу бедра"
+    }
+   ]
+  },
+  {
+   "name": "haven-hit-crouch",
+   "help": "Удар у крупных (Babulardo, Chirulida, Heliga): присед-замах 0.4 доли перед отлётом.",
+   "params": {
+    "duration": 1.0,
+    "peakVelT": 0.2,
+    "peakT": 0.4,
+    "settleT": 0.85,
+    "windup": 0.4,
+    "windupT": 0.15,
+    "pitch": 20,
+    "push": 0.25
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/04-creatures.md: §8.2 — замах 0.36–0.43 у Babulardo/Chirulida/Heliga, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: длина замаха 0.15 с и сдвиг пиков на неё"
+    }
+   ]
+  },
+  {
+   "name": "haven-dodge",
+   "help": "Уклон вбок: рывок (пик скорости 0.06 с), пик к 0.33 с, возврат к 0.94 с.",
+   "params": {
+    "dir": "left",
+    "duration": 1.13,
+    "peakVelT": 0.06,
+    "peakT": 0.33,
+    "settleT": 0.94,
+    "windup": 0.03,
+    "windupT": 0.03,
+    "pitch": 12,
+    "push": 0.8,
+    "headPitch": -6
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/04-creatures.md: §11.3, Dodge, 21 вид — времена измерены (медианы по видам)"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: вбок, отлёт 0.8 h, голова встречным креном"
+    }
+   ]
+  },
+  {
+   "name": "haven-spot",
+   "help": "«Заметил»: вскинулся и замер настороже — ровно 20 кадров (0.667 с) у 15 видов из 24.",
+   "params": {
+    "dir": "back",
+    "duration": 0.667,
+    "peakVelT": 0.1,
+    "peakT": 0.41,
+    "settleT": 0.61,
+    "windup": 0.04,
+    "windupT": 0.04,
+    "keep": 0.6,
+    "pitch": 10,
+    "push": 0.05,
+    "drop": -0.06,
+    "headPitch": 12
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/04-creatures.md: §11.3, Spot, 24 вида — времена измерены (медианы по видам)"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: поза настороже — 0.6 пика, подскок 0.06 h"
+    }
+   ]
+  },
+  {
+   "name": "haven-death",
+   "help": "Смерть: медленно, пик скорости к 0.7 с, тело заваливается назад к концу и остаётся. Падение плашмя — не сюда.",
+   "params": {
+    "dir": "back",
+    "duration": 1.67,
+    "peakVelT": 0.7,
+    "peakT": 1.57,
+    "settleT": 1.67,
+    "keep": 1,
+    "pitch": 60,
+    "push": 0.4,
+    "drop": 0.1,
+    "headPitch": 20,
+    "headLag": 0.1
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/04-creatures.md: §11.3, Death, 22 вида; голова к концу опускается на ~1 h — времена измерены (медианы по видам)"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: наклон 60°, оседание таза 0.1 h (глубже на работнике рвётся кожа бедра; голова опускается за счёт наклона)"
+    }
+   ]
+  }
+ ]
+}

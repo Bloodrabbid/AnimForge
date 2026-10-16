@@ -6,7 +6,7 @@ extends RefCounted
 
 const RAD := PI / 180.0
 const SECONDARY := ["jiggle"]
-const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble"]
+const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble", "hit-react"]
 
 
 static func is_secondary(recipe: String) -> bool:
@@ -31,6 +31,7 @@ static func evaluate(recipe: String, p: Dictionary, i: int, n: int, t: float, in
 		"emerge": return _emerge(p, i, t, info)
 		"body-ram": return _body_ram(p, i, t, info)
 		"tremble": return _tremble(p, i, n, t)
+		"hit-react": return _hit_react(p, i, t, info)
 	push_error("AFRecipes: нет рецепта «%s»" % recipe)
 	return {}
 
@@ -43,6 +44,7 @@ static func events(recipe: String, p: Dictionary) -> Array:
 			# удар основания; при delay > 0 конец бьёт позже на delay·(n − 1) — число костей здесь неизвестно
 			return [{"t": to_fixed(p["windupT"] + p["strikeT"], 4), "name": "hit"}]
 		"body-ram": return _ram_events(p)
+		"hit-react": return _react_events(p)
 	return []
 
 
@@ -65,6 +67,7 @@ static func length(recipe: String, p: Dictionary) -> float:
 		"charge-release": return to_fixed(p["windup"] + p["hold"] + p["release"] + 0.3, 3)
 		"tentacle-strike": return to_fixed(p["windupT"] + p["strikeT"] + p["hold"] + p["returnT"] + 0.3, 3)
 		"body-ram": return to_fixed(_ram_keys(p)["ev"]["f"] + p["tail"], 3)
+		"hit-react": return p["duration"]
 	return -1.0
 
 
@@ -724,3 +727,52 @@ static func _tremble(p: Dictionary, i: int, n: int, t: float) -> Dictionary:
 	var v: float = (amp / maxi(1, n)) * env * sin(2.0 * PI * hz * t - lag)
 	var axis: String = "yaw" if role == "tail" and p["plane"] == "pitch" else p["plane"]
 	return {axis: v}
+
+
+# ── hit-react ───────────────────────────────────────────────────────────────────────────────────────────────────
+
+const REACT_DIR := {"back": [-1, 0], "forward": [1, 0], "left": [0, -1], "right": [0, 1]}
+
+
+static func _react_curve(p: Dictionary, t: float) -> float:
+	var w0: float = p["windupT"] if p["windup"] > 0 else 0.0
+	if t <= 0:
+		return 0.0
+	if t < w0:
+		return -p["windup"] * _smooth(t / w0)
+	if t < p["peakT"]:
+		var a := minf(0.95, maxf(0.02, (p["peakVelT"] - w0) / (p["peakT"] - w0)))
+		return -p["windup"] + (1 + p["windup"]) * swing_ease((t - w0) / (p["peakT"] - w0), a)
+	if t < p["settleT"]:
+		return 1 + (p["keep"] - 1) * _smooth((t - p["peakT"]) / (p["settleT"] - p["peakT"]))
+	return p["keep"]
+
+
+static func _hit_react(p: Dictionary, i: int, t: float, info: Dictionary) -> Dictionary:
+	if i > 0:
+		return {}
+	var d: Array = REACT_DIR.get(p["dir"], REACT_DIR["back"])
+	var f: float = d[0]
+	var s: float = d[1]
+	if p["role"] == "head":
+		var ch: float = p["headPitch"] * _react_curve(p, t - p["headLag"])
+		return {"pitch": f * ch} if f != 0 else {"bank": s * ch}
+	var c := _react_curve(p, t)
+	var H: float = info.get("height", 1.0)
+	var out := {}
+	if f != 0:
+		out["pitch"] = f * p["pitch"] * c
+		out["move_forward"] = f * p["push"] * H * c
+	else:
+		out["bank"] = s * p["pitch"] * c
+		out["move_side"] = s * p["push"] * H * c
+	if p["drop"] != 0:
+		out["move_up"] = -p["drop"] * H * c
+	return out
+
+
+static func _react_events(p: Dictionary) -> Array:
+	var impact := {"t": p["windupT"] if p["windup"] > 0 else 0.0, "name": "impact"}
+	if p["keep"] >= 1:
+		return [impact, {"t": p["peakT"], "name": "thud"}]
+	return [impact, {"t": p["peakT"], "name": "peak"}, {"t": p["settleT"], "name": "recovered"}]

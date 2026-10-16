@@ -1236,3 +1236,36 @@ test("tremble: петля без шва, частота Ghost Master, голов
   close(at("chest", 0.05, 3) * 3, at("chest", 0.05), 1e-12, "доля кости");
   assert.equal(Object.keys(def.evaluate({ ...p, role: "tail" }, 0, 1, 0.1))[0], "yaw");
 });
+
+test("hit-react: пики Haven на своих местах, без перелёта, смерть остаётся лежать", () => {
+  const def = RECIPES["hit-react"];
+  const lib = JSON.parse(readFileSync(new URL("../../../library/presets/hit-react.json", import.meta.url), "utf8"));
+  const pre = (name: string) => withDefaults(def, lib.presets.find((p: any) => p.name === name).params);
+  const pelvisPitch = (p: Record<string, any>, t: number) => def.evaluate({ ...p, role: "pelvis" }, 0, 1, t, { height: 1 }).pitch as number;
+  const light = pre("haven-hit-light"), dt = 1e-3;
+  let vMax = 0, tV = 0, xMax = 0, tX = 0, xMin = 0;
+  for (let t = 0; t <= light.duration; t += dt) {
+    const x = -pelvisPitch(light, t), v = (-pelvisPitch(light, t + dt) - x) / dt;
+    if (v > vMax) { vMax = v; tV = t; }
+    if (x > xMax) { xMax = x; tX = t; }
+    xMin = Math.min(xMin, x);
+  }
+  close(tV, 0.05, 2 * dt, "пик скорости");
+  close(tX, 0.27, 2 * dt, "пик отклонения");
+  close(xMax, 25, 1e-6, "наклон назад");
+  assert.ok(xMin >= 0, "без замаха и без перелёта вперёд");
+  close(pelvisPitch(light, 0.78), 0, 1e-12, "успокоилось к 0.78");
+  assert.equal(def.evaluate({ ...light, role: "pelvis" }, 0, 1, 0.27, { height: 1 }).move_forward! < 0, true, "отлёт назад");
+  // смерть: в конце — полное отклонение, оседание вниз, событие thud
+  const death = pre("haven-death");
+  close(pelvisPitch(death, death.duration), -60, 1e-9, "лежит");
+  assert.ok((def.evaluate({ ...death, role: "pelvis" }, 0, 1, death.duration, { height: 1 }).move_up as number) < -0.099, "осело");
+  assert.deepEqual(def.events!(death).map((e) => e.name), ["impact", "thud"]);
+  // присед крупных: сперва против хода
+  assert.ok(pelvisPitch(pre("haven-hit-crouch"), 0.12) > 0, "замах вперёд перед отлётом назад");
+  // уклон вбок: крен и сдвиг вбок, тангажа нет; голова отстаёт от таза
+  const dodge = def.evaluate({ ...pre("haven-dodge"), role: "pelvis" }, 0, 1, 0.33, { height: 1 });
+  assert.ok(dodge.move_side! < 0 && dodge.pitch === undefined);
+  const head = (t: number) => def.evaluate({ ...light, role: "head" }, 0, 1, t).pitch as number;
+  close(head(0.27 + light.headLag), -light.headPitch, 1e-9, "голова пиком позже на headLag");
+});
