@@ -1165,7 +1165,55 @@ const zeroGFloat: RecipeDef = {
   events: (p) => [{ t: +(0.45 * p.period).toFixed(4), name: "breath" }],
 };
 
-export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact, "idle-glance": idleGlance, startle, "scare-pose": scarePose, "zero-g-float": zeroGFloat };
+// ── отключение парящего робота (Breathedge A_RobotGuardian_DeathIn/DeathIdle/DeathOut) ─────────────────────────
+/** Доля «отключённости» 0…1 и время после входа: in — провал и остаётся, out — назад, full — вход, висит hang с, выход. */
+function powerLevel(p: Record<string, any>, t: number): number {
+  const up = (a: number, d: number) => keyCurve([a, a + d], [0, 1], t), down = (a: number, d: number) => keyCurve([a, a + d], [1, 0], t);
+  if (p.mode === "hang") return 1;
+  if (p.mode === "in") return up(0, p.inT);
+  if (p.mode === "out") return down(0, p.outT);
+  return t < p.inT + p.hang ? up(0, p.inT) : down(p.inT + p.hang, p.outT);
+}
+const powerDown: RecipeDef = {
+  name: "power-down",
+  main: ["drop", "tilt", "droop", "hang"],
+  roles: { body: { chain: "pelvis", params: { role: "body" } }, arm_l: { chain: "arm_l", params: { role: "limb" }, optional: true }, arm_r: { chain: "arm_r", params: { role: "limb" }, optional: true }, head: { chain: "head", params: { role: "head" }, optional: true } },
+  help:
+    "Отключение и включение парящего робота (Breathedge, охранник): за 0.27 с корпус проваливается на 0.2 роста и клонится " +
+    "на 31.5°, руки обвисают и остаются; висит, чуть покачиваясь (±0.8 см за 2 с); за 0.33 с — обратно. mode: in — отключиться, " +
+    "hang — петля выключенного, out — включиться, full — всё подряд. Времена и провал измерены, доли обвисания по костям — на глаз.",
+  params: {
+    role: { type: "enum", default: "body", options: ["body", "limb", "head"], help: "корпус проваливается и клонится, конечность обвисает, голова никнет" },
+    mode: { type: "enum", default: "full", options: ["in", "hang", "out", "full"], help: "отключиться / висеть выключенным (петля) / включиться / всё подряд" },
+    inT: { type: "number", default: 0.27, min: 0.05, max: 3, unit: "с", help: "отключение (DeathIn 0.27, подъём 10→90 % — 0.17)" },
+    outT: { type: "number", default: 0.33, min: 0.05, max: 3, unit: "с", help: "включение (DeathOut 0.33)" },
+    hang: { type: "number", default: 2, min: 0, max: 20, unit: "с", help: "сколько висеть выключенным в full (и длина петли hang)" },
+    drop: { type: "number", default: 0.2, min: 0, max: 1, help: "провал корпуса — доля роста (30 см на 1.5 м)" },
+    tilt: { type: "number", default: 31.5, min: -90, max: 90, unit: "°", help: "наклон корпуса вперёд" },
+    droop: { type: "number", default: 60, min: 0, max: 120, unit: "°", help: "обвисание первой кости конечности (Breathedge 20–110° по костям), дальше по цепочке — вполовину" },
+    headDroop: { type: "number", default: 25, min: 0, max: 90, unit: "°", help: "голова никнет (на глаз)" },
+    bob: { type: "number", default: 0.0055, min: 0, max: 0.05, help: "покачивание выключенного — доля роста (±0.83 см на 1.5 м)" },
+    bobPeriod: { type: "number", default: 2, min: 0.5, max: 8, unit: "с", help: "период покачивания (2.0)" },
+  },
+  length: (p) => +(p.mode === "in" ? p.inT : p.mode === "out" ? p.outT : p.mode === "hang" ? p.bobPeriod : p.inT + p.hang + p.outT).toFixed(3),
+  evaluate(p, i, n, t, info) {
+    const v = powerLevel(p, t);
+    if (p.role === "limb") return i >= n ? {} : { pitch: p.droop * v * (i === 0 ? 1 : 0.5) };
+    if (i > 0) return {};
+    if (p.role === "head") return { pitch: p.headDroop * v };
+    const size = info?.size ?? info?.height ?? 1;
+    return { pitch: p.tilt * v, move_up: size * (-p.drop * v + p.bob * v * Math.sin((2 * Math.PI * t) / p.bobPeriod)) };
+  },
+  events(p) {
+    const ev: ClipEvent[] = [];
+    if (p.mode === "in" || p.mode === "full") ev.push({ t: 0, name: "power_off" });
+    if (p.mode === "out") ev.push({ t: 0, name: "power_on" });
+    if (p.mode === "full") ev.push({ t: +(p.inT + p.hang).toFixed(4), name: "power_on" });
+    return ev;
+  },
+};
+
+export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact, "idle-glance": idleGlance, startle, "scare-pose": scarePose, "zero-g-float": zeroGFloat, "power-down": powerDown };
 
 export { QUAD, STARTLE, glancePlan, emergeCurve, strikeCurve, flapProfile, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
 

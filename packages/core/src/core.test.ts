@@ -1391,3 +1391,22 @@ test("zero-g-float: педалирование Breathedge — колено сг�
   assert.ok(swing("arm_l") > 0.7 && swing("arm_r") < 0.6, `отмашка ${swing("arm_l")}, гребок ${swing("arm_r")}`);
   assert.deepEqual(def.events!(p), [{ t: 1.8135, name: "breath" }]);
 });
+
+test("power-down: провал за 0.27 с (10→90 % около 0.17), висит с покачиванием, full включается обратно", () => {
+  const def = RECIPES["power-down"];
+  const body = (mode: string, t: number) => def.evaluate(withDefaults(def, { mode, role: "body" }), 0, 1, t, { height: 1, size: 1.5 });
+  const lvl = (t: number) => -(body("in", t).move_up as number) / (0.2 * 1.5);
+  let t10 = 0, t90 = 0;
+  for (let t = 0; t <= 0.27; t += 0.001) { if (!t10 && lvl(t) >= 0.1) t10 = t; if (!t90 && lvl(t) >= 0.9) t90 = t; }
+  close(t90 - t10, 0.17, 0.02, "подъём 10→90 %");
+  close(body("in", 0.27).pitch as number, 31.5, 1e-9, "наклон");
+  close(body("in", 0.27).move_up as number, -0.3, 0.01, "провал 30 см на 1.5 м");
+  const hang = withDefaults(def, { mode: "hang" });
+  close(body("hang", def.length!(hang)).move_up as number, body("hang", 0).move_up as number, 1e-9, "петля без шва");
+  const full = withDefaults(def, { mode: "full" });
+  close(body("full", def.length!(full)).move_up as number, 0, 1e-12, "включился");
+  close(def.length!(full), 0.27 + 2 + 0.33, 1e-9);
+  assert.deepEqual(def.events!(full).map((e) => [e.t, e.name]), [[0, "power_off"], [2.27, "power_on"]]);
+  const limb = (i: number) => def.evaluate(withDefaults(def, { mode: "hang", role: "limb" }), i, 2, 0.5).pitch;
+  assert.deepEqual([limb(0), limb(1), def.evaluate(withDefaults(def, { mode: "hang", role: "limb" }), 2, 2, 0.5).pitch], [60, 30, undefined]);
+});

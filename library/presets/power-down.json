@@ -1,0 +1,73 @@
+{
+ "recipe": "power-down",
+ "presets": [
+  {
+   "name": "breathedge-guardian-shutdown",
+   "help": "Охранник отключается, висит 2 с и включается.",
+   "params": {
+    "mode": "full"
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/03-creatures-robots.md: §5.2 A_RobotGuardian_DeathIn/DeathIdle/DeathOut — 0.27 / 2.0 / 0.33 с, провал 30 см, наклон 31.5°, руки 20–110°, покачивание ±0.83 см, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: обвисание 60° первой кости и вполовину дальше, голова 25°"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-guardian-off",
+   "help": "Отключиться и остаться (DeathIn).",
+   "params": {
+    "mode": "in"
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/03-creatures-robots.md: §5.2 A_RobotGuardian_DeathIn/DeathIdle/DeathOut — 0.27 / 2.0 / 0.33 с, провал 30 см, наклон 31.5°, руки 20–110°, покачивание ±0.83 см, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: обвисание 60° первой кости и вполовину дальше, голова 25°"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-guardian-dead-hang",
+   "help": "Петля выключенного: висит, чуть покачиваясь (DeathIdle).",
+   "params": {
+    "mode": "hang"
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/03-creatures-robots.md: §5.2 A_RobotGuardian_DeathIn/DeathIdle/DeathOut — 0.27 / 2.0 / 0.33 с, провал 30 см, наклон 31.5°, руки 20–110°, покачивание ±0.83 см, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: обвисание 60° первой кости и вполовину дальше, голова 25°"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-guardian-on",
+   "help": "Включиться (DeathOut).",
+   "params": {
+    "mode": "out"
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/03-creatures-robots.md: §5.2 A_RobotGuardian_DeathIn/DeathIdle/DeathOut — 0.27 / 2.0 / 0.33 с, провал 30 см, наклон 31.5°, руки 20–110°, покачивание ±0.83 см, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: обвисание 60° первой кости и вполовину дальше, голова 25°"
+    }
+   ]
+  }
+ ]
+}

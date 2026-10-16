@@ -6,7 +6,7 @@ extends RefCounted
 
 const RAD := PI / 180.0
 const SECONDARY := ["jiggle"]
-const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble", "hit-react", "idle-glance", "startle", "scare-pose", "zero-g-float"]
+const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble", "hit-react", "idle-glance", "startle", "scare-pose", "zero-g-float", "power-down"]
 
 
 static func is_secondary(recipe: String) -> bool:
@@ -36,6 +36,7 @@ static func evaluate(recipe: String, p: Dictionary, i: int, n: int, t: float, in
 		"startle": return _startle(p, i, t, info)
 		"scare-pose": return _scare_pose(p, i, t, info)
 		"zero-g-float": return _zero_g(p, i, t, info)
+		"power-down": return _power_down(p, i, n, t, info)
 	push_error("AFRecipes: нет рецепта «%s»" % recipe)
 	return {}
 
@@ -49,6 +50,7 @@ static func events(recipe: String, p: Dictionary) -> Array:
 			return [{"t": to_fixed(p["windupT"] + p["strikeT"], 4), "name": "hit"}]
 		"body-ram": return _ram_events(p)
 		"hit-react": return _react_events(p)
+		"power-down": return _power_events(p)
 		"zero-g-float": return [{"t": to_fixed(0.45 * p["period"], 4), "name": "breath"}]
 		"scare-pose": return [{"t": to_fixed(_scare_keys(p)[2], 4), "name": "manifest"}]
 		"startle":
@@ -85,6 +87,12 @@ static func length(recipe: String, p: Dictionary) -> float:
 		"body-ram": return to_fixed(_ram_keys(p)["ev"]["f"] + p["tail"], 3)
 		"hit-react": return p["duration"]
 		"scare-pose": return to_fixed(_scare_keys(p)[4], 3)
+		"power-down":
+			match p["mode"]:
+				"in": return to_fixed(p["inT"], 3)
+				"out": return to_fixed(p["outT"], 3)
+				"hang": return to_fixed(p["bobPeriod"], 3)
+			return to_fixed(p["inT"] + p["hang"] + p["outT"], 3)
 		"startle":
 			var st: Array = STARTLE[p["kind"]]["t"]
 			return to_fixed(st[st.size() - 1] / p["speed"], 3)
@@ -952,3 +960,39 @@ static func _zero_g(p: Dictionary, i: int, t: float, info: Dictionary) -> Dictio
 	if i == 1:
 		return {"pitch": p["elbow"] + fore}
 	return {"pitch": p["arms"] * 8.8 * cs.call(0.75)} if i == 2 else {}
+
+
+# ── power-down ──────────────────────────────────────────────────────────────────────────────────────────────────
+
+static func _power_level(p: Dictionary, t: float) -> float:
+	match p["mode"]:
+		"hang": return 1.0
+		"in": return _ram_curve([0.0, p["inT"]], [0.0, 1.0], t)
+		"out": return _ram_curve([0.0, p["outT"]], [1.0, 0.0], t)
+	if t < p["inT"] + p["hang"]:
+		return _ram_curve([0.0, p["inT"]], [0.0, 1.0], t)
+	var a: float = p["inT"] + p["hang"]
+	return _ram_curve([a, a + p["outT"]], [1.0, 0.0], t)
+
+
+static func _power_down(p: Dictionary, i: int, n: int, t: float, info: Dictionary) -> Dictionary:
+	var v := _power_level(p, t)
+	if p["role"] == "limb":
+		return {} if i >= n else {"pitch": p["droop"] * v * (1.0 if i == 0 else 0.5)}
+	if i > 0:
+		return {}
+	if p["role"] == "head":
+		return {"pitch": p["headDroop"] * v}
+	var size: float = info.get("size", info.get("height", 1.0))
+	return {"pitch": p["tilt"] * v, "move_up": size * (-p["drop"] * v + p["bob"] * v * sin((2.0 * PI * t) / p["bobPeriod"]))}
+
+
+static func _power_events(p: Dictionary) -> Array:
+	var ev := []
+	if p["mode"] == "in" or p["mode"] == "full":
+		ev.append({"t": 0.0, "name": "power_off"})
+	if p["mode"] == "out":
+		ev.append({"t": 0.0, "name": "power_on"})
+	if p["mode"] == "full":
+		ev.append({"t": to_fixed(p["inT"] + p["hang"], 4), "name": "power_on"})
+	return ev

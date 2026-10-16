@@ -48,6 +48,7 @@ function keyTimes(recipe: string, p: Record<string, any>): number[] {
     }
     case "idle-glance": return [0, p.period, ...glancePlan(p).segs.flatMap((g) => [g.a, g.b, (g.a + g.b) / 2])];
     case "scare-pose": { const pre = p.anticipation > 0 ? p.preT : 0, a = pre + p.rise, b = a + p.settle; return [0, pre, a, b, Math.max(p.duration, b + 0.01)]; }
+    case "power-down": return [0, p.inT, p.outT, p.inT + p.hang, p.inT + p.hang + p.outT, p.bobPeriod];
     case "startle": return STARTLE[p.kind].t.map((x: number) => x / p.speed);
     case "hit-react": {
       const T = [0, p.windupT, p.peakVelT, p.peakT, p.settleT, p.duration];

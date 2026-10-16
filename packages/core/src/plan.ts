@@ -36,7 +36,7 @@ export const CATEGORIES: { id: string; title: string; recipes: string[] }[] = [
   { id: "multi", title: "Многоногие", recipes: ["multileg-gait"] },
   { id: "wing", title: "Крылья и ласты", recipes: ["wing-flap"] },
   { id: "swim", title: "Плавание и хвосты", recipes: ["wave", "curl", "zero-g-float"] },
-  { id: "hover", title: "Парение", recipes: ["hover", "scare-pose"] },
+  { id: "hover", title: "Парение", recipes: ["hover", "scare-pose", "power-down"] },
   { id: "fight", title: "Удары", recipes: ["melee-strike", "charge-release", "tentacle-strike", "body-ram"] },
   { id: "react", title: "Реакции", recipes: ["hit-react", "startle"] },
   { id: "emerge", title: "Появление", recipes: ["emerge"] },
@@ -45,7 +45,7 @@ export const CATEGORIES: { id: string; title: string; recipes: string[] }[] = [
 export const categoryOf = (recipe: string) => CATEGORIES.find((c) => c.recipes.includes(recipe))?.id ?? "small";
 
 /** Рецепты на один раз (удар, появление) — клип не зациклен. */
-export const ONE_SHOT = new Set(["melee-strike", "charge-release", "tentacle-strike", "emerge", "body-ram", "hit-react", "startle", "scare-pose"]);
+export const ONE_SHOT = new Set(["melee-strike", "charge-release", "tentacle-strike", "emerge", "body-ram", "hit-react", "startle", "scare-pose", "power-down"]);
 
 /** Цепочки, которые подходят рецепту без ролей, — в порядке предпочтения. */
 const CHAIN_PREF: Record<string, string[]> = {
