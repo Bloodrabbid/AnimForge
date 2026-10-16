@@ -629,6 +629,15 @@ static func flap_profile(u: float, down: float) -> float:
 	return cos((PI * u) / down) if u < down else -cos((PI * (u - down)) / (1 - down))
 
 
+## Фаза взмаха с паузой: крыло стоит вверху (фаза 0) долю pause (в файлах до неё параметра нет в схеме).
+static func _flap_pz(p: Dictionary, x: float) -> float:
+	var w := _fmod1(x)
+	var ps: float = p.get("pause", 0.0)
+	if ps > 0:
+		return 0.0 if w < ps else (w - ps) / (1 - ps)
+	return w
+
+
 static func _wing_flap(p: Dictionary, i: int, n: int, t: float, info: Dictionary) -> Dictionary:
 	var u: float = t / p["period"]
 	match p["role"]:
@@ -636,21 +645,36 @@ static func _wing_flap(p: Dictionary, i: int, n: int, t: float, info: Dictionary
 			if i > 0:
 				return {}
 			# корпус поднимается на рабочем ходе
-			return {"move_up": p["bob"] * info.get("height", 0.0) * -flap_profile(u - 0.1, p["down"]) * 0.5}
+			return {"move_up": p["bob"] * info.get("height", 0.0) * -flap_profile(_flap_pz(p, u - 0.1), p["down"]) * 0.5}
 		"tail":
-			return {"pitch": (p["tailPitch"] / n) * flap_profile(u - 0.2, p["down"])}
+			return {"pitch": (p["tailPitch"] / n) * flap_profile(_flap_pz(p, u - 0.2), p["down"])}
 		"leg_l", "leg_r":
 			return {"pitch": p["tuck"]} if i == 0 else ({"pitch": -p["tuck"] * 0.8} if i == 1 else {})
 	var s := 1.0 if p["role"] == "wing_l" else -1.0
-	var f := flap_profile(u - i * p["lag"], p["down"])
+	var uu := _flap_pz(p, u - i * p["lag"])
+	var f := flap_profile(uu, p["down"])
 	# складывание — на подъёме (вторая часть цикла), плавный горб
-	var uu := _fmod1(u - i * p["lag"])
 	var up: float = 0.0 if uu < p["down"] else sin((PI * (uu - p["down"])) / (1 - p["down"]))
-	if i == 0:
-		return {"vertical": p["mean"] + p["amp"] * f}
-	if i == 1:
-		return {"vertical": 0.3 * p["amp"] * (f - flap_profile(u, p["down"])), "yaw": s * p["fold"] * up}
-	return {"yaw": -s * 0.5 * p["fold"] * up}
+	var fr: float = p.get("featherRoll", 0.0)
+	var out := {}
+	if p.get("stroke", "vertical") == "lateral":
+		# гребок вбок: ход — вокруг вертикали, складывание — вверх-вниз
+		if i == 0:
+			return {"yaw": s * (p["mean"] + p["amp"] * f)}
+		if i == 1:
+			out = {"yaw": s * 0.3 * p["amp"] * (f - flap_profile(_flap_pz(p, u), p["down"])), "vertical": p["fold"] * up}
+		else:
+			out = {"vertical": -0.5 * p["fold"] * up}
+	else:
+		if i == 0:
+			return {"vertical": p["mean"] + p["amp"] * f}
+		if i == 1:
+			out = {"vertical": 0.3 * p["amp"] * (f - flap_profile(_flap_pz(p, u), p["down"])), "yaw": s * p["fold"] * up}
+		else:
+			out = {"yaw": -s * 0.5 * p["fold"] * up}
+	if fr != 0:
+		out["roll"] = s * fr * flap_profile(uu + 0.25, p["down"])
+	return out
 
 
 # ── парение (призрак Witcher) ───────────────────────────────────────────────────────────────────────────────────

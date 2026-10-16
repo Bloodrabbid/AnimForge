@@ -672,30 +672,42 @@ const wingFlap: RecipeDef = {
     bob: { type: "number", default: 0.04, min: 0, max: 0.3, help: "подскок корпуса за взмах — доля высоты таза" },
     tailPitch: { type: "number", default: 6, min: 0, max: 30, unit: "°", help: "ответ хвоста за взмах" },
     tuck: { type: "number", default: 50, min: 0, max: 120, unit: "°", help: "ноги поджаты назад в полёте" },
+    stroke: { type: "enum", default: "vertical", options: ["vertical", "lateral"], help: "плоскость взмаха: vertical — вверх-вниз, lateral — гребок вбок (Haven Sukopi: рыскание ±22–29°)" },
+    featherRoll: { type: "number", default: 0, min: 0, max: 60, unit: "°", help: "крен дальних костей крыла с опережением на четверть взмаха — перья поворачиваются (Haven Katefulai, Fayasna, птица: ±19–47°)" },
+    pause: { type: "number", default: 0, min: 0, max: 0.5, help: "пауза вверху между взмахами, доля цикла (птица Haven 0.17)" },
   },
   evaluate(p, i, n, t, info) {
     const u = t / p.period;
+    // фаза с паузой: крыло стоит вверху (фаза 0) долю pause, остальное — взмах
+    const pz = (x: number) => { const w = ((x % 1) + 1) % 1, ps = p.pause ?? 0; return ps > 0 ? (w < ps ? 0 : (w - ps) / (1 - ps)) : w; };
     switch (p.role) {
       case "body": {
         if (i > 0) return {};
         // корпус поднимается на рабочем ходе: ниже всего — в начале взмаха вниз, выше — к его концу
-        return { move_up: p.bob * (info?.height ?? 0) * -flapProfile(u - 0.1, p.down) * 0.5 };
+        return { move_up: p.bob * (info?.height ?? 0) * -flapProfile(pz(u - 0.1), p.down) * 0.5 };
       }
       case "tail":
-        return { pitch: (p.tailPitch / n) * flapProfile(u - 0.2, p.down) };
+        return { pitch: (p.tailPitch / n) * flapProfile(pz(u - 0.2), p.down) };
       case "leg_l":
       case "leg_r":
         return i === 0 ? { pitch: p.tuck } : i === 1 ? { pitch: -p.tuck * 0.8 } : {};
       default: {
         const s = p.role === "wing_l" ? 1 : -1;
-        const f = flapProfile(u - i * p.lag, p.down);
+        const uu = pz(u - i * p.lag);
+        const f = flapProfile(uu, p.down);
         // складывание — на подъёме (вторая часть цикла), плавный горб
-        const uu = (((u - i * p.lag) % 1) + 1) % 1;
         const up = uu < p.down ? 0 : Math.sin((Math.PI * (uu - p.down)) / (1 - p.down));
+        const roll = p.featherRoll && i > 0 ? { roll: s * p.featherRoll * flapProfile(uu + 0.25, p.down) } : {};
+        // гребок вбок: ход крыла — вокруг вертикали, складывание — вверх-вниз
+        if (p.stroke === "lateral") {
+          if (i === 0) return { yaw: s * (p.mean + p.amp * f) };
+          if (i === 1) return { yaw: s * 0.3 * p.amp * (f - flapProfile(pz(u), p.down)), vertical: p.fold * up, ...roll };
+          return { vertical: -0.5 * p.fold * up, ...roll };
+        }
         // vertical цепочки крыла: + поднимает и левое, и правое; вокруг вертикали + уводит левую кисть назад
         if (i === 0) return { vertical: p.mean + p.amp * f };
-        if (i === 1) return { vertical: 0.3 * p.amp * (f - flapProfile(u, p.down)), yaw: s * p.fold * up };
-        return { yaw: -s * 0.5 * p.fold * up };
+        if (i === 1) return { vertical: 0.3 * p.amp * (f - flapProfile(pz(u), p.down)), yaw: s * p.fold * up, ...roll };
+        return { yaw: -s * 0.5 * p.fold * up, ...roll };
       }
     }
   },

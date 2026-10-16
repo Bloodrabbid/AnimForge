@@ -133,7 +133,8 @@
     "down": 0.5,
     "lag": 0.05,
     "fold": 20,
-    "bob": 0.04
+    "bob": 0.04,
+    "pause": 0.17
    },
    "provenance": [
     {
@@ -143,6 +144,10 @@
     {
      "source": "hand-tuned",
      "ref": "mean, lag, fold, bob — на глаз"
+    },
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A5, B5: Bird_Flying — пауза между взмахами 0.17 цикла, измерено"
     }
    ]
   },
@@ -213,7 +218,8 @@
     "period": 4.0,
     "amp": 27,
     "down": 0.5,
-    "lag": 0.125
+    "lag": 0.125,
+    "featherRoll": 20
    },
    "provenance": [
     {
@@ -223,6 +229,10 @@
     {
      "source": "hand-tuned",
      "ref": "down — на глаз"
+    },
+    {
+     "source": "research/haven",
+     "ref": "analysis/06-animforge-candidates.md A5, B5: Katefulai — крен перьев ±19–22°, измерено; опережение на четверть взмаха — на глаз"
     }
    ]
   },
@@ -278,6 +288,30 @@
     {
      "source": "research/ghostmaster",
      "ref": "analysis/05-candidates.md A wing-flap: crow_flutter — измерено (в игре беспорядочно, чистота 0.35)"
+    }
+   ]
+  },
+  {
+   "name": "haven-sukopi-paddle",
+   "help": "Летун Sukopi «гребёт» крыльями вбок, тело почти неподвижно; кладётся вместе с haven-sukopi-hover.",
+   "params": {
+    "period": 1.0,
+    "amp": 25,
+    "mean": 0,
+    "down": 0.5,
+    "lag": 0.05,
+    "fold": 10,
+    "bob": 0,
+    "stroke": "lateral"
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/04-creatures.md: §1 Sukopi — T 1.0, крылья рыскание ±22–29° (горизонтальный гребок), тело неподвижно — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: down 0.5, lag, fold"
     }
    ]
   }

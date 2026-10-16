@@ -1552,3 +1552,22 @@ test("multileg-gait: у каждой ноги своя фаза (Heliga Haven) �
   close(multilegPhase(tri, "r", 1, 0.1), multilegPhase({ ...tri, ph_r1: -1 }, "r", 1, 0.1), 1e-12);
   close(multilegPhase(tri, "r", 1, 0), ((0 - (-0.5 + 0.5)) % 1 + 1) % 1, 1e-12, "трипод как раньше");
 });
+
+test("wing-flap: пауза вверху, гребок вбок и крен перьев (Haven); без них — как раньше", () => {
+  const def = RECIPES["wing-flap"];
+  const base = withDefaults(def, { period: 1, amp: 40, mean: 0, down: 0.5, lag: 0 });
+  const ev = (extra: Record<string, unknown>, i: number, t: number) => def.evaluate({ ...base, ...extra }, i, 3, t, { height: 1 });
+  // пауза 0.17: всю долю паузы крыло наверху (+amp), потом взмах
+  for (const t of [0, 0.08, 0.16]) close(ev({ pause: 0.17 }, 0, t).vertical!, 40, 1e-9, `пауза t=${t}`);
+  assert.ok(ev({ pause: 0.17 }, 0, 0.3).vertical! < 40 - 1, "после паузы — взмах");
+  close(ev({ pause: 0.17 }, 0, 0.17 + 0.83 * 0.5).vertical!, -40, 1e-9, "низ взмаха — середина оставшегося цикла");
+  // гребок вбок: ход основания — рыскание, зеркально у правого
+  const lat = ev({ stroke: "lateral" }, 0, 0.2);
+  assert.equal(lat.vertical, undefined);
+  close(ev({ stroke: "lateral", role: "wing_r" }, 0, 0.2).yaw!, -lat.yaw!, 1e-12, "правое — зеркально");
+  // крен перьев — у дальних костей, основание без крена
+  assert.equal(ev({ featherRoll: 20 }, 0, 0.3).roll, undefined);
+  let mx = 0; for (let k = 0; k < 200; k++) mx = Math.max(mx, Math.abs(ev({ featherRoll: 20 }, 2, k / 200).roll!));
+  close(mx, 20, 1e-3, "±20°");
+  assert.equal(ev({}, 2, 0.3).roll, undefined, "по умолчанию крена нет");
+});
