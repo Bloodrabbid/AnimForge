@@ -1113,7 +1113,59 @@ const scarePose: RecipeDef = {
   events: (p) => [{ t: +SCARE_KEYS(p)[2].toFixed(4), name: "manifest" }],
 };
 
-export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact, "idle-glance": idleGlance, startle, "scare-pose": scarePose };
+// ── висение в невесомости (Breathedge A_Idle_Fly, 4.03 с) ─────────────────────────────────────────────────────
+/** curve20 из разбора (° от среднего, 20 отсчётов на цикл): левая нога, предплечье правой (гребок) и левой (отмашка). */
+const ZERO_G: Record<string, number[]> = {"thigh": [-1.1, -3.9, -6.6, -9.1, -10.9, -11.8, -11.4, -10.0, -7.7, -4.6, -0.9, 3.1, 7.2, 11.0, 13.8, 14.7, 12.8, 9.0, 5.0, 1.4], "calf": [8.8, 13.3, 17.3, 20.3, 22.3, 22.9, 21.6, 18.1, 12.9, 6.3, -1.3, -9.6, -17.9, -25.4, -30.9, -32.5, -27.0, -16.8, -5.9, 3.4], "foot": [4.0, -0.5, -6.8, -13.3, -18.2, -20.1, -19.0, -16.4, -12.5, -7.7, -2.3, 3.4, 9.0, 14.0, 17.7, 19.2, 17.7, 14.4, 10.6, 6.8], "paddle": [-1.6, 1.7, 4.9, 7.8, 10.0, 11.4, 11.7, 10.7, 8.8, 6.1, 2.7, -1.3, -5.5, -9.6, -12.7, -13.5, -12.0, -9.5, -6.7, -3.8], "flick": [-13.9, -11.5, -6.0, -0.4, 3.8, 5.5, 5.7, 5.9, 6.0, 6.0, 5.8, 5.4, 4.8, 4.0, 3.0, 1.8, -0.5, -4.2, -8.5, -12.3]};
+const zeroGFloat: RecipeDef = {
+  name: "zero-g-float",
+  main: ["period", "legs", "arms", "legRatio"],
+  roles: Object.fromEntries(["pelvis", "spine", "leg_l", "leg_r", "arm_l", "arm_r"].map((r) => [r, { chain: r, params: { role: r }, optional: r !== "leg_l" && r !== "leg_r" }])),
+  help:
+    "Висение в скафандре (Breathedge A_Idle_Fly): всё тело на одном цикле 4.03 с. Ноги «педалируют» в противофазе — колено " +
+    "сгибается, когда бедро уходит назад, сгиб медленный, разгиб быстрый; вторая нога вдвое слабее и сдвинута на 167°. " +
+    "Одна рука гребёт синусом, другая делает отмашку; корпус почти стоит — звенья проворачиваются в противофазе ±1–2°. " +
+    "Кривые измерены (curve20), средняя поза «поджатых» ног и знаки осей — на глаз. Событие breath на 0.45 цикла.",
+  params: {
+    role: { type: "enum", default: "leg_l", options: ["pelvis", "spine", "leg_l", "leg_r", "arm_l", "arm_r"], help: "какую часть тела крутит слой" },
+    period: { type: "number", default: 4.03, min: 1, max: 10, unit: "с", help: "цикл (Breathedge 4.03)" },
+    legs: { type: "number", default: 1, min: 0, max: 2, help: "размах ног: 1 — как в игре (бедро ±12.4°, голень ±26°, стопа ±19°)" },
+    legRatio: { type: "number", default: 0.45, min: 0, max: 1, help: "вторая нога — доля первой (0.45)" },
+    legLR: { type: "number", default: 167, min: 0, max: 360, unit: "°", help: "сдвиг второй ноги по фазе (167)" },
+    strong: { type: "enum", default: "left", options: ["left", "right"], help: "какая нога педалирует сильнее (в игре левая)" },
+    arms: { type: "number", default: 1, min: 0, max: 2, help: "размах рук: гребок плечо ±5.6, предплечье ±12, кисть ±8.8; отмашка ±3.2 / 8.6 / 6.5" },
+    body: { type: "number", default: 1, min: 0, max: 3, help: "проворот корпуса: таз ±0.86, spine_01 ±1.76, spine_02 ±1.45" },
+    hip: { type: "number", default: -20, min: -90, max: 30, unit: "°", help: "средний подъём бёдер — ноги поджаты (на глаз)" },
+    knee: { type: "number", default: 35, min: 0, max: 120, unit: "°", help: "средний сгиб колен (на глаз)" },
+    elbow: { type: "number", default: -25, min: -120, max: 0, unit: "°", help: "средний сгиб локтей (на глаз)" },
+    lift: { type: "number", default: 0.3, min: 0, max: 2, help: "таз приподнят — доля его высоты: поджатые ноги не уходят в пол предпросмотра (в невесомости пола нет)" },
+  },
+  evaluate(p, i, n, t, info) {
+    const s = t / p.period, cs = (peak: number) => Math.cos(2 * Math.PI * (s - peak));
+    switch (p.role) {
+      case "pelvis": return i > 0 ? {} : { yaw: p.body * 0.86 * cs(0.5), move_up: p.lift * (info?.height ?? 0) };
+      case "spine": return i === 0 ? { yaw: p.body * 1.76 * cs(0) } : i === 1 ? { yaw: p.body * 1.45 * cs(0.5) } : {};
+      case "leg_l": case "leg_r": {
+        const strong = (p.role === "leg_l") === (p.strong === "left");
+        const k = p.legs * (strong ? 1 : p.legRatio), u = strong ? s : s - p.legLR / 360;
+        // голень со знаком «−»: в curve20 её минимум приходится на заднее бедро, а колено там сгибается
+        if (i === 0) return { pitch: p.hip + k * periodic(ZERO_G.thigh, u) };
+        if (i === 1) return { pitch: p.knee - k * periodic(ZERO_G.calf, u) };
+        if (i === 2) return { pitch: k * periodic(ZERO_G.foot, u) };
+        return {};
+      }
+      default: {
+        // правая гребёт синусом (пики 0.75), левая — отмашка: быстрый ход за 0.15 цикла, потом плато
+        const flick = (p.role === "arm_l") === (p.strong === "left");
+        const fore = periodic(flick ? ZERO_G.flick : ZERO_G.paddle, s) * p.arms;
+        if (flick) return i === 0 ? { pitch: fore * (3.2 / 8.6) } : i === 1 ? { pitch: p.elbow + fore } : i === 2 ? { pitch: fore * (6.5 / 8.6) } : {};
+        return i === 0 ? { pitch: p.arms * 5.6 * cs(0.75) } : i === 1 ? { pitch: p.elbow + fore } : i === 2 ? { pitch: p.arms * 8.8 * cs(0.75) } : {};
+      }
+    }
+  },
+  events: (p) => [{ t: +(0.45 * p.period).toFixed(4), name: "breath" }],
+};
+
+export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact, "idle-glance": idleGlance, startle, "scare-pose": scarePose, "zero-g-float": zeroGFloat };
 
 export { QUAD, STARTLE, glancePlan, emergeCurve, strikeCurve, flapProfile, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
 

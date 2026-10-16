@@ -6,7 +6,7 @@ extends RefCounted
 
 const RAD := PI / 180.0
 const SECONDARY := ["jiggle"]
-const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble", "hit-react", "idle-glance", "startle", "scare-pose"]
+const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble", "hit-react", "idle-glance", "startle", "scare-pose", "zero-g-float"]
 
 
 static func is_secondary(recipe: String) -> bool:
@@ -35,6 +35,7 @@ static func evaluate(recipe: String, p: Dictionary, i: int, n: int, t: float, in
 		"idle-glance": return _idle_glance(p, n, t)
 		"startle": return _startle(p, i, t, info)
 		"scare-pose": return _scare_pose(p, i, t, info)
+		"zero-g-float": return _zero_g(p, i, t, info)
 	push_error("AFRecipes: нет рецепта «%s»" % recipe)
 	return {}
 
@@ -48,6 +49,7 @@ static func events(recipe: String, p: Dictionary) -> Array:
 			return [{"t": to_fixed(p["windupT"] + p["strikeT"], 4), "name": "hit"}]
 		"body-ram": return _ram_events(p)
 		"hit-react": return _react_events(p)
+		"zero-g-float": return [{"t": to_fixed(0.45 * p["period"], 4), "name": "breath"}]
 		"scare-pose": return [{"t": to_fixed(_scare_keys(p)[2], 4), "name": "manifest"}]
 		"startle":
 			var sev := []
@@ -909,3 +911,44 @@ static func _scare_pose(p: Dictionary, i: int, t: float, info: Dictionary) -> Di
 	if i == 1:
 		return {"pitch": p["elbow"] * arm}
 	return {}
+
+
+# ── zero-g-float ────────────────────────────────────────────────────────────────────────────────────────────────
+const ZERO_G := {"thigh": [-1.1, -3.9, -6.6, -9.1, -10.9, -11.8, -11.4, -10.0, -7.7, -4.6, -0.9, 3.1, 7.2, 11.0, 13.8, 14.7, 12.8, 9.0, 5.0, 1.4], "calf": [8.8, 13.3, 17.3, 20.3, 22.3, 22.9, 21.6, 18.1, 12.9, 6.3, -1.3, -9.6, -17.9, -25.4, -30.9, -32.5, -27.0, -16.8, -5.9, 3.4], "foot": [4.0, -0.5, -6.8, -13.3, -18.2, -20.1, -19.0, -16.4, -12.5, -7.7, -2.3, 3.4, 9.0, 14.0, 17.7, 19.2, 17.7, 14.4, 10.6, 6.8], "paddle": [-1.6, 1.7, 4.9, 7.8, 10.0, 11.4, 11.7, 10.7, 8.8, 6.1, 2.7, -1.3, -5.5, -9.6, -12.7, -13.5, -12.0, -9.5, -6.7, -3.8], "flick": [-13.9, -11.5, -6.0, -0.4, 3.8, 5.5, 5.7, 5.9, 6.0, 6.0, 5.8, 5.4, 4.8, 4.0, 3.0, 1.8, -0.5, -4.2, -8.5, -12.3]}
+
+
+static func _zero_g(p: Dictionary, i: int, t: float, info: Dictionary) -> Dictionary:
+	var s: float = t / p["period"]
+	var cs := func(peak: float) -> float: return cos(2.0 * PI * (s - peak))
+	var role: String = p["role"]
+	if role == "pelvis":
+		return {} if i > 0 else {"yaw": p["body"] * 0.86 * cs.call(0.5), "move_up": p["lift"] * info.get("height", 0.0)}
+	if role == "spine":
+		if i == 0:
+			return {"yaw": p["body"] * 1.76 * cs.call(0.0)}
+		return {"yaw": p["body"] * 1.45 * cs.call(0.5)} if i == 1 else {}
+	if role == "leg_l" or role == "leg_r":
+		var strong: bool = (role == "leg_l") == (p["strong"] == "left")
+		var k: float = p["legs"] * (1.0 if strong else p["legRatio"])
+		var u: float = s if strong else s - p["legLR"] / 360.0
+		# голень со знаком «−»: колено сгибается, когда бедро уходит назад
+		if i == 0:
+			return {"pitch": p["hip"] + k * periodic(ZERO_G["thigh"], u)}
+		if i == 1:
+			return {"pitch": p["knee"] - k * periodic(ZERO_G["calf"], u)}
+		if i == 2:
+			return {"pitch": k * periodic(ZERO_G["foot"], u)}
+		return {}
+	var flick: bool = (role == "arm_l") == (p["strong"] == "left")
+	var fore: float = periodic(ZERO_G["flick"] if flick else ZERO_G["paddle"], s) * p["arms"]
+	if flick:
+		if i == 0:
+			return {"pitch": fore * (3.2 / 8.6)}
+		if i == 1:
+			return {"pitch": p["elbow"] + fore}
+		return {"pitch": fore * (6.5 / 8.6)} if i == 2 else {}
+	if i == 0:
+		return {"pitch": p["arms"] * 5.6 * cs.call(0.75)}
+	if i == 1:
+		return {"pitch": p["elbow"] + fore}
+	return {"pitch": p["arms"] * 8.8 * cs.call(0.75)} if i == 2 else {}

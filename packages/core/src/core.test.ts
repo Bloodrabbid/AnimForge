@@ -1369,3 +1369,25 @@ test("scare-pose: выход в позу к rise без возврата, гру
   close(at("arm_l", peakT, 1).pitch as number, p.elbow, 1e-9, "локоть в пике");
   assert.deepEqual(def.events!(p), [{ t: 1.27, name: "manifest" }]);
 });
+
+test("zero-g-float: педалирование Breathedge — колено сгибается с бедром назад, вторая нога 0.45 и сдвинута, отмашка резкая", () => {
+  const def = RECIPES["zero-g-float"];
+  const p = withDefaults(def, {});
+  const at = (role: string, i: number, t: number) => (def.evaluate({ ...p, role }, i, 3, t, { height: 1 }).pitch ?? 0) as number;
+  const N = 400, ts = Array.from({ length: N }, (_, k) => (k / N) * p.period);
+  const range = (f: (t: number) => number) => { const v = ts.map(f); return Math.max(...v) - Math.min(...v); };
+  close(range((t) => at("leg_l", 0, t)), 14.7 + 11.8, 0.3, "бедро Л пик-пик по curve20");
+  close(range((t) => at("leg_r", 0, t)) / range((t) => at("leg_l", 0, t)), 0.45, 1e-3, "вторая нога 0.45");
+  // колено сгибается, когда бедро уходит назад: в момент самого заднего бедра колено согнуто сильнее среднего
+  const back = ts.reduce((a, t) => (at("leg_l", 0, t) > at("leg_l", 0, a) ? t : a), 0);
+  assert.ok(at("leg_l", 1, back) > p.knee + 20, `колено ${at("leg_l", 1, back)}`);
+  // сдвиг второй ноги — 167°: её самое заднее бедро позже на 0.464 цикла
+  const backR = ts.reduce((a, t) => (at("leg_r", 0, t) > at("leg_r", 0, a) ? t : a), 0);
+  close(((backR - back) / p.period + 1) % 1, 167 / 360, 0.01, "сдвиг 167°");
+  // шов петли
+  close(at("leg_l", 1, p.period), at("leg_l", 1, 0), 1e-9, "шов");
+  // отмашка левой руки: за 0.15 цикла проходит больше 70 % хода, гребок правой — меньше половины
+  const swing = (role: string) => { const f = (t: number) => at(role, 1, t); const r = range(f); let best = 0; for (const t of ts) best = Math.max(best, Math.abs(f(t + 0.15 * p.period) - f(t))); return best / r; };
+  assert.ok(swing("arm_l") > 0.7 && swing("arm_r") < 0.6, `отмашка ${swing("arm_l")}, гребок ${swing("arm_r")}`);
+  assert.deepEqual(def.events!(p), [{ t: 1.8135, name: "breath" }]);
+});

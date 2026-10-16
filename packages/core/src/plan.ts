@@ -35,7 +35,7 @@ export const CATEGORIES: { id: string; title: string; recipes: string[] }[] = [
   { id: "quad", title: "Четвероногие", recipes: ["quadruped-gait"] },
   { id: "multi", title: "Многоногие", recipes: ["multileg-gait"] },
   { id: "wing", title: "Крылья и ласты", recipes: ["wing-flap"] },
-  { id: "swim", title: "Плавание и хвосты", recipes: ["wave", "curl"] },
+  { id: "swim", title: "Плавание и хвосты", recipes: ["wave", "curl", "zero-g-float"] },
   { id: "hover", title: "Парение", recipes: ["hover", "scare-pose"] },
   { id: "fight", title: "Удары", recipes: ["melee-strike", "charge-release", "tentacle-strike", "body-ram"] },
   { id: "react", title: "Реакции", recipes: ["hit-react", "startle"] },

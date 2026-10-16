@@ -1,0 +1,14 @@
+{
+ "recipe": "zero-g-float",
+ "presets": [
+  {
+   "name": "breathedge-suit-idle",
+   "help": "Висение в скафандре (Breathedge A_Idle_Fly): ноги педалируют, правая рука гребёт, левая делает отмашку, корпус почти стоит; цикл 4.03 с.",
+   "params": { "period": 4.03, "legs": 1, "legRatio": 0.45, "legLR": 167, "arms": 1, "body": 1 },
+   "provenance": [
+    { "source": "research/breathedge", "ref": "analysis/04-zero-g-first-person.md: §1 A_Idle_Fly — амплитуды, фазы и curve20, измерено" },
+    { "source": "hand-tuned", "note": "на глаз: средняя поза (бёдра −20°, колени 35°, локти −25°), оси сгиба и знак голени" }
+   ]
+  }
+ ]
+}

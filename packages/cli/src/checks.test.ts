@@ -277,3 +277,13 @@ test("scare-pose на рабочем: пресеты Ghost Master проходя
     assert.deepEqual(checkClip(ctx.project, ctx, mesh, c, false).report.findings.filter((f) => f.level === "fail").map((f) => f.check), [], pr.name);
   }
 });
+
+test("zero-g-float на рабочем: висение проходит проверки без замечаний", async () => {
+  const dir = copy("zero-g");
+  await smoothWeights(dir);
+  await call(dir, "clip.add", { name: "float", duration: 4.03, loop: true });
+  await call(dir, "recipe.rig", { clip: "float", recipe: "zero-g-float", preset: "breathedge-suit-idle" });
+  const ctx = await loadCtx(dir), c = ctx.project.clips.find((x) => x.name === "float")!;
+  assert.ok(c.layers.length >= 4, "ноги и руки");
+  assert.deepEqual(checkClip(ctx.project, ctx, await loadMesh(ctx), c, false).report.findings.map((f) => f.check), []);
+});
