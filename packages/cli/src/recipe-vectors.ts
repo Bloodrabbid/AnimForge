@@ -50,6 +50,7 @@ function keyTimes(recipe: string, p: Record<string, any>): number[] {
     case "scare-pose": { const pre = p.anticipation > 0 ? p.preT : 0, a = pre + p.rise, b = a + p.settle; return [0, pre, a, b, Math.max(p.duration, b + 0.01)]; }
     case "power-down": return [0, p.inT, p.outT, p.inT + p.hang, p.inT + p.hang + p.outT, p.bobPeriod];
     case "tool-use": return TOOL[p.kind].t.map((x: number) => x / p.speed).concat([0.2, 0.5, 0.6].map((x) => x / p.speed));
+    case "huddle": return [0, 0.25, 0.5, 0.75, 1, 1.25, 1.75, 2].map((u) => u * p.period);
     case "startle": return STARTLE[p.kind].t.map((x: number) => x / p.speed);
     case "hit-react": {
       const T = [0, p.windupT, p.peakVelT, p.peakT, p.settleT, p.duration];

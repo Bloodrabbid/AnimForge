@@ -1410,7 +1410,38 @@ const toolUse: RecipeDef = {
   },
 };
 
-export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact, "idle-glance": idleGlance, startle, "scare-pose": scarePose, "zero-g-float": zeroGFloat, "power-down": powerDown, "head-look-peck": headLookPeck, "thrust-trail": thrustTrail, "inspect-item": inspectItem, "fp-aim-arms": fpAimArms, "tool-use": toolUse };
+// ── сидит сжавшись (Ghost Master covhead, chfri/coufri): петли страха на полу ──────────────────────────────────
+/** Позы сидя по ролям (°, на глаз по раскадровкам); поверх — покачивание корпуса с замеренным периодом. */
+export const HUDDLE: Record<string, Record<string, Record<string, number>>> = {"covhead": {"pelvis": {"pitch": 15}, "chest": {"pitch": 25}, "head": {"pitch": 20}, "arm0": {"pitch": -150}, "arm1": {"pitch": -120}, "leg0": {"pitch": -80}, "leg1": {"pitch": 120}}, "hugknees": {"pelvis": {"pitch": 5}, "chest": {"pitch": 30}, "head": {"pitch": 15}, "arm0": {"pitch": -55}, "arm1": {"pitch": -90}, "leg0": {"pitch": -115}, "leg1": {"pitch": 140}}};
+const huddle: RecipeDef = {
+  name: "huddle",
+  main: ["rock", "period", "sit"],
+  roles: Object.fromEntries(["pelvis", "chest", "head", "arm_l", "arm_r", "leg_l", "leg_r"].map((r) => [r, { chain: r, params: { role: r }, optional: r !== "pelvis" }])),
+  help:
+    "Сидит на полу, сжавшись от страха (Ghost Master): covhead — обхватив голову, качается с периодом 0.82 с; hugknees — обхватив " +
+    "колени (chfri/coufri, петля 2.03 с). Периоды измерены, позы и размах покачивания — на глаз. Таз опускается к полу на sit.",
+  params: {
+    kind: { type: "enum", default: "covhead", options: Object.keys(HUDDLE), help: "обхватив голову или колени" },
+    role: { type: "enum", default: "pelvis", options: ["pelvis", "chest", "head", "arm_l", "arm_r", "leg_l", "leg_r"], help: "какую часть тела крутит слой" },
+    period: { type: "number", default: 0.82, min: 0.3, max: 6, unit: "с", help: "покачивание (covhead 0.82, chfri 2.03)" },
+    rock: { type: "number", default: 8, min: 0, max: 30, unit: "°", help: "размах покачивания корпуса вперёд-назад (на глаз)" },
+    sit: { type: "number", default: 0.3, min: 0, max: 0.9, help: "таз сидя — доля его высоты стоя (у толстяков больше)" },
+  },
+  length: (p) => +(2 * p.period).toFixed(3),
+  evaluate(p, i, n, t, info) {
+    const limb = /^(arm|leg)_/.test(p.role);
+    if (limb ? i > 1 : i > 0) return {};
+    const ch = HUDDLE[p.kind][limb ? `${p.role.slice(0, 3)}${i}` : p.role];
+    const out: Partial<Record<Channel, number>> = {};
+    for (const [c, v] of Object.entries(ch ?? {})) out[c as Channel] = v;
+    const sw = Math.sin((2 * Math.PI * t) / p.period);
+    if (p.role === "pelvis") { out.move_up = -(1 - p.sit) * (info?.height ?? 1); out.pitch = (out.pitch ?? 0) + p.rock * sw; }
+    if (p.role === "chest") out.pitch = (out.pitch ?? 0) + 0.5 * p.rock * sw;
+    return out;
+  },
+};
+
+export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact, "idle-glance": idleGlance, startle, "scare-pose": scarePose, "zero-g-float": zeroGFloat, "power-down": powerDown, "head-look-peck": headLookPeck, "thrust-trail": thrustTrail, "inspect-item": inspectItem, "fp-aim-arms": fpAimArms, "tool-use": toolUse, huddle };
 
 export { QUAD, STARTLE, TOOL, glancePlan, emergeCurve, strikeCurve, flapProfile, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
 

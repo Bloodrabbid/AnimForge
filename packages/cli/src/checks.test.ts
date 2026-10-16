@@ -261,6 +261,26 @@ test("startle на рабочем: пресеты Ghost Master проходят 
   }
 });
 
+test("huddle на рабочем: сидит на полу, обхватив голову или колени, — петли Ghost Master без брака", async () => {
+  const dir = copy("huddle");
+  await smoothWeights(dir);
+  const lib = JSON.parse(readFileSync(join(ROOT, "library/presets/huddle.json"), "utf8"));
+  for (const pr of lib.presets) {
+    const p = withDefaults(RECIPES.huddle, pr.params);
+    await call(dir, "clip.add", { name: pr.name, duration: RECIPES.huddle.length!(p), loop: true });
+    await call(dir, "recipe.rig", { clip: pr.name, recipe: "huddle", preset: pr.name });
+    await call(dir, "clip.ground", { clip: pr.name, bones: "foot_l,foot_r", mode: "floor", ik: true, flat: true });
+  }
+  const ctx = await loadCtx(dir), mesh = await loadMesh(ctx);
+  for (const pr of lib.presets) {
+    const c = ctx.project.clips.find((x) => x.name === pr.name)!;
+    assert.equal(c.layers.filter((l) => l.type === "recipe").length, 7, `${pr.name}: слой на каждую роль`);
+    // сидя на корточках кожа бедра рабочего рвётся при любой позе — это меш (так же у startle cower)
+    const f = checkClip(ctx.project, ctx, mesh, c, false).report.findings.filter((x) => x.level === "fail" && x.check !== "skin");
+    assert.deepEqual(f.map((x) => x.check), [], pr.name);
+  }
+});
+
 test("scare-pose на рабочем: пресеты Ghost Master проходят проверки без брака", async () => {
   const dir = copy("scare");
   await smoothWeights(dir);

@@ -1,0 +1,43 @@
+{
+ "recipe": "huddle",
+ "presets": [
+  {
+   "name": "gm-cover-head",
+   "help": "Сидит на полу, обхватив голову (maa_covhead): петля 1.67 с — два покачивания по 0.82 с.",
+   "params": {
+    "kind": "covhead",
+    "period": 0.835,
+    "rock": 8
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/03-mortal-fear.md: §6 — maa_covhead: петля 1.67 с, качается с периодом 0.82 с, голова на 0.65 H — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: поза сидя, руки на затылке, размах покачивания 8°"
+    }
+   ]
+  },
+  {
+   "name": "gm-hug-knees",
+   "help": "Сидит, обхватив колени (maa_chfri/coufri): петля 2.03 с, медленное покачивание.",
+   "params": {
+    "kind": "hugknees",
+    "period": 1.015,
+    "rock": 5
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/03-mortal-fear.md: §6 — maa_chfri/coufri: петля 2.03 с, макс. угол ≤ 37° — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: поза сидя с коленями у груди, два покачивания по 5° на петлю"
+    }
+   ]
+  }
+ ]
+}

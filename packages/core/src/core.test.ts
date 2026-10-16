@@ -5,7 +5,7 @@ import { evalKeys } from "./curves.ts";
 import { bakeClip, buildRig, chainAxes, poseAt } from "./evaluate.ts";
 import { DEG, Quat, qmul, qinv, qrot } from "./math.ts";
 import type { Project, Skeleton } from "./project.ts";
-import { RECIPES, withDefaults } from "./recipes.ts";
+import { HUDDLE, RECIPES, withDefaults } from "./recipes.ts";
 import { runCommand } from "./commands.ts";
 import { emptyProject } from "./project.ts";
 
@@ -1353,6 +1353,29 @@ test("startle: времена Ghost Master — пик вздрога 0.27 с и 
   // кисть и третьи кости не трогаем
   assert.deepEqual(at("jump", "arm_l", 0.63, {}, 2), {});
   assert.deepEqual(at("jump", "pelvis", 0.63, {}, 1), {}, "у таза — только первая кость");
+});
+
+test("huddle: петли Ghost Master — covhead 1.67 с из двух покачиваний по 0.82, колени 2.03 с; таз сидя на sit высоты", () => {
+  const def = RECIPES.huddle;
+  const at = (pr: Record<string, unknown>, role: string, t: number, i = 0) => def.evaluate(withDefaults(def, { ...pr, role }), i, 2, t, { height: 1 });
+  close(def.length!(withDefaults(def, { kind: "covhead", period: 0.835 })), 1.67, 1e-9, "covhead");
+  close(def.length!(withDefaults(def, { kind: "hugknees", period: 1.015 })), 2.03, 1e-9, "chfri");
+  // покачивание: пик таза вперёд на четверти периода, грудь — вдвое меньше, петля замкнута
+  const pr = { kind: "covhead", period: 0.82, rock: 8 };
+  const base = { pelvis: HUDDLE.covhead.pelvis.pitch, chest: HUDDLE.covhead.chest.pitch };
+  close((at(pr, "pelvis", 0.205).pitch as number) - base.pelvis, 8, 1e-9, "таз +rock на T/4");
+  close((at(pr, "pelvis", 0.615).pitch as number) - base.pelvis, -8, 1e-9, "таз −rock на 3T/4");
+  close((at(pr, "chest", 0.205).pitch as number) - base.chest, 4, 1e-9, "грудь — половина");
+  close(at(pr, "pelvis", 1.64).pitch as number, at(pr, "pelvis", 0).pitch as number, 1e-9, "петля");
+  close(at({ ...pr, sit: 0.25 }, "pelvis", 0).move_up as number, -0.75, 1e-9, "таз сидя");
+  assert.equal(at(pr, "chest", 0).move_up, undefined, "опускается только таз");
+  // голова не качается сама — её несёт грудь; колени у груди у hugknees, руки над головой у covhead
+  assert.equal(at(pr, "head", 0.205).pitch, at(pr, "head", 0).pitch);
+  assert.ok((at({ kind: "hugknees" }, "leg_l", 0).pitch as number) < -100, "бедро к груди");
+  assert.ok((at(pr, "arm_r", 0).pitch as number) < -140, "руки к голове");
+  assert.ok((at(pr, "leg_r", 0, 1).pitch as number) > 100, "колено согнуто");
+  assert.deepEqual(at(pr, "arm_l", 0, 2), {});
+  assert.deepEqual(at(pr, "chest", 0, 1), {});
 });
 
 test("scare-pose: выход в позу к rise без возврата, грудь перелетает в overshoot раз, замах — у корпуса, не у рук", () => {

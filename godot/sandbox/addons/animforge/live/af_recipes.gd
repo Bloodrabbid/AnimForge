@@ -6,7 +6,7 @@ extends RefCounted
 
 const RAD := PI / 180.0
 const SECONDARY := ["jiggle"]
-const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble", "hit-react", "idle-glance", "startle", "scare-pose", "zero-g-float", "power-down", "head-look-peck", "thrust-trail", "inspect-item", "fp-aim-arms", "tool-use"]
+const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble", "hit-react", "idle-glance", "startle", "scare-pose", "zero-g-float", "power-down", "head-look-peck", "thrust-trail", "inspect-item", "fp-aim-arms", "tool-use", "huddle"]
 
 
 static func is_secondary(recipe: String) -> bool:
@@ -42,6 +42,7 @@ static func evaluate(recipe: String, p: Dictionary, i: int, n: int, t: float, in
 		"inspect-item": return _inspect_item(p, i, n, t)
 		"fp-aim-arms": return _fp_aim_arms(p, i)
 		"tool-use": return _tool_use(p, i, t)
+		"huddle": return _huddle(p, i, t, info)
 	push_error("AFRecipes: нет рецепта «%s»" % recipe)
 	return {}
 
@@ -108,6 +109,7 @@ static func length(recipe: String, p: Dictionary) -> float:
 		"tool-use":
 			var tt: Array = TOOL[p["kind"]]["t"]
 			return to_fixed(tt[tt.size() - 1] / p["speed"], 3)
+		"huddle": return to_fixed(2.0 * p["period"], 3)
 		"startle":
 			var st: Array = STARTLE[p["kind"]]["t"]
 			return to_fixed(st[st.size() - 1] / p["speed"], 3)
@@ -1167,3 +1169,26 @@ static func _tool_use(p: Dictionary, i: int, t: float) -> Dictionary:
 	if i == 1:
 		return {"pitch": p["bend"] * (4.0 * r * (1.0 - r) if r >= 0 else -2.0 * r)}
 	return {}
+
+
+# ── huddle ──────────────────────────────────────────────────────────────────────────────────────────────────────
+const HUDDLE := {"covhead": {"pelvis": {"pitch": 15}, "chest": {"pitch": 25}, "head": {"pitch": 20}, "arm0": {"pitch": -150}, "arm1": {"pitch": -120}, "leg0": {"pitch": -80}, "leg1": {"pitch": 120}}, "hugknees": {"pelvis": {"pitch": 5}, "chest": {"pitch": 30}, "head": {"pitch": 15}, "arm0": {"pitch": -55}, "arm1": {"pitch": -90}, "leg0": {"pitch": -115}, "leg1": {"pitch": 140}}}
+
+
+static func _huddle(p: Dictionary, i: int, t: float, info: Dictionary) -> Dictionary:
+	var role: String = p["role"]
+	var limb := role.begins_with("arm_") or role.begins_with("leg_")
+	if (i > 1) if limb else (i > 0):
+		return {}
+	var key: String = (role.substr(0, 3) + str(i)) if limb else role
+	var out := {}
+	var ch: Dictionary = HUDDLE[p["kind"]].get(key, {})
+	for c in ch:
+		out[c] = float(ch[c])
+	var sw := sin((2.0 * PI * t) / p["period"])
+	if role == "pelvis":
+		out["move_up"] = -(1.0 - p["sit"]) * info.get("height", 1.0)
+		out["pitch"] = out.get("pitch", 0.0) + p["rock"] * sw
+	if role == "chest":
+		out["pitch"] = out.get("pitch", 0.0) + 0.5 * p["rock"] * sw
+	return out
