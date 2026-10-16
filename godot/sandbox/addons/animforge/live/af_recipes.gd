@@ -6,7 +6,7 @@ extends RefCounted
 
 const RAD := PI / 180.0
 const SECONDARY := ["jiggle"]
-const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble", "hit-react", "idle-glance", "startle", "scare-pose", "zero-g-float", "power-down", "head-look-peck"]
+const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble", "hit-react", "idle-glance", "startle", "scare-pose", "zero-g-float", "power-down", "head-look-peck", "thrust-trail"]
 
 
 static func is_secondary(recipe: String) -> bool:
@@ -38,6 +38,7 @@ static func evaluate(recipe: String, p: Dictionary, i: int, n: int, t: float, in
 		"zero-g-float": return _zero_g(p, i, t, info)
 		"power-down": return _power_down(p, i, n, t, info)
 		"head-look-peck": return _head_look_peck(p, i, n, t)
+		"thrust-trail": return _thrust_trail(p, i)
 	push_error("AFRecipes: нет рецепта «%s»" % recipe)
 	return {}
 
@@ -1034,3 +1035,18 @@ static func _head_look_peck(p: Dictionary, i: int, n: int, t: float) -> Dictiona
 		"head": return {} if i > 0 else {"yaw": p["head"] * sin(w + p["headPhase"] * RAD)}
 		"tail": return {"yaw": (p["tail"] / maxi(1, n)) * sin(w + p["tailPhase"] * RAD)}
 	return {} if i > 0 else {"pitch": (p["wing"] * (sin(w) + 0.82 * sin(2.0 * w))) / _twitch_peak()}
+
+
+# ── thrust-trail ────────────────────────────────────────────────────────────────────────────────────────────────
+
+static func _thrust_trail(p: Dictionary, i: int) -> Dictionary:
+	if i > 0:
+		return {}
+	var a: float = p["angle"] * RAD
+	var f: float = cos(a) * p["amount"]
+	var s: float = sin(a) * p["amount"]
+	if p["role"] == "leg":
+		return {"pitch": p["legTrail"] * f, "bank": -p["legTrail"] * s}
+	var m2 := f * f + s * s
+	var diag := (2.0 * absf(f * s)) / m2 if m2 > 1e-12 else 0.0
+	return {"pitch": p["forwardTilt"] * f if f >= 0 else p["backTilt"] * f, "bank": p["sideTilt"] * s, "yaw": p["diagYaw"] * diag * signf(f * s) * sqrt(m2)}

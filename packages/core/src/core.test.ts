@@ -1445,3 +1445,18 @@ test("curl секциями: внутри секции синхронно, се�
   const old = withDefaults(def, { angle: 40, pulse: 0.5, growth: 1 });
   close(v(7, 0.3, old), 40 * (8 / 15) / (16 * 15 / 2 / 15) * (1 + 0.5 * Math.sin(2 * Math.PI * (0.3 / old.period))), 1e-9, "одна секция");
 });
+
+test("thrust-trail: таз ложится на тягу по замерам Breathedge, диагонали поворачивают, ноги отстают", () => {
+  const def = RECIPES["thrust-trail"];
+  const at = (angle: number, role = "pelvis", amount = 1) => def.evaluate(withDefaults(def, { angle, role, amount }), 0, 1, 0);
+  close(at(0).pitch!, 26.6, 1e-9, "F");
+  close(at(180).pitch!, -38, 1e-9, "B");
+  close(at(90).bank!, 22.5, 1e-9, "R");
+  close(at(-90).bank!, -22.5, 1e-9, "L");
+  close(Math.abs(at(0).yaw!), 0, 1e-9, "по оси без рыскания");
+  close(Math.abs(at(45).yaw!), 44, 1e-9, "диагональ 44°");
+  assert.ok(at(45).yaw! * at(-45).yaw! < 0, "FL и FR в разные стороны");
+  close(at(45, "pelvis", 0.5).pitch!, 26.6 * 0.5 * Math.SQRT1_2, 1e-9, "сила тяги");
+  assert.ok(at(0, "leg").pitch! > 0 && at(180, "leg").pitch! < 0, "бёдра против тяги");
+  assert.deepEqual(def.evaluate(withDefaults(def, {}), 1, 2, 0), {});
+});

@@ -1255,7 +1255,38 @@ const headLookPeck: RecipeDef = {
 /** Пик |sin w + 0.82·sin 2w| — чтобы подёргивание крыльев было ровно ±wing. */
 const WING_TWITCH_PEAK = (() => { let m = 0; for (let k = 0; k < 20000; k++) { const w = (2 * Math.PI * k) / 20000; m = Math.max(m, Math.abs(Math.sin(w) + 0.82 * Math.sin(2 * w))); } return m; })();
 
-export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact, "idle-glance": idleGlance, startle, "scare-pose": scarePose, "zero-g-float": zeroGFloat, "power-down": powerDown, "head-look-peck": headLookPeck };
+// ── тело отстаёт от тяги (Breathedge B_Fly_Movement, 9 клипов) ─────────────────────────────────────────────────
+/** Вектор тяги в осях тела: вперёд и вправо, по углу (0 — вперёд, 90 — вправо) и силе 0…1. */
+const thrustDir = (p: Record<string, any>) => { const a = (p.angle * Math.PI) / 180; return { f: Math.cos(a) * p.amount, s: Math.sin(a) * p.amount }; };
+const thrustTrail: RecipeDef = {
+  name: "thrust-trail",
+  main: ["angle", "amount", "forwardTilt", "backTilt"],
+  roles: { pelvis: { chain: "pelvis", params: { role: "pelvis" } }, leg_l: { chain: "leg_l", params: { role: "leg" }, optional: true }, leg_r: { chain: "leg_r", params: { role: "leg" }, optional: true } },
+  help:
+    "Тело отстаёт от тяги (Breathedge, полёт в скафандре): по направлению тяги таз ложится — вперёд на 27°, назад откидывается " +
+    "на 38°, вбок кренится на 15–30°, на диагоналях ещё и поворачивается на ≈ 44°; ноги уходят против тяги. Верх тела не трогается. " +
+    "Статичная поза — кладётся поверх zero-g-float; сглаживание входа 1.0 с делает игра. Углы таза измерены, доля ног — на глаз.",
+  params: {
+    role: { type: "enum", default: "pelvis", options: ["pelvis", "leg"], help: "таз ложится на тягу, бёдра отстают" },
+    angle: { type: "number", default: 0, min: -180, max: 180, unit: "°", help: "куда тяга в осях тела: 0 — вперёд, 90 — вправо, 180 — назад" },
+    amount: { type: "number", default: 1, min: 0, max: 1, help: "сила тяги (доля полной)" },
+    forwardTilt: { type: "number", default: 26.6, min: 0, max: 60, unit: "°", help: "наклон вперёд при тяге вперёд (F: 26.6)" },
+    backTilt: { type: "number", default: 38, min: 0, max: 60, unit: "°", help: "откид назад при тяге назад (B: 38)" },
+    sideTilt: { type: "number", default: 22.5, min: 0, max: 45, unit: "°", help: "крен при тяге вбок (L 30, R 15 — среднее)" },
+    diagYaw: { type: "number", default: 44, min: 0, max: 90, unit: "°", help: "поворот таза на диагоналях (FL/FR/BL/BR: 39–44)" },
+    legTrail: { type: "number", default: 20, min: 0, max: 60, unit: "°", help: "бёдра отстают от тяги сверх наклона таза (стопы уходят на 0.33–0.6 роста — на глаз)" },
+  },
+  evaluate(p, i) {
+    if (i > 0) return {};
+    const { f, s } = thrustDir(p);
+    if (p.role === "leg") return { pitch: p.legTrail * f, bank: -p.legTrail * s };
+    // диагональ: 1 под 45°, 0 по осям
+    const m2 = f * f + s * s, diag = m2 > 1e-12 ? (2 * Math.abs(f * s)) / m2 : 0;
+    return { pitch: f >= 0 ? p.forwardTilt * f : p.backTilt * f, bank: p.sideTilt * s, yaw: p.diagYaw * diag * Math.sign(f * s) * Math.sqrt(m2) };
+  },
+};
+
+export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact, "idle-glance": idleGlance, startle, "scare-pose": scarePose, "zero-g-float": zeroGFloat, "power-down": powerDown, "head-look-peck": headLookPeck, "thrust-trail": thrustTrail };
 
 export { QUAD, STARTLE, glancePlan, emergeCurve, strikeCurve, flapProfile, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
 

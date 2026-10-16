@@ -376,6 +376,7 @@ pnpm af export.directions --clip walk --verify true                    # и св
 - `power-down`: отключение и включение парящего робота (Breathedge, охранник) — за 0.27 с корпус проваливается на 0.2 роста и клонится на 31.5°, руки и голова обвисают и остаются; выключенный висит, покачиваясь на ±0.55 % роста за 2 с; за 0.33 с включается. `mode`: `in`, `hang` (петля), `out`, `full`; события `power_off` / `power_on`. Пресеты `breathedge-guardian-shutdown/off/dead-hang/on`.
 - `head-look-peck`: птица озирается (курица Breathedge, 1 с) — шея из двух звеньев в противофазе ±17.8 / ±22.2° (S-образно), голова ±10.8…30.2°, хвост ±18.7° против головы, крылья подёргиваются дважды за цикл ровно на ±5.8°. Пресеты `breathedge-chicken-keeper`, `-alert`, `-calm`.
 - `curl` секциями (`sections` 2–3): хвост пришельца Breathedge гнётся тремя секциями (звенья 0–2 / 3–9 / 10–14 из 15) — внутри секции синхронно, следующая секция запаздывает на `sectionPhase`, размах средней и концевой — `midAmp` / `tipAmp`. При `sections` 1 — прежний `curl`. Пресет `breathedge-xeno-tail-sections`.
+- `thrust-trail`: тело отстаёт от тяги в невесомости (Breathedge, 9 клипов полёта) — по углу тяги (`angle`: 0 вперёд, 90 вправо) таз ложится вперёд на 26.6° или откидывается на 38°, кренится вбок на 22.5°, на диагоналях поворачивается на 44°, бёдра отстают. Статичная поза поверх `zero-g-float`; восемь пресетов `breathedge-thrust-f/fr/r/br/b/bl/l/fl` ложатся на восемь направлений.
 - `charge-release`: силовая атака — замах, удержание с пружинящим корнем, выпуск двумя ударами (`witcher-power`).
 - События рецептов: `hit`, `whoosh`, `effort`, `trail_on/off`, `window_open/close`.
   Посмотреть их: `af clip.events --clip combo`. При экспорте они пишутся в extras анимации и в `<glb>.events.json`.
@@ -781,6 +782,7 @@ pnpm af model.autorig --project out/uploads/bot --file assets/model.glb --out as
 | `zero-g-float` | невесомость, плавание под водой на месте | Breathedge: `breathedge-suit-idle` |
 | `power-down` | роботы и механизмы: выключиться, повиснуть, включиться | Breathedge: `breathedge-guardian-shutdown`, `-off`, `-dead-hang`, `-on` |
 | `head-look-peck` | птицы и мелкие звери: вертит головой | Breathedge: `breathedge-chicken-keeper`, `-alert`, `-calm` |
+| `thrust-trail` | полёт в невесомости, джетпак, плавание: поза по направлению тяги | Breathedge: `breathedge-thrust-f` … `-fl` |
 | прочее | | `melee-strike`: `breathedge-guardian-hit`, `breathedge-fp-crowbar/jab`; `curl`: `haven-creature-breathe`, `breathedge-xeno-tail-walk/angry`; `jiggle`: `breathedge-cow-ragdoll-limb/tongue`; `blink`: `haven-toriko/daikon-blink`; `charge-release`: `gm-ghost-power`; твины камеры `breathedge-camera-hit/bump` |
 
 Шаблоны `template.make`: `quadruped`, `insect`, `spider`, `centipede`, `bird`, `ghost`, `plant`. Разборы, из которых взяты числа:

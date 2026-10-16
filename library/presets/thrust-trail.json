@@ -1,0 +1,141 @@
+{
+ "recipe": "thrust-trail",
+ "presets": [
+  {
+   "name": "breathedge-thrust-f",
+   "help": "Тяга вперёд: тело ложится на тягу, ноги отстают. Кладётся поверх breathedge-suit-idle.",
+   "params": {
+    "angle": 0
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/04-zero-g-first-person.md: §2 B_Fly_Movement — таз F −26.6°, B +38°, L 30° / R 15° крена, диагонали 39–44° рыскания, ноги против тяги 0.33–0.6 роста, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: крен вбок — среднее 22.5°, знак рыскания на диагоналях, доля бёдер 20°"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-thrust-fr",
+   "help": "Тяга вперёд-вправо: тело ложится на тягу, ноги отстают. Кладётся поверх breathedge-suit-idle.",
+   "params": {
+    "angle": 45
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/04-zero-g-first-person.md: §2 B_Fly_Movement — таз F −26.6°, B +38°, L 30° / R 15° крена, диагонали 39–44° рыскания, ноги против тяги 0.33–0.6 роста, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: крен вбок — среднее 22.5°, знак рыскания на диагоналях, доля бёдер 20°"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-thrust-r",
+   "help": "Тяга вправо: тело ложится на тягу, ноги отстают. Кладётся поверх breathedge-suit-idle.",
+   "params": {
+    "angle": 90
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/04-zero-g-first-person.md: §2 B_Fly_Movement — таз F −26.6°, B +38°, L 30° / R 15° крена, диагонали 39–44° рыскания, ноги против тяги 0.33–0.6 роста, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: крен вбок — среднее 22.5°, знак рыскания на диагоналях, доля бёдер 20°"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-thrust-br",
+   "help": "Тяга назад-вправо: тело ложится на тягу, ноги отстают. Кладётся поверх breathedge-suit-idle.",
+   "params": {
+    "angle": 135
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/04-zero-g-first-person.md: §2 B_Fly_Movement — таз F −26.6°, B +38°, L 30° / R 15° крена, диагонали 39–44° рыскания, ноги против тяги 0.33–0.6 роста, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: крен вбок — среднее 22.5°, знак рыскания на диагоналях, доля бёдер 20°"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-thrust-b",
+   "help": "Тяга назад: тело ложится на тягу, ноги отстают. Кладётся поверх breathedge-suit-idle.",
+   "params": {
+    "angle": 180
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/04-zero-g-first-person.md: §2 B_Fly_Movement — таз F −26.6°, B +38°, L 30° / R 15° крена, диагонали 39–44° рыскания, ноги против тяги 0.33–0.6 роста, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: крен вбок — среднее 22.5°, знак рыскания на диагоналях, доля бёдер 20°"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-thrust-bl",
+   "help": "Тяга назад-влево: тело ложится на тягу, ноги отстают. Кладётся поверх breathedge-suit-idle.",
+   "params": {
+    "angle": -135
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/04-zero-g-first-person.md: §2 B_Fly_Movement — таз F −26.6°, B +38°, L 30° / R 15° крена, диагонали 39–44° рыскания, ноги против тяги 0.33–0.6 роста, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: крен вбок — среднее 22.5°, знак рыскания на диагоналях, доля бёдер 20°"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-thrust-l",
+   "help": "Тяга влево: тело ложится на тягу, ноги отстают. Кладётся поверх breathedge-suit-idle.",
+   "params": {
+    "angle": -90
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/04-zero-g-first-person.md: §2 B_Fly_Movement — таз F −26.6°, B +38°, L 30° / R 15° крена, диагонали 39–44° рыскания, ноги против тяги 0.33–0.6 роста, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: крен вбок — среднее 22.5°, знак рыскания на диагоналях, доля бёдер 20°"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-thrust-fl",
+   "help": "Тяга вперёд-влево: тело ложится на тягу, ноги отстают. Кладётся поверх breathedge-suit-idle.",
+   "params": {
+    "angle": -45
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/04-zero-g-first-person.md: §2 B_Fly_Movement — таз F −26.6°, B +38°, L 30° / R 15° крена, диагонали 39–44° рыскания, ноги против тяги 0.33–0.6 роста, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: крен вбок — среднее 22.5°, знак рыскания на диагоналях, доля бёдер 20°"
+    }
+   ]
+  }
+ ]
+}
