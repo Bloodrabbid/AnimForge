@@ -579,7 +579,9 @@ const quadrupedGait: RecipeDef = {
 // Фаза ноги k (0 — передняя пара): −k·lag — задние шагают раньше, волна бежит к голове; правая сторона + side.
 const MAX_PAIRS = 24;
 function multilegPhase(p: Record<string, any>, side: "l" | "r", k: number, t: number) {
-  const u = t / p.period - (-k * p.lag + (side === "r" ? p.side : 0));
+  // своя фаза ноги (Haven Heliga: не трипод и не волна) — если задана, иначе сдвиг по lag и side
+  const own = k < 3 ? p[`ph_${side}${k}`] ?? -1 : -1;
+  const u = t / p.period - (own >= 0 ? own : -k * p.lag + (side === "r" ? p.side : 0));
   return ((u % 1) + 1) % 1;
 }
 /** Профиль ноги: protract — вынос вперёд в долях размаха (+1 впереди, −1 сзади), lift — подъём 0…1 (только в переносе). */
@@ -618,6 +620,8 @@ const multilegGait: RecipeDef = {
     pelvisYaw: { type: "number", default: 0, min: 0, max: 30, unit: "°", help: "рыскание таза раз за цикл (кикимора ±9.8)" },
     chestRoll: { type: "number", default: 0, min: 0, max: 30, unit: "°", help: "крен груди раз за цикл (кикимора ±17.3)" },
     bob: { type: "number", default: 0, min: 0, max: 0.2, help: "подскок таза дважды за цикл — доля высоты (кикимора 0.066 / 1.86 = 3.5 %)" },
+    ...Object.fromEntries([0, 1, 2].flatMap((k) => (["l", "r"] as const).map((s) => [`ph_${s}${k}`, { type: "number" as const, default: -1, min: -1, max: 1, help: `своя фаза выноса ноги ${s === "l" ? "левой" : "правой"} пары ${k}, доля цикла (−1 — по lag и side; Haven Heliga: 0, .434, .608, .159, .863, .404)` }]))),
+    ...Object.fromEntries([0, 1, 2].map((k) => [`duty${k}`, { type: "number" as const, default: -1, min: -1, max: 0.9, help: `доля опоры пары ${k} (−1 — как duty; у Heliga средние короче всех: 0.42)` }])),
   },
   evaluate(p, i, n, t, info) {
     const cyc = 2 * Math.PI * (t / p.period);
@@ -630,7 +634,8 @@ const multilegGait: RecipeDef = {
     const m = /^leg_([lr])(\d+)$/.exec(p.role);
     if (!m) return {};
     const s = m[1] as "l" | "r", k = +m[2];
-    const { protract, lift } = legProfile(multilegPhase(p, s, k, t), p.duty);
+    const dk = k < 3 ? p[`duty${k}`] ?? -1 : -1;
+    const { protract, lift } = legProfile(multilegPhase(p, s, k, t), dk > 0 ? dk : p.duty);
     const sgn = s === "l" ? 1 : -1;
     // вокруг вертикали: + уводит левую ногу назад, правую — вперёд; вокруг поперечной оси ноги (vertical цепочки) + поднимает
     if (i === 0) return { yaw: -sgn * p.swing * protract, vertical: p.lift * lift };

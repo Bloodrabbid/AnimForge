@@ -1534,3 +1534,21 @@ test("rig.detect: челюсть bn_Jaw (как в Haven) — цепочка jaw
   assert.deepEqual(detectRig(sk, { up: [0, 1, 0] }).chains.jaw, ["bn_Jaw"]);
   assert.equal(detectRig(humanSkel(CONV.unreal), { up: [0, 1, 0] }).chains.jaw, undefined, "без челюсти — нет");
 });
+
+test("multileg-gait: у каждой ноги своя фаза (Heliga Haven) — вынос в замеренный момент, средние стоят короче", () => {
+  const def = RECIPES["multileg-gait"];
+  const lib = JSON.parse(readFileSync(new URL("../../../library/presets/multileg-gait.json", import.meta.url), "utf8"));
+  const p = withDefaults(def, lib.presets.find((x: any) => x.name === "haven-heliga-walk").params);
+  const lift = (role: string, t: number) => (def.evaluate({ ...p, role }, 0, 2, t).vertical ?? 0) as number;
+  const meas: Record<string, number> = { leg_l0: 0, leg_r0: 0.434, leg_l1: 0.608, leg_r1: 0.159, leg_l2: 0.863, leg_r2: 0.404 };
+  for (const [role, m] of Object.entries(meas)) {
+    let start = -1, swing = 0;
+    for (let k = 0; k < 2000; k++) { const t = (k / 2000) * p.period, a = lift(role, t), b = lift(role, t + p.period / 2000); if (a <= 1e-9 && b > 1e-9) start = t; if (b > 1e-9) swing++; }
+    close(((start / p.period - m) % 1 + 1.5) % 1 - 0.5, 0, 0.002, `${role}: вынос в ${start / p.period}, замер ${m}`);
+    close(1 - swing / 2000, role.endsWith("1") ? 0.42 : 0.6, 0.002, `${role}: опора`);
+  }
+  // без таблицы — прежняя формула по lag и side
+  const tri = withDefaults(def, { lag: 0.5, side: 0.5 });
+  close(multilegPhase(tri, "r", 1, 0.1), multilegPhase({ ...tri, ph_r1: -1 }, "r", 1, 0.1), 1e-12);
+  close(multilegPhase(tri, "r", 1, 0), ((0 - (-0.5 + 0.5)) % 1 + 1) % 1, 1e-12, "трипод как раньше");
+});

@@ -577,7 +577,9 @@ static func _quadruped_gait(p: Dictionary, i: int, n: int, t: float, info: Dicti
 # ── многоногие: волна шагов по ногам ────────────────────────────────────────────────────────────────────────────
 ## Фаза ноги k (0 — передняя пара): −k·lag — задние шагают раньше; правая сторона + side.
 static func multileg_phase(p: Dictionary, side: String, k: int, t: float) -> float:
-	var u: float = t / p["period"] - (-k * p["lag"] + (p["side"] if side == "r" else 0.0))
+	# своя фаза ноги, если задана (в файлах до неё параметра нет в схеме)
+	var own: float = p.get("ph_%s%d" % [side, k], -1.0) if k < 3 else -1.0
+	var u: float = t / p["period"] - (own if own >= 0 else -k * p["lag"] + (p["side"] if side == "r" else 0.0))
 	return _fmod1(u)
 
 
@@ -609,7 +611,8 @@ static func _multileg_gait(p: Dictionary, i: int, _n: int, t: float, info: Dicti
 		return {}
 	var s := m.get_string(1)
 	var k := int(m.get_string(2))
-	var lp := leg_profile(multileg_phase(p, s, k, t), p["duty"])
+	var dk: float = p.get("duty%d" % k, -1.0) if k < 3 else -1.0
+	var lp := leg_profile(multileg_phase(p, s, k, t), dk if dk > 0 else p["duty"])
 	var sgn := 1.0 if s == "l" else -1.0
 	# вокруг вертикали: + уводит левую ногу назад, правую — вперёд; vertical + поднимает
 	if i == 0:

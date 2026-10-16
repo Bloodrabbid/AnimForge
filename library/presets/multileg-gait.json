@@ -126,7 +126,13 @@
     "side": 0.2,
     "swing": 30,
     "lift": 30,
-    "chestRoll": 11.9
+    "chestRoll": 11.9,
+    "ph_l0": 0.75,
+    "ph_r0": 0.001,
+    "ph_l1": 0.017,
+    "ph_r1": 0.925,
+    "ph_l2": 0.101,
+    "ph_r2": 0.951
    },
    "provenance": [
     {
@@ -136,6 +142,38 @@
     {
      "source": "hand-tuned",
      "ref": "lag, side, swing, lift (все шесть лап в 0.35 цикла) — на глаз"
+    },
+    {
+     "source": "research/haven",
+     "ref": "analysis/04-creatures.md: §3 Шестиногое Heliga — RoamingRun2Idle: фазы выноса FL..HR 0, .251, .267, .175, .351, .201, измерено; ph_* = фаза выноса − duty"
+    }
+   ]
+  },
+  {
+   "name": "haven-heliga-walk",
+   "help": "Шаг шестиногого Heliga: не трипод и не волна — у каждой ноги своя фаза выноса, средние ноги стоят короче.",
+   "params": {
+    "period": 2.0,
+    "duty": 0.6,
+    "duty1": 0.42,
+    "swing": 20,
+    "lift": 12,
+    "chestRoll": 7.1,
+    "ph_l0": 0.4,
+    "ph_r0": 0.834,
+    "ph_l1": 0.188,
+    "ph_r1": 0.739,
+    "ph_l2": 0.263,
+    "ph_r2": 0.804
+   },
+   "provenance": [
+    {
+     "source": "research/haven",
+     "ref": "analysis/04-creatures.md: §3 Шестиногое Heliga — RoamingWalk2Idle: T 2.0, опора 0.42–0.65 (средние 0.42), фазы выноса 0, .434, .608, .159, .863, .404, крен 7.1°, измерено; ph_* = фаза выноса − duty пары"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: опора передних и задних 0.6, размах 20°, подъём 12°"
     }
    ]
   }
