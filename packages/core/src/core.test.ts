@@ -1513,3 +1513,24 @@ test("твин стаи Breathedge: выскок 7 м за 0.3 с, развор�
   assert.ok(t5 >= 1.9 && t5 <= 2.5 && t95 >= 3.27 && t95 <= 3.37, `5 % в ${t5}, 95 % в ${t95}`);
   assert.ok(vmax >= 600 && vmax <= 900, `пик ${vmax} м/с`);
 });
+
+test("челюсть Haven: в таране открыта к концу замаха и закрыта к удару; в реакции распахнута к jawT, у смерти остаётся", () => {
+  const ram = RECIPES["body-ram"], p = withDefaults(ram, { jawOpen: 53, role: "jaw" });
+  const a = p.windupT, b = a + p.hold, c = b + p.strikeT;
+  close(ram.evaluate(p, 0, 1, b).pitch!, 53, 1e-9, "пик в конце задержки замаха");
+  close(ram.evaluate(p, 0, 1, c).pitch!, 0, 1e-9, "к удару закрыта");
+  assert.deepEqual(ram.evaluate(withDefaults(ram, { role: "jaw" }), 0, 1, b), {}, "без jawOpen — не трогаем");
+  const hr = RECIPES["hit-react"];
+  const light = withDefaults(hr, { role: "jaw", jawOpen: 30, jawT: 0.12 });
+  close(hr.evaluate(light, 0, 1, 0.12).pitch!, 30, 1e-9);
+  close(hr.evaluate(light, 0, 1, light.settleT).pitch!, 0, 1e-9, "закрылась к успокоению");
+  const death = withDefaults(hr, { role: "jaw", jawOpen: 30, jawT: 0.4, keep: 1, settleT: 1.67, peakT: 1.57, peakVelT: 0.7, duration: 1.67 });
+  close(hr.evaluate(death, 0, 1, 1.67).pitch!, 30, 1e-9, "смерть — пасть открыта");
+});
+
+test("rig.detect: челюсть bn_Jaw (как в Haven) — цепочка jaw", () => {
+  const sk = humanSkel(CONV.unreal);
+  sk.nodes.push({ name: "bn_Jaw", parent: "head", restT: [0, -0.03, 0.06], restR: [0, 0, 0, 1], restS: [1, 1, 1], isJoint: true });
+  assert.deepEqual(detectRig(sk, { up: [0, 1, 0] }).chains.jaw, ["bn_Jaw"]);
+  assert.equal(detectRig(humanSkel(CONV.unreal), { up: [0, 1, 0] }).chains.jaw, undefined, "без челюсти — нет");
+});

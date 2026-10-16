@@ -761,6 +761,10 @@ static func _body_ram(p: Dictionary, i: int, t: float, info: Dictionary) -> Dict
 	# голова в мире = (1 − hold) · наклон корпуса с запаздыванием; слой отдаёт разницу с корпусом
 	if p["role"] == "head":
 		return {"pitch": (1 - p["headHold"]) * _ram_curve(T, PITCH, t - p["headLag"]) - _ram_curve(T, PITCH, t)}
+	# пасть: раскрывается за замах, к контакту закрыта (в файлах до jawOpen его нет в схеме)
+	if p["role"] == "jaw":
+		var jo: float = p.get("jawOpen", 0.0)
+		return {"pitch": jo * _ram_curve(T, [0.0, 0.8, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0], t)} if jo != 0 else {}
 	return {
 		"pitch": _ram_curve(T, PITCH, t),
 		"bank": _ram_curve(T, [0.0, -p["bank"], -p["bank"] * 1.1, 0.0, 0.0, p["bank"] * 0.1, 0.0, 0.0], t),
@@ -815,6 +819,12 @@ static func _hit_react(p: Dictionary, i: int, t: float, info: Dictionary) -> Dic
 	if p["role"] == "head":
 		var ch: float = p["headPitch"] * _react_curve(p, t - p["headLag"])
 		return {"pitch": f * ch} if f != 0 else {"bank": s * ch}
+	if p["role"] == "jaw":
+		var jo: float = p.get("jawOpen", 0.0)
+		if jo == 0:
+			return {}
+		var jt: float = p.get("jawT", 0.1)
+		return {"pitch": jo * _ram_curve([0.0, jt, maxf(jt + 0.01, p["settleT"])], [0.0, 1.0, p["keep"]], t)}
 	var c := _react_curve(p, t)
 	var H: float = info.get("height", 1.0)
 	var out := {}

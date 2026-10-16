@@ -10,7 +10,9 @@
     "peakT": 0.27,
     "settleT": 0.78,
     "pitch": 25,
-    "push": 0.3
+    "push": 0.3,
+    "jawOpen": 30,
+    "jawT": 0.12
    },
    "provenance": [
     {
@@ -20,6 +22,10 @@
     {
      "source": "hand-tuned",
      "note": "на глаз: наклон 25° — внутри измеренных ±13…58°, отлёт 0.3 h"
+    },
+    {
+     "source": "research/haven",
+     "ref": "analysis/04-creatures.md: §11.5 Челюсть — раскрытие по видам, измерено: HitLight 16–62° (Chirulida 62 за 0.03, Babulardo 48 за 0.21); значение — медиана по видам"
     }
    ]
   },
@@ -33,7 +39,9 @@
     "settleT": 1.41,
     "pitch": 40,
     "push": 0.5,
-    "headPitch": 18
+    "headPitch": 18,
+    "jawOpen": 30,
+    "jawT": 0.15
    },
    "provenance": [
     {
@@ -43,6 +51,10 @@
     {
      "source": "hand-tuned",
      "note": "на глаз: наклон 40° и отлёт 0.5 h; оседание таза убрано — на работнике рвёт кожу бедра"
+    },
+    {
+     "source": "research/haven",
+     "ref": "analysis/04-creatures.md: §11.5 Челюсть — раскрытие по видам, измерено: HitHeavy 15–68°; значение — медиана по видам"
     }
    ]
   },
@@ -111,7 +123,9 @@
     "pitch": 10,
     "push": 0.05,
     "drop": -0.06,
-    "headPitch": 12
+    "headPitch": 12,
+    "jawOpen": 8,
+    "jawT": 0.1
    },
    "provenance": [
     {
@@ -121,6 +135,10 @@
     {
      "source": "hand-tuned",
      "note": "на глаз: поза настороже — 0.6 пика, подскок 0.06 h"
+    },
+    {
+     "source": "research/haven",
+     "ref": "analysis/04-creatures.md: §11.5 Челюсть — раскрытие по видам, измерено: Spot 0–57°, медиана ≈ 8; значение — медиана по видам"
     }
    ]
   },
@@ -138,7 +156,9 @@
     "push": 0.4,
     "drop": 0.1,
     "headPitch": 20,
-    "headLag": 0.1
+    "headLag": 0.1,
+    "jawOpen": 30,
+    "jawT": 0.4
    },
    "provenance": [
     {
@@ -148,6 +168,10 @@
     {
      "source": "hand-tuned",
      "note": "на глаз: наклон 60°, оседание таза 0.1 h (глубже на работнике рвётся кожа бедра; голова опускается за счёт наклона)"
+    },
+    {
+     "source": "research/haven",
+     "ref": "analysis/04-creatures.md: §11.5 Челюсть — раскрытие по видам, измерено: Death 6–56°, остаётся открытой; значение — медиана по видам"
     }
    ]
   }

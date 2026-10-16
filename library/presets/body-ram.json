@@ -102,12 +102,17 @@
     "windupT": 1.2,
     "strikeT": 0.33,
     "recover": 0.7,
-    "settle": 0.57
+    "settle": 0.57,
+    "jawOpen": 53
    },
    "provenance": [
     {
      "source": "research/haven",
      "ref": "analysis/06-animforge-candidates.md A6: NPC_Dorago=Atk* — 1.2 / 0.33 / 1.27 — измерено"
+    },
+    {
+     "source": "research/haven",
+     "ref": "analysis/04-creatures.md: §11.5 Челюсть — раскрытие по видам, измерено: Dorago Atk1Start 53° (0.18 с) → удар 2°"
     }
    ]
   },

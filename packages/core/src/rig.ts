@@ -7,7 +7,7 @@ import type { Project, Skeleton } from "./project.ts";
 import { bodyFrame, buildRig, type Rig } from "./evaluate.ts";
 
 /** Стандартные цепочки. Ноги и руки — от основания к концу: бедро → голень (→ стопа отдельно), плечо → предплечье. */
-export const STANDARD_CHAINS = ["pelvis", "spine", "chest", "neck", "head", "arm_l", "arm_r", "leg_l", "leg_r", "tail", "eye_l", "eye_r"] as const;
+export const STANDARD_CHAINS = ["pelvis", "spine", "chest", "neck", "head", "arm_l", "arm_r", "leg_l", "leg_r", "tail", "eye_l", "eye_r", "jaw"] as const;
 export type StdChain = (typeof STANDARD_CHAINS)[number];
 
 export interface RigDetection {
@@ -19,7 +19,7 @@ export interface RigDetection {
 }
 
 // Нормализация имени: префиксы риггеров и регистр убираем, сторону вынимаем отдельно.
-const PREFIX = /^(\d+[_ ]|mixamorig\d*[:_]|def[-_]|org[-_]|mch[-_]|bip\d*[ _]?|bone[_ ]?|armature[|_:]|cc_base_|rig[_:]|j_|b_|jnt_|ik_)/i;
+const PREFIX = /^(\d+[_ ]|mixamorig\d*[:_]|def[-_]|org[-_]|mch[-_]|bip\d*[ _]?|bone[_ ]?|armature[|_:]|cc_base_|rig[_:]|j_|b_|bn_|jnt_|ik_)/i;
 function norm(name: string): { base: string; side: "l" | "r" | null } {
   let n = name.replace(/^[^|:]*[|:]/, "").trim(); // пространство имён: «mixamorig:», «Armature|»
   for (let k = 0; k < 3; k++) n = n.replace(PREFIX, "");
@@ -48,6 +48,7 @@ const NAMES: Record<string, RegExp> = {
   foot: /^(foot|ankle|heel|feet)$/,
   tail: /^(tail ?\d*)$/,
   eye: /^(eye|eyeball|facial eye)$/,
+  jaw: /^(jaw ?\d*|mandible|lower ?jaw|jaw lower|jawbone)$/,
 };
 
 function roleOf(base: string): { role: string; order: number } | null {
@@ -137,6 +138,8 @@ export function detectRig(skel: Skeleton, project: Pick<Project, "up" | "forward
     const eye = pick("eye", s)[0];
     if (eye) { det.chains[`eye_${s}`] = [name(eye.i)]; det.method[`eye_${s}`] = "names"; }
   }
+  const jaw = pick("jaw")[0];
+  if (jaw) { det.chains.jaw = [name(jaw.i)]; det.method.jaw = "names"; }
   const tails = pick("tail").map((t) => t.i);
   if (tails.length) { det.chains.tail = tails.map(name); det.method.tail = "names"; }
 

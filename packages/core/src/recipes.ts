@@ -822,13 +822,14 @@ const bodyRam: RecipeDef = {
   name: "body-ram",
   main: ["windupT", "back", "forward", "contact", "recover"],
   // голова — своим слоем: держится на линии удара и чуть отстаёт (критик: «голова с колпаком опережает корпус, силуэт размыт»)
-  roles: { pelvis: { chain: "pelvis", params: { role: "pelvis" } }, head: { chain: "head", params: { role: "head" }, optional: true } },
+  roles: { pelvis: { chain: "pelvis", params: { role: "pelvis" } }, head: { chain: "head", params: { role: "head" }, optional: true }, jaw: { chain: "jaw", params: { role: "jaw" }, optional: true } },
   help:
     "Таран корпусом (на глаз, по кругам с критиком): удар всем телом от корня — для персонажей, у которых руки не двигаются " +
     "(слеплены с телом). Замах назад с задержкой, бросок вперёд с задержкой на контакте, откат за нейтраль, оседание. " +
     "События: effort, whoosh, hit, window_open/close.",
   params: {
-    role: { type: "enum", default: "pelvis", options: ["pelvis", "head"], help: "что крутит слой: таз ведёт удар, голова гасит его наклон" },
+    role: { type: "enum", default: "pelvis", options: ["pelvis", "head", "jaw"], help: "что крутит слой: таз ведёт удар, голова гасит его наклон, челюсть рычит в замахе" },
+    jawOpen: { type: "number", default: 0, min: 0, max: 150, unit: "°", help: "пасть в замахе: открыта к концу замаха, к удару закрыта (Haven: Dorago 53 → 2, Bigufurai 82 → 0, Toriko 38 → 2, босс Babulardo 95)" },
     headHold: { type: "number", default: 0.4, min: 0, max: 1, help: "голова гасит эту долю наклона корпуса — остаётся на линии удара, а не ныряет вперёд" },
     headLag: { type: "number", default: 0.03, min: 0, max: 0.2, unit: "с", help: "голова догоняет корпус с запаздыванием — масса читается" },
     windupT: { type: "number", default: 0.5, min: 0.1, max: 5, unit: "с", help: "замах назад (NPC — длиннее, игрок — короче; «телеграф» существ Haven — медиана 1.9 с, до 5)" },
@@ -858,6 +859,8 @@ const bodyRam: RecipeDef = {
     const PITCH = [0, -p.back, -p.back * 1.05, p.forward, p.forward * 0.95, -p.overshoot, p.overshoot * 0.3, 0];
     // голова в мире = (1 − hold) · наклон корпуса с запаздыванием; слой отдаёт разницу с корпусом, который она наследует
     if (p.role === "head") return { pitch: (1 - p.headHold) * curve(PITCH, t - p.headLag) - curve(PITCH, t) };
+    // пасть: раскрывается за замах, пик в конце задержки, к контакту закрыта
+    if (p.role === "jaw") return p.jawOpen ? { pitch: p.jawOpen * curve([0, 0.8, 1, 0, 0, 0, 0, 0], t) } : {};
     return {
       pitch: curve(PITCH, t),
       bank: curve([0, -p.bank, -p.bank * 1.1, 0, 0, p.bank * 0.1, 0, 0], t),
@@ -919,13 +922,15 @@ const REACT_DIR: Record<string, [number, number]> = { back: [-1, 0], forward: [1
 const hitReact: RecipeDef = {
   name: "hit-react",
   main: ["pitch", "push", "peakT", "settleT"],
-  roles: { pelvis: { chain: "pelvis", params: { role: "pelvis" } }, head: { chain: "head", params: { role: "head" }, optional: true } },
+  roles: { pelvis: { chain: "pelvis", params: { role: "pelvis" } }, head: { chain: "head", params: { role: "head" }, optional: true }, jaw: { chain: "jaw", params: { role: "jaw" }, optional: true } },
   help:
     "Реакция существа (Haven, 22–24 вида): удар, тяжёлый удар, уклон, «заметил», смерть. Рывок без замаха — пик скорости " +
     "в первые 0.05 с, пик отклонения к 0.27 с, мягкое успокоение без перелёта к 0.78 с. Смерть — медленно, пик скорости к 0.7 с " +
     "и остаётся (keep = 1). Ноги на полу держит clip.ground. Времена измерены, амплитуды — на глаз в измеренных пределах.",
   params: {
-    role: { type: "enum", default: "pelvis", options: ["pelvis", "head"], help: "таз ведёт реакцию, голова добавляет свой кивок с запаздыванием" },
+    role: { type: "enum", default: "pelvis", options: ["pelvis", "head", "jaw"], help: "таз ведёт реакцию, голова добавляет свой кивок с запаздыванием, пасть распахивается" },
+    jawOpen: { type: "number", default: 0, min: 0, max: 150, unit: "°", help: "пасть в реакции (Haven HitLight: 16–62°; смерть 24–56 — остаётся открытой)" },
+    jawT: { type: "number", default: 0.1, min: 0.01, max: 1, unit: "с", help: "пасть раскрыта к (Haven 0.03–0.21)" },
     dir: { type: "enum", default: "back", options: ["back", "forward", "left", "right"], help: "куда отбрасывает тело (удар спереди — назад)" },
     duration: { type: "number", default: 1, min: 0.3, max: 5, unit: "с", help: "длина клипа (Haven: удар 1.0, тяжёлый 2.0, уклон 1.13, «заметил» 0.667, смерть 1.67)" },
     peakVelT: { type: "number", default: 0.05, min: 0.01, max: 2, unit: "с", help: "пик скорости (удар и уклон 0.05–0.06 — рывок, смерть 0.7)" },
@@ -945,6 +950,8 @@ const hitReact: RecipeDef = {
     if (i > 0) return {};
     const [f, s] = REACT_DIR[p.dir as string] ?? REACT_DIR.back;
     if (p.role === "head") { const c = p.headPitch * reactCurve(p, t - p.headLag); return f ? { pitch: f * c } : { bank: s * c }; }
+    // пасть: распахнута к jawT, к успокоению закрыта (у смерти — остаётся по keep)
+    if (p.role === "jaw") return p.jawOpen ? { pitch: p.jawOpen * keyCurve([0, p.jawT, Math.max(p.jawT + 0.01, p.settleT)], [0, 1, p.keep], t) } : {};
     const c = reactCurve(p, t), H = info?.height ?? 1;
     return {
       ...(f ? { pitch: f * p.pitch * c } : { bank: s * p.pitch * c }),
