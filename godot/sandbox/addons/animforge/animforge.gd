@@ -110,7 +110,7 @@ static func sample(p: Dictionary, t: float) -> Dictionary:
 	return out
 
 
-## Запускает пресет на Control, Camera3D или Camera2D. opts: delay (с), loops (для циклов, 0 = бесконечно), speed.
+## Запускает пресет на Control, Camera3D, Camera2D или Node3D. opts: delay (с), loops (для циклов, 0 = бесконечно), speed.
 static func play(node: Node, name: String, opts := {}) -> Tween:
 	var p := preset(name)
 	var base := _capture(node)
@@ -139,7 +139,9 @@ static func _capture(node: Node) -> Dictionary:
 			"roll": node.rotation_degrees.z, "h": node.h_offset, "v": node.v_offset, "pos": node.position, "fwd": -node.transform.basis.z}
 	if node is Camera2D:
 		return {"x": node.offset.x, "y": node.offset.y, "rotation": node.rotation_degrees, "zoom": node.zoom.x}
-	push_error("AnimForge: пресеты умеют Control, Camera3D и Camera2D, а не %s" % node.get_class())
+	if node is Node3D:
+		return {"x": node.position.x, "y": node.position.y, "z": node.position.z, "yaw": node.rotation_degrees.y}
+	push_error("AnimForge: пресеты умеют Control, Camera3D, Camera2D и Node3D, а не %s" % node.get_class())
 	return {}
 
 
@@ -182,6 +184,15 @@ static func apply(node: Node, base: Dictionary, modes: Dictionary, s: Dictionary
 			c2.offset = Vector2(base["x"] + s["shake_x"] * 100, base["y"] + s["shake_y"] * 100)
 			c2.rotation_degrees = base["rotation"] + s["shake_roll"]
 		if s.has("fov"): c2.zoom = Vector2.ONE * base["zoom"] * 40.0 / (40.0 + s["fov"])
+	elif node is Node3D:
+		# target «node»: сдвиг в осях родителя, поворот вокруг вертикали и путь вперёд по взгляду после поворота
+		var n3 := node as Node3D
+		if s.has("yaw"): n3.rotation_degrees.y = _mix(base["yaw"], s["yaw"], modes["yaw"])
+		var pos := Vector3(base["x"], base["y"], base["z"])
+		for k in [["x", 0], ["y", 1], ["z", 2]]:
+			if s.has(k[0]): pos[k[1]] = _mix(pos[k[1]], s[k[0]], modes[k[0]])
+		if s.has("forward"): pos += -n3.transform.basis.z * float(s["forward"])
+		n3.position = pos
 
 
 ## События клипов из <glb>.events.json (их пишет `af export`) → дорожки вызова метода в анимациях плеера.

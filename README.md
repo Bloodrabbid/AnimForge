@@ -210,6 +210,11 @@ pnpm af tweens.verify      # синхронизирует пресеты в ад
 `AnimForge.play($Panel, "window_in")`, `AnimForge.play($Camera3D, "shake_explosion")`,
 `AnimForge.play(btn, "button_cascade_item", {"delay": 0.1 * i})`.
 
+Третья цель — `node`: любой `Node3D`, свойства `x`, `y`, `z` (м, в осях родителя), `yaw` (°) и `forward` (м по взгляду
+узла после поворота). Пресет `breathedge-swarm-launch` — «стая улетает» пришельцев Breathedge: выскок на 7 м за 0.3 с,
+разворот на 90°, рывок на 735 м примерно за 1 с (пик ≈ 790 м/с). Разброс старта стаи задаёт игра:
+`AnimForge.play(alien, "breathedge-swarm-launch", {"delay": randf_range(0.0, 0.6)})`.
+
 ## Каналы, пол и вторичная динамика
 
 Повороты бывают двух видов. `lateral | vertical | roll` идут по осям цепочки, а `pitch | yaw | bank` — по осям тела

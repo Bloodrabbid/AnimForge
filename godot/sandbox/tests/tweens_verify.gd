@@ -29,6 +29,9 @@ func _initialize() -> void:
 		live = _live_camera()
 	if live.begins_with("LIVE_OK"):
 		print(live)
+		live = _live_node()
+	if live.begins_with("LIVE_OK"):
+		print(live)
 		live = await _events_check()
 	if live.begins_with("LIVE_OK"):
 		print(live)
@@ -79,6 +82,21 @@ func _live_camera() -> String:
 	if absf(cam.rotation_degrees.x - (-10 + float(s["pitch"]))) > 1e-3 or cam.position.distance_to(exp_pos) > 1e-3:
 		return "LIVE_FAIL камера pitch=%s pos=%s (ждали %s, %s)" % [cam.rotation_degrees.x, cam.position, -10 + float(s["pitch"]), exp_pos]
 	return "LIVE_OK камера: pitch %.2f°, наезд %.2f м" % [cam.rotation_degrees.x, s["dolly"]]
+
+
+# Узел (target «node»): стая — выскок вверх, разворот на 90°, рывок вперёд по новому взгляду.
+func _live_node() -> String:
+	var n := Node3D.new()
+	n.position = Vector3(1, 0, 2)
+	root.add_child(n)
+	var tw: Tween = AF.play(n, "breathedge-swarm-launch")
+	tw.pause()
+	tw.custom_step(4.0)
+	# повернулся на 90° влево (вокруг +Y): взгляд −Z стал −X, рывок 735 м туда; выскок 7 м
+	var exp := Vector3(1 - 735, 7, 2)
+	if absf(n.rotation_degrees.y - 90) > 1e-3 or n.position.distance_to(exp) > 1e-2:
+		return "LIVE_FAIL узел yaw=%s pos=%s (ждали 90, %s)" % [n.rotation_degrees.y, n.position, exp]
+	return "LIVE_OK узел: yaw %.1f°, путь %.1f м" % [n.rotation_degrees.y, n.position.distance_to(Vector3(1, 7, 2))]
 
 
 class Catcher extends Node:

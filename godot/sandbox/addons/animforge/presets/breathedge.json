@@ -141,6 +141,63 @@
      "ref": "путь 100 px — для примера"
     }
    ]
+  },
+  {
+   "name": "breathedge-swarm-launch",
+   "help": "Стая улетает (пришельцы Zone7): выскок на 7 м за 0.3 с, разворот курса на 90°, рывок на 735 м примерно за 1 с (пик ≈ 790 м/с). Каждому агенту — свой сдвиг старта ±0.3 с (opts.delay).",
+   "target": "node",
+   "duration": 4,
+   "tracks": [
+    {
+     "prop": "y",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0,
+       "t1": 0.3,
+       "from": 0,
+       "to": 7,
+       "ease": "outQuad"
+      }
+     ]
+    },
+    {
+     "prop": "yaw",
+     "mode": "add",
+     "segments": [
+      {
+       "t0": 0.15,
+       "t1": 1.0,
+       "from": 0,
+       "to": 90,
+       "ease": "smoothstep"
+      }
+     ]
+    },
+    {
+     "prop": "forward",
+     "mode": "abs",
+     "segments": [
+      {
+       "t0": 2.1,
+       "t1": 3.5,
+       "from": 0,
+       "to": 735,
+       "ease": "smoothstep"
+      }
+     ]
+    }
+   ],
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/03-creatures-robots.md: §7 SM_AlienTrack_01…11 — выскок 4–10 м за 0.3 с, разворот 84–93° (90 % к 0.53–1.23 с), рывок 735 м: 5 % в 1.9–2.5 с, 95 % в 3.27–3.37 с, пик 600–900 м/с, разброс старта ±0.3 с — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: высота 7 м (середина 4–10), smoothstep рывка 2.1–3.5 с даёт 5 % в 2.28 и 95 % в 3.32 с; дрейф при развороте не повторён"
+    }
+   ]
   }
  ]
 }

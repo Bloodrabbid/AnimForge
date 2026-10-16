@@ -1499,3 +1499,17 @@ test("tool-use: дальняя точка в замеренный момент, 
   assert.deepEqual(ev, [{ t: 0.1945, name: "hit" }, { t: 0.46, name: "window_open" }]);
   close(def.evaluate(withDefaults(def, { kind: "camera" }), 1, 2, 0.53).pitch!, 0, 1e-12, "в дальней точке локоть прям");
 });
+
+test("твин стаи Breathedge: выскок 7 м за 0.3 с, разворот 90 % к 0.53–1.23 с, рывок 5 % → 95 % за ≈ 1 с с пиком 600–900 м/с", () => {
+  const lib = JSON.parse(readFileSync(new URL("../../../library/tweens/breathedge.json", import.meta.url), "utf8"));
+  const p = lib.presets.find((x: any) => x.name === "breathedge-swarm-launch");
+  assert.equal(p.target, "node");
+  const s = (t: number) => sampleTween(p, t);
+  close(s(0.3).y, 7, 1e-9, "выскок");
+  let t90 = 0; for (let t = 0; t < 2; t += 0.001) if (!t90 && s(t).yaw >= 81) t90 = t;
+  assert.ok(t90 >= 0.53 && t90 <= 1.23, `90 % разворота к ${t90}`);
+  let t5 = 0, t95 = 0, vmax = 0;
+  for (let t = 0; t < 4; t += 0.001) { const f = s(t).forward; if (!t5 && f >= 0.05 * 735) t5 = t; if (!t95 && f >= 0.95 * 735) t95 = t; vmax = Math.max(vmax, (s(t + 0.001).forward - f) / 0.001); }
+  assert.ok(t5 >= 1.9 && t5 <= 2.5 && t95 >= 3.27 && t95 <= 3.37, `5 % в ${t5}, 95 % в ${t95}`);
+  assert.ok(vmax >= 600 && vmax <= 900, `пик ${vmax} м/с`);
+});

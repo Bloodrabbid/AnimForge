@@ -24,7 +24,8 @@ export interface ShakeSpec {
 
 export interface TweenTrack {
   // ui: alpha, scale, scale_x, scale_y, x, y (px, вниз = +), rotation (°) · camera: fov (°), yaw, pitch (°, вверх = +),
-  // dolly (м вперёд по взгляду камеры), shake. Оси — как в Godot; при переносе из Unity y и pitch меняют знак.
+  // dolly (м вперёд по взгляду камеры), shake · node (любой Node3D): x, y, z (м, в осях родителя), yaw (°), forward (м по
+  // взгляду узла −Z после поворота). Оси — как в Godot; при переносе из Unity y и pitch меняют знак.
   prop: string;
   mode?: "abs" | "add" | "mul"; // abs — значение как есть; add — к исходному; mul — множитель исходного
   segments?: Segment[];
@@ -34,7 +35,7 @@ export interface TweenTrack {
 export interface TweenPreset {
   name: string;
   help: string;
-  target: "ui" | "camera";
+  target: "ui" | "camera" | "node";
   duration: number;
   loop?: boolean;
   tracks: TweenTrack[];
