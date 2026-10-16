@@ -65,3 +65,14 @@ export function qscale(q: Quat, k: number): Quat {
   const ang = 2 * Math.atan2(s, d[3]) * k;
   return qaxis([d[0] / s, d[1] / s, d[2] / s], ang);
 }
+
+/** Целочисленный хеш (Томас Ванг, 32 бита): одинаковый в TS и GDScript — случайность совпадает до бита. */
+export function hash32(x: number): number {
+  x = ((x ^ 61) ^ (x >>> 16)) >>> 0;
+  x = (x + ((x << 3) >>> 0)) >>> 0;
+  x = (x ^ (x >>> 4)) >>> 0;
+  x = Math.imul(x, 0x27d4eb2d) >>> 0;
+  return (x ^ (x >>> 15)) >>> 0;
+}
+/** Случайное 0…1 по зерну и трём номерам. */
+export const rand01 = (seed: number, a: number, b: number, c: number) => hash32((hash32((hash32((seed ^ 0x9e37) >>> 0) ^ a) >>> 0) ^ (b * 31 + c)) >>> 0) / 4294967296;

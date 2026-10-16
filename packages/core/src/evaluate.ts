@@ -1,7 +1,7 @@
 // Вычисление позы: rest-поза → слои рецептов → ручной слой → постановка на пол → вторичная динамика.
 // Работает одинаково в браузере и в Node.
 import { evalKeys } from "./curves.ts";
-import { DEG, QI, Quat, Vec3, angVel, qaxis, qinv, qmul, qnorm, qrot, qscale, vadd, vcross, vdot, vmul, vnorm, vscale, vsub } from "./math.ts";
+import { DEG, QI, Quat, Vec3, angVel, rand01, qaxis, qinv, qmul, qnorm, qrot, qscale, vadd, vcross, vdot, vmul, vnorm, vscale, vsub } from "./math.ts";
 import type { Channel, Clip, Constraint, ConstraintTarget, GaitStyle, PoseLayer, Project, RecipeLayer, SemanticAxis, Skeleton, Travel } from "./project.ts";
 import { RECIPES, withDefaults, type ClipEvent } from "./recipes.ts";
 import { clampRotation, decompose, limitFrame } from "./limits.ts";
@@ -497,16 +497,7 @@ function applyInPlace(acc: Acc, rig: Rig, project: Project, clip: Clip, tClip: n
 }
 
 // ── микродвижения (clip.micro) ───────────────────────────────────────────────────────────────────────────────
-/** Целочисленный хеш (Томас Ванг, 32 бита): одинаковый в TS и GDScript — случайность совпадает до бита. */
-export function hash32(x: number): number {
-  x = ((x ^ 61) ^ (x >>> 16)) >>> 0;
-  x = (x + ((x << 3) >>> 0)) >>> 0;
-  x = (x ^ (x >>> 4)) >>> 0;
-  x = Math.imul(x, 0x27d4eb2d) >>> 0;
-  return (x ^ (x >>> 15)) >>> 0;
-}
-/** Случайное 0…1 по зерну и трём номерам. */
-export const rand01 = (seed: number, a: number, b: number, c: number) => hash32((hash32((hash32((seed ^ 0x9e37) >>> 0) ^ a) >>> 0) ^ (b * 31 + c)) >>> 0) / 4294967296;
+export { hash32, rand01 } from "./math.ts";
 
 /** Кости микродвижений и доля размаха: таз меньше, голова и плечи больше (на глаз — по живым стойкам мокапа). */
 export function microBones(project: Project): [string, number][] {

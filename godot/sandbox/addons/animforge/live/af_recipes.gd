@@ -6,7 +6,7 @@ extends RefCounted
 
 const RAD := PI / 180.0
 const SECONDARY := ["jiggle"]
-const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble", "hit-react"]
+const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble", "hit-react", "idle-glance"]
 
 
 static func is_secondary(recipe: String) -> bool:
@@ -32,6 +32,7 @@ static func evaluate(recipe: String, p: Dictionary, i: int, n: int, t: float, in
 		"body-ram": return _body_ram(p, i, t, info)
 		"tremble": return _tremble(p, i, n, t)
 		"hit-react": return _hit_react(p, i, t, info)
+		"idle-glance": return _idle_glance(p, n, t)
 	push_error("AFRecipes: нет рецепта «%s»" % recipe)
 	return {}
 
@@ -45,6 +46,11 @@ static func events(recipe: String, p: Dictionary) -> Array:
 			return [{"t": to_fixed(p["windupT"] + p["strikeT"], 4), "name": "hit"}]
 		"body-ram": return _ram_events(p)
 		"hit-react": return _react_events(p)
+		"idle-glance":
+			var ev := []
+			for s0 in _glance_plan(p)["starts"]:
+				ev.append({"t": to_fixed(s0, 4), "name": "glance"})
+			return ev
 	return []
 
 
@@ -776,3 +782,62 @@ static func _react_events(p: Dictionary) -> Array:
 	if p["keep"] >= 1:
 		return [impact, {"t": p["peakT"], "name": "thud"}]
 	return [impact, {"t": p["peakT"], "name": "peak"}, {"t": p["settleT"], "name": "recovered"}]
+
+
+# ── idle-glance ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+static func _glance_ease(u: float) -> float:
+	u = minf(1.0, maxf(0.0, u))
+	return u + u * u - u * u * u
+
+
+static func _glance_target(p: Dictionary, k: int, j: int, side: float) -> Array:
+	var seed := int(p["seed"])
+	var yaw: float = p["yawMin"] + (p["yawMax"] - p["yawMin"]) * AFCore.rand01(seed, k, j, 7)
+	var down: float = p["downMin"] + (p["downMax"] - p["downMin"]) * AFCore.rand01(seed, k, j + 1, 7)
+	return [maxf(-p["limitYaw"], minf(p["limitYaw"], side * yaw)), minf(p["limitDown"], down)]
+
+
+## Расписание взглядов на петле — как glancePlan в recipes.ts.
+static func _glance_plan(p: Dictionary) -> Dictionary:
+	var seed := int(p["seed"])
+	var T: float = p["transition"]
+	var starts: Array = []
+	var segs: Array = []
+	var cur := 0.0
+	for k in 64:
+		var r := func(j: int) -> float: return AFCore.rand01(seed, k, j, 7)
+		var s0: float = cur + (p["intervalMin"] + (p["intervalMax"] - p["intervalMin"]) * r.call(0)) * (0.5 if k == 0 else 1.0)
+		var side := -1.0 if r.call(1) < 0.5 else 1.0
+		var g1 := _glance_target(p, k, 2, side)
+		var h1: float = p["holdMin"] + (p["holdMax"] - p["holdMin"]) * r.call(4)
+		var two: bool = r.call(5) < p["double"]
+		var g2: Array = _glance_target(p, k, 6, -side if r.call(8) < p["opposite"] else side) if two else g1
+		var h2: float = p["holdMin"] + (p["holdMax"] - p["holdMin"]) * r.call(9) if two else 0.0
+		var end: float = s0 + T + h1 + ((T + h2) if two else 0.0) + T
+		if end > p["period"] - 1e-6:
+			break
+		starts.append(s0)
+		var t := s0
+		var parts: Array = [[T, [0.0, 0.0], g1], [h1, g1, g1]]
+		if two:
+			parts.append([T, g1, g2])
+			parts.append([h2, g2, g2])
+		parts.append([T, g2, [0.0, 0.0]])
+		for q in parts:
+			segs.append({"a": t, "b": t + q[0], "from": q[1], "to": q[2]})
+			t += q[0]
+		cur = end
+	return {"starts": starts, "segs": segs}
+
+
+static func _idle_glance(p: Dictionary, n: int, t: float) -> Dictionary:
+	var per: float = p["period"]
+	var tt := fmod(fmod(t, per) + per, per)
+	for g in _glance_plan(p)["segs"]:
+		if tt < g["a"] or tt >= g["b"]:
+			continue
+		var u := _glance_ease((tt - g["a"]) / (g["b"] - g["a"])) if g["b"] > g["a"] else 1.0
+		var k := 1.0 / maxi(1, n)
+		return {"yaw": (g["from"][0] + (g["to"][0] - g["from"][0]) * u) * k, "pitch": (g["from"][1] + (g["to"][1] - g["from"][1]) * u) * k}
+	return {}

@@ -1,0 +1,23 @@
+{
+ "recipe": "idle-glance",
+ "presets": [
+  {
+   "name": "haven-duo-glance",
+   "help": "Взгляды вдвоём (Haven, Kay и Yu): раз в 8–15 с на 30–70° вбок и до 20° вниз, 0.2–1.5 с, в 60 % — двойной.",
+   "params": { "period": 40, "intervalMin": 8, "intervalMax": 15, "yawMin": 30, "yawMax": 70, "downMin": 0, "downMax": 30, "holdMin": 0.2, "holdMax": 1.5, "double": 0.6, "opposite": 0.5, "transition": 0.7 },
+   "provenance": [
+    { "source": "research/haven", "ref": "analysis/03-code-driven.md: §5 Взгляд — FinalIK LookAt героев вдвоём, из кода (enableMCRoamingLookAt)" },
+    { "source": "hand-tuned", "note": "на глаз: длина петли 40 с и вероятность 0.5, что вторая точка — в другую сторону («в другую точку», сторона случайна)" }
+   ]
+  },
+  {
+   "name": "haven-solo-look",
+   "help": "Один осматривается (партнёр ушёл): раз в 7–12 с на 45–70° в одну сторону, затем в другую, по 0.2–0.5 с.",
+   "params": { "period": 40, "intervalMin": 7, "intervalMax": 12, "yawMin": 45, "yawMax": 70, "downMin": 0, "downMax": 10, "holdMin": 0.2, "holdMax": 0.5, "double": 1, "opposite": 1, "transition": 0.7 },
+   "provenance": [
+    { "source": "research/haven", "ref": "analysis/03-code-driven.md: §5 Взгляд — в одиночку, из кода" },
+    { "source": "hand-tuned", "note": "на глаз: длина петли 40 с" }
+   ]
+  }
+ ]
+}

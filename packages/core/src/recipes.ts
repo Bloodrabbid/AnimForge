@@ -1,6 +1,7 @@
 // Реестр рецептов. Рецепт по параметрам и цепочке костей выдаёт углы по семантическим осям в момент t.
 // Параметры описаны схемой — по ней интерфейс рисует ползунки, а агент знает, что можно менять.
 import type { Channel, SemanticAxis } from "./project.ts";
+import { rand01 } from "./math.ts";
 
 export interface ParamSpec {
   type: "number" | "enum";
@@ -944,9 +945,79 @@ const hitReact: RecipeDef = {
   },
 };
 
-export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact };
+// ── случайные взгляды в стойке (Haven, FinalIK LookAt героев — из кода) ───────────────────────────────────────
+/** Вес перехода взгляда: 0 → 1, наклон 1 в начале и 0 в конце (lookAtTransitionCurve). */
+const glanceEase = (u: number) => { u = Math.min(1, Math.max(0, u)); return u + u * u - u * u * u; };
+type GlanceSeg = { a: number; b: number; from: [number, number]; to: [number, number] };
+/** Расписание взглядов на петле: отрезки «из позы в позу» [рыскание, вниз]. Всё помещается в период — шва нет. */
+function glancePlan(p: Record<string, any>): { starts: number[]; segs: GlanceSeg[] } {
+  const r = (k: number, j: number) => rand01(p.seed, k, j, 7);
+  const lerp = (a: number, b: number, u: number) => a + (b - a) * u;
+  const target = (k: number, j: number, side: number): [number, number] => [
+    Math.max(-p.limitYaw, Math.min(p.limitYaw, side * lerp(p.yawMin, p.yawMax, r(k, j)))),
+    Math.min(p.limitDown, lerp(p.downMin, p.downMax, r(k, j + 1))),
+  ];
+  const T = p.transition, starts: number[] = [], segs: GlanceSeg[] = [];
+  let cur = 0;
+  for (let k = 0; k < 64; k++) {
+    const s0 = cur + lerp(p.intervalMin, p.intervalMax, r(k, 0)) * (k === 0 ? 0.5 : 1);
+    const side = r(k, 1) < 0.5 ? -1 : 1;
+    const g1 = target(k, 2, side), h1 = lerp(p.holdMin, p.holdMax, r(k, 4));
+    const two = r(k, 5) < p.double;
+    const g2 = two ? target(k, 6, r(k, 8) < p.opposite ? -side : side) : g1, h2 = two ? lerp(p.holdMin, p.holdMax, r(k, 9)) : 0;
+    const end = s0 + T + h1 + (two ? T + h2 : 0) + T;
+    if (end > p.period - 1e-6) break;
+    starts.push(s0);
+    let t = s0;
+    const push = (d: number, from: [number, number], to: [number, number]) => { segs.push({ a: t, b: t + d, from, to }); t += d; };
+    push(T, [0, 0], g1); push(h1, g1, g1);
+    if (two) { push(T, g1, g2); push(h2, g2, g2); }
+    push(T, g2, [0, 0]);
+    cur = end;
+  }
+  return { starts, segs };
+}
+const idleGlance: RecipeDef = {
+  name: "idle-glance",
+  main: ["intervalMin", "intervalMax", "yawMax", "seed"],
+  roles: { head: { chain: "head" } },
+  help:
+    "Случайные взгляды в стойке (Haven, LookAt героев — из кода): раз в 8–15 с голова уходит на 30–70° вбок и 0–30° вниз, " +
+    "держит 0.2–1.5 с, с вероятностью 0.6 переводит взгляд во вторую точку; переход 0.7 с, мягко к концу. " +
+    "Расписание задаёт seed — одинаково в редакторе и в Godot; все взгляды помещаются в петлю.",
+  params: {
+    period: { type: "number", default: 40, min: 5, max: 120, unit: "с", help: "длина петли — в неё раскладываются взгляды" },
+    seed: { type: "number", default: 1, min: 0, max: 9999, help: "зерно расписания: другое число — другие взгляды" },
+    intervalMin: { type: "number", default: 8, min: 0.5, max: 60, unit: "с", help: "пауза между взглядами, от (вдвоём 8, в одиночку 7)" },
+    intervalMax: { type: "number", default: 15, min: 0.5, max: 60, unit: "с", help: "пауза, до (вдвоём 15, в одиночку 12)" },
+    yawMin: { type: "number", default: 30, min: 0, max: 90, unit: "°", help: "поворот вбок, от (вдвоём 30, в одиночку 45)" },
+    yawMax: { type: "number", default: 70, min: 0, max: 90, unit: "°", help: "поворот вбок, до (70)" },
+    downMin: { type: "number", default: 0, min: -30, max: 45, unit: "°", help: "вниз, от" },
+    downMax: { type: "number", default: 30, min: -30, max: 45, unit: "°", help: "вниз, до (вдвоём 30, в одиночку 10)" },
+    holdMin: { type: "number", default: 0.2, min: 0, max: 5, unit: "с", help: "удержание, от" },
+    holdMax: { type: "number", default: 1.5, min: 0, max: 5, unit: "с", help: "удержание, до (вдвоём 1.5, в одиночку 0.5)" },
+    double: { type: "number", default: 0.6, min: 0, max: 1, help: "вероятность двойного взгляда — перевести во вторую точку (вдвоём 0.6, в одиночку всегда)" },
+    opposite: { type: "number", default: 0.5, min: 0, max: 1, help: "вероятность, что вторая точка — в другую сторону (в одиночку — всегда)" },
+    transition: { type: "number", default: 0.7, min: 0.1, max: 3, unit: "с", help: "переход взгляда (Haven 0.7)" },
+    limitYaw: { type: "number", default: 85, min: 0, max: 120, unit: "°", help: "предел вбок (±85)" },
+    limitDown: { type: "number", default: 20, min: -30, max: 60, unit: "°", help: "предел по вертикали (±20 — режет «вниз до 30»)" },
+  },
+  evaluate(p, i, n, t) {
+    const tt = ((t % p.period) + p.period) % p.period;
+    for (const g of glancePlan(p).segs) {
+      if (tt < g.a || tt >= g.b) continue;
+      const u = g.b > g.a ? glanceEase((tt - g.a) / (g.b - g.a)) : 1;
+      const k = 1 / Math.max(1, n);
+      return { yaw: (g.from[0] + (g.to[0] - g.from[0]) * u) * k, pitch: (g.from[1] + (g.to[1] - g.from[1]) * u) * k };
+    }
+    return {};
+  },
+  events: (p) => glancePlan(p).starts.map((t) => ({ t: +t.toFixed(4), name: "glance" })),
+};
 
-export { QUAD, emergeCurve, strikeCurve, flapProfile, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
+export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact, "idle-glance": idleGlance };
+
+export { QUAD, glancePlan, emergeCurve, strikeCurve, flapProfile, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
 
 export function withDefaults(def: RecipeDef, params: Record<string, unknown>): Record<string, any> {
   const out: Record<string, any> = {};

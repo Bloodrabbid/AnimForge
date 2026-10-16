@@ -331,7 +331,7 @@ test("библиотека: параметры пресетов есть в ре
   assert.deepEqual(problems, []);
 });
 
-import { QUAD as QUADT, periodic, strikePlan, strikePos, swingEase } from "./recipes.ts";
+import { QUAD as QUADT, glancePlan, periodic, strikePlan, strikePos, swingEase } from "./recipes.ts";
 import { clipEvents } from "./evaluate.ts";
 
 test("взмах: пик скорости в доле a, края без скорости", () => {
@@ -1268,4 +1268,44 @@ test("hit-react: пики Haven на своих местах, без перел�
   assert.ok(dodge.move_side! < 0 && dodge.pitch === undefined);
   const head = (t: number) => def.evaluate({ ...light, role: "head" }, 0, 1, t).pitch as number;
   close(head(0.27 + light.headLag), -light.headPitch, 1e-9, "голова пиком позже на headLag");
+});
+
+test("idle-glance: взгляды Haven — паузы, углы, пределы, двойной взгляд, петля без шва", () => {
+  const def = RECIPES["idle-glance"];
+  const lib = JSON.parse(readFileSync(new URL("../../../library/presets/idle-glance.json", import.meta.url), "utf8"));
+  const pre = (name: string, seed: number) => withDefaults(def, { ...lib.presets.find((p: any) => p.name === name).params, seed });
+  let doubles = 0, total = 0;
+  for (let seed = 0; seed < 200; seed++) {
+    const p = pre("haven-duo-glance", seed), { starts, segs } = glancePlan(p);
+    assert.ok(starts.length >= 2, `seed ${seed}: в 40 с хотя бы два взгляда`);
+    assert.ok(segs[segs.length - 1].b <= p.period, "последний взгляд вернулся до конца петли");
+    assert.deepEqual(def.evaluate(p, 0, 1, 0), {}, "на шве — покой");
+    // пауза от конца прошлого взгляда — 8…15 с (первый — половина)
+    let prevEnd = 0;
+    for (const [k, s0] of starts.entries()) {
+      const gap = (s0 - prevEnd) / (k === 0 ? 0.5 : 1);
+      assert.ok(gap >= 8 - 1e-9 && gap <= 15 + 1e-9, `пауза ${gap}`);
+      const mine = segs.filter((g) => g.a >= s0 && (k + 1 >= starts.length || g.a < starts[k + 1]));
+      prevEnd = mine[mine.length - 1].b;
+      total++;
+      if (mine.length === 5) doubles++;
+      const hold = mine[1].from;
+      assert.ok(Math.abs(hold[0]) >= 30 && Math.abs(hold[0]) <= 70, `вбок ${hold[0]}`);
+      assert.ok(hold[1] >= 0 && hold[1] <= 20, `вниз ${hold[1]} ≤ предела 20`);
+      close(mine[0].b - mine[0].a, 0.7, 1e-12, "переход 0.7");
+    }
+  }
+  assert.ok(Math.abs(doubles / total - 0.6) < 0.08, `двойных ${doubles}/${total}`);
+  // в одиночку: всегда двойной и в другую сторону
+  for (let seed = 0; seed < 50; seed++) for (const [k] of glancePlan(pre("haven-solo-look", seed)).starts.entries()) {
+    const segs = glancePlan(pre("haven-solo-look", seed)).segs.slice(k * 5, k * 5 + 5);
+    assert.equal(segs.length, 5);
+    assert.ok(Math.sign(segs[1].from[0]) === -Math.sign(segs[3].from[0]), "в одну сторону, затем в другую");
+  }
+  // переход: наклон 1 в начале и 0 в конце (lookAtTransitionCurve), значения — по кривой между точками
+  const p = pre("haven-duo-glance", 3), g = glancePlan(p).segs[0], yaw = (t: number) => def.evaluate(p, 0, 1, t).yaw ?? 0, h = 1e-5;
+  close((yaw(g.a + h) - yaw(g.a)) / h * (g.b - g.a) / g.to[0], 1, 1e-3, "наклон в начале");
+  close((yaw(g.b - h) - yaw(g.b - 2 * h)) / h * (g.b - g.a) / g.to[0], 0, 1e-3, "наклон в конце");
+  close(yaw(g.b + 0.01), g.to[0], 1e-12, "держит");
+  close(yaw(g.b + 0.01 + p.period), g.to[0], 1e-12, "петля: второй круг — тот же взгляд");
 });
