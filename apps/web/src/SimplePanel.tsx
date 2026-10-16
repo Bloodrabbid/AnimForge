@@ -2,7 +2,7 @@
 // Всё остальное (слои, ключи, цели, пределы, веса) — за «Расширенным». Основная работа идёт словами через агента,
 // здесь — посмотреть и поправить главное мышью.
 import { useEffect, useState } from "react";
-import { GAIT_STYLES, HAND_POSES, RECIPES, fingersOf, followBones, withDefaults, type Clip, type GaitStyle, type ParamSpec, type Project, type RecipeLayer, type Rig } from "../../../packages/core/src/index.ts";
+import { GAIT_STYLES, HAND_POSES, STYLE100, RECIPES, fingersOf, followBones, withDefaults, type Clip, type GaitStyle, type ParamSpec, type Project, type RecipeLayer, type Rig } from "../../../packages/core/src/index.ts";
 import { command, type Step } from "./api.ts";
 import { Icon } from "./Icon.tsx";
 
@@ -40,6 +40,7 @@ export function SimplePanel({ dir, project, clip, rig, readOnly, runMany }: Prop
       ))}
       {!byRecipe.size && <p className="muted">У клипа нет рецептов с ручками — только ключи и позы. Они — в «Расширенном».</p>}
       {clip.loop && Object.keys(project.chains).some((c) => c.startsWith("leg_")) && <GaitKnobs clip={clip} readOnly={readOnly} runMany={runMany} />}
+      {project.chains.leg_l && project.chains.leg_r && <StyleKnobs clip={clip} readOnly={readOnly} runMany={runMany} />}
       {followBones(project).length > 0 && <FollowKnobs clip={clip} readOnly={readOnly} runMany={runMany} />}
       {rig && (fingersOf(project, rig, "l") || fingersOf(project, rig, "r")) && <HandKnobs clip={clip} readOnly={readOnly} runMany={runMany} />}
       <Checks dir={dir} project={project} clip={clip} readOnly={readOnly} runMany={runMany} />
@@ -200,6 +201,57 @@ function FollowKnobs({ clip, readOnly, runMany }: { clip: Clip; readOnly?: boole
             </label>
           );
         })}
+    </section>
+  );
+}
+
+const STYLE_FROM: [string, string][] = [["walk", "шаг"], ["run", "бег"], ["walk-back", "шаг назад"], ["strafe-walk", "шаг вбок"], ["idle", "стойка"]];
+
+/** Стиль 100STYLE поверх клипа (clip.style): зомби, старик, руки в боки… — в такт шагам клипа. */
+function StyleKnobs({ clip, readOnly, runMany }: { clip: Clip; readOnly?: boolean; runMany: Props["runMany"] }) {
+  const layer = clip.layers.find((l) => l.id === "style") as { source?: { take?: string }; weight?: number } | undefined;
+  const cur = layer?.source?.take?.match(/^(.+?)_([A-Za-z]+)_loop$/);
+  const [style, setStyle] = useState(cur?.[2] ?? "Zombie");
+  const [from, setFrom] = useState(cur?.[1] ?? "walk");
+  const [amount, setAmount] = useState(1);
+  const names = Object.entries(STYLE100).filter(([k]) => k !== "Neutral").sort((a, b) => a[1].localeCompare(b[1], "ru"));
+  const apply = (st = style, fr = from, am = amount) => runMany([{ name: "clip.style", args: { clip: clip.name, style: st, from: fr, amount: am } }], `стиль: ${STYLE100[st]}`);
+  return (
+    <section className="knobs">
+      <h3>
+        Стиль <span className="muted">clip.style · 100STYLE, CC BY</span>
+      </h3>
+      <label className="param">
+        <span className="pname">стиль</span>
+        <select value={style} disabled={readOnly} onChange={(e) => { setStyle(e.target.value); if (layer) apply(e.target.value); }}>
+          {names.map(([k, v]) => (
+            <option key={k} value={k}>{v}</option>
+          ))}
+        </select>
+      </label>
+      <label className="param">
+        <span className="pname">из записи</span>
+        <select value={from} disabled={readOnly} onChange={(e) => { setFrom(e.target.value); if (layer) apply(style, e.target.value); }}>
+          {STYLE_FROM.map(([k, v]) => (
+            <option key={k} value={k}>{v}</option>
+          ))}
+        </select>
+      </label>
+      <label className="knob" title="доля разницы: 1 — как в записи">
+        <span className="k-name">сила</span>
+        <input type="range" min={0} max={2} step={0.05} value={amount} disabled={readOnly} onChange={(e) => setAmount(Number(e.target.value))} onPointerUp={() => layer && apply()} onKeyUp={() => layer && apply()} />
+        <span className="k-val">{amount.toFixed(2)}</span>
+      </label>
+      <div className="gait-styles">
+        <button className="chip" disabled={readOnly} onClick={() => apply()}>
+          {layer ? "обновить" : "наложить"}
+        </button>
+        {layer && (
+          <button className="chip" disabled={readOnly} onClick={() => runMany([{ name: "clip.style", args: { clip: clip.name, off: true } }], "стиль снят")}>
+            снять
+          </button>
+        )}
+      </div>
     </section>
   );
 }
