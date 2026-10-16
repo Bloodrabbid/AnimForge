@@ -806,7 +806,7 @@ export function App() {
             </div>
             <div className="tab-body">
               {clip ? (
-                <SimplePanel dir={DIR} project={shown} clip={clip} readOnly={!!trial} runMany={trial ? runTrial : runMany} />
+                <SimplePanel dir={DIR} project={shown} clip={clip} rig={rig} readOnly={!!trial} runMany={trial ? runTrial : runMany} />
               ) : (
                 <div className="empty-state">
                   <Icon name="library" size={28} />

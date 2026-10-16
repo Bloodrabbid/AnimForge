@@ -2,7 +2,7 @@
 // Всё остальное (слои, ключи, цели, пределы, веса) — за «Расширенным». Основная работа идёт словами через агента,
 // здесь — посмотреть и поправить главное мышью.
 import { useEffect, useState } from "react";
-import { GAIT_STYLES, RECIPES, withDefaults, type Clip, type GaitStyle, type ParamSpec, type Project, type RecipeLayer } from "../../../packages/core/src/index.ts";
+import { GAIT_STYLES, HAND_POSES, RECIPES, fingersOf, followBones, withDefaults, type Clip, type GaitStyle, type ParamSpec, type Project, type RecipeLayer, type Rig } from "../../../packages/core/src/index.ts";
 import { command, type Step } from "./api.ts";
 import { Icon } from "./Icon.tsx";
 
@@ -22,11 +22,13 @@ interface Props {
   dir: string;
   project: Project;
   clip: Clip;
+  /** для поз кисти: есть ли пальцы */
+  rig?: Rig;
   readOnly?: boolean;
   runMany(steps: Step[], label?: string): Promise<unknown>;
 }
 
-export function SimplePanel({ dir, project, clip, readOnly, runMany }: Props) {
+export function SimplePanel({ dir, project, clip, rig, readOnly, runMany }: Props) {
   // слои одного рецепта (ходьба на всё тело — 7 слоёв) правятся вместе: ручка одна на рецепт
   const byRecipe = new Map<string, RecipeLayer[]>();
   for (const l of clip.layers) if (l.type === "recipe" && RECIPES[l.recipe]?.main?.length) byRecipe.set(l.recipe, [...(byRecipe.get(l.recipe) ?? []), l]);
@@ -38,6 +40,8 @@ export function SimplePanel({ dir, project, clip, readOnly, runMany }: Props) {
       ))}
       {!byRecipe.size && <p className="muted">У клипа нет рецептов с ручками — только ключи и позы. Они — в «Расширенном».</p>}
       {clip.loop && Object.keys(project.chains).some((c) => c.startsWith("leg_")) && <GaitKnobs clip={clip} readOnly={readOnly} runMany={runMany} />}
+      {followBones(project).length > 0 && <FollowKnobs clip={clip} readOnly={readOnly} runMany={runMany} />}
+      {rig && (fingersOf(project, rig, "l") || fingersOf(project, rig, "r")) && <HandKnobs clip={clip} readOnly={readOnly} runMany={runMany} />}
       <Checks dir={dir} project={project} clip={clip} readOnly={readOnly} runMany={runMany} />
     </div>
   );
@@ -144,6 +148,92 @@ function GaitKnobs({ clip, readOnly, runMany }: { clip: Clip; readOnly?: boolean
           </label>
         );
       })}
+    </section>
+  );
+}
+
+const FOLLOW: { k: "lag" | "bounce" | "loosen"; name: string; def: number; min: number; max: number; unit?: string; help: string }[] = [
+  { k: "lag", name: "запаздывание", def: 0.08, min: 0.01, max: 0.5, unit: "с", help: "насколько грудь отстаёт от таза, голова и руки — от груди" },
+  { k: "bounce", name: "перелёт", def: 0.3, min: 0, max: 1, help: "пружина: 0 — догоняет мягко, 1 — проскакивает и возвращается" },
+  { k: "loosen", name: "доля", def: 0.6, min: 0, max: 1, help: "1 — грудь целиком отстаёт от таза, 0 — выключено" },
+];
+
+/** Догоняющее движение (clip.follow): верх тела догоняет низ через пружину. */
+function FollowKnobs({ clip, readOnly, runMany }: { clip: Clip; readOnly?: boolean; runMany: Props["runMany"] }) {
+  const f = clip.follow;
+  const [drag, setDrag] = useState<Partial<Record<"lag" | "bounce" | "loosen", number>>>({});
+  const set = (k: string, v: number) => runMany([{ name: "clip.follow", args: { clip: clip.name, [k]: v } }], `догоняющее: ${k} = ${v}`).then(() => setDrag({}));
+  return (
+    <section className="knobs">
+      <h3>
+        Догоняющее движение <span className="muted">clip.follow</span>
+      </h3>
+      <div className="gait-styles">
+        {f ? (
+          <button className="chip" disabled={readOnly} onClick={() => runMany([{ name: "clip.follow", args: { clip: clip.name } }], "догоняющее выключено")}>
+            выключить
+          </button>
+        ) : (
+          <button className="chip" disabled={readOnly} title="грудь догоняет таз, голова и руки — грудь" onClick={() => runMany([{ name: "clip.follow", args: { clip: clip.name, lag: 0.08, bounce: 0.3, loosen: 0.6 } }], "догоняющее включено")}>
+            включить
+          </button>
+        )}
+      </div>
+      {f &&
+        FOLLOW.map((x) => {
+          const v = drag[x.k] ?? f[x.k] ?? x.def;
+          return (
+            <label key={x.k} className="knob" title={x.help}>
+              <span className="k-name">{x.name}</span>
+              <input
+                type="range"
+                min={x.min}
+                max={x.max}
+                step={(x.max - x.min) / 100}
+                value={v}
+                disabled={readOnly}
+                onChange={(e) => setDrag({ ...drag, [x.k]: Number(e.target.value) })}
+                onPointerUp={() => drag[x.k] != null && set(x.k, +drag[x.k]!.toFixed(3))}
+                onKeyUp={() => drag[x.k] != null && set(x.k, +drag[x.k]!.toFixed(3))}
+              />
+              <span className="k-val">{`${+v.toFixed(2)}${x.unit ? ` ${x.unit}` : ""}`}</span>
+            </label>
+          );
+        })}
+    </section>
+  );
+}
+
+const HAND_LABEL: Record<string, string> = { fist: "кулак", relaxed: "расслабленно", open: "раскрыта", point: "указательный", grip: "хват", thumbs_up: "палец вверх" };
+
+/** Поза кисти (hand.pose) на весь клип: кулак, хват, указательный… — слой «hands». */
+function HandKnobs({ clip, readOnly, runMany }: { clip: Clip; readOnly?: boolean; runMany: Props["runMany"] }) {
+  const [side, setSide] = useState<"both" | "l" | "r">("both");
+  const has = clip.layers.some((l) => l.id === "hands");
+  return (
+    <section className="knobs">
+      <h3>
+        Кисти <span className="muted">hand.pose</span>
+      </h3>
+      <div className="seg">
+        {([["both", "обе"], ["l", "левая"], ["r", "правая"]] as const).map(([k, t]) => (
+          <button key={k} className={side === k ? "on" : ""} onClick={() => setSide(k)}>
+            {t}
+          </button>
+        ))}
+      </div>
+      <div className="gait-styles">
+        {Object.entries(HAND_POSES).map(([name, p]) => (
+          <button key={name} className="chip" disabled={readOnly} title={p.help} onClick={() => runMany([{ name: "hand.pose", args: { clip: clip.name, side, pose: name } }], `кисти: ${p.help}`)}>
+            {HAND_LABEL[name] ?? name}
+          </button>
+        ))}
+        {has && (
+          <button className="chip" disabled={readOnly} onClick={() => runMany([{ name: "layer.remove", args: { clip: clip.name, layer: "hands" } }], "кисти: как в клипе")}>
+            сбросить
+          </button>
+        )}
+      </div>
     </section>
   );
 }
