@@ -1890,3 +1890,4 @@ button.small.on { background: var(--accent); color: #111; }
 .mk-list li i { width: 10px; height: 10px; border-radius: 50%; border: 2px solid; flex: none; }
 .mk-list li svg { margin-left: auto; opacity: 0.7; }
 .markers label.check { display: flex; gap: 6px; align-items: center; margin: 6px 0; font-size: 12px; }
+.card-tags .rec.nc { color: #ff9c8f; background: rgba(255, 107, 107, 0.16); }

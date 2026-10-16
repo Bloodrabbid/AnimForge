@@ -24,12 +24,16 @@ const kindOf = (n: string) => KINDS.find((k) => k.re.test(n))!.id;
 
 const BODY: Record<string, string> = { biped: "Люди", quadruped: "Четвероногие", other: "Прочие" };
 const bodyOf = (p: ClipPackInfo) => p.body ?? "biped";
+/** CC BY-NC: только некоммерческое — в игру на продажу нельзя */
+export const nonCommercial = (p: ClipPackInfo) => /\bNC\b/i.test(p.license);
 /** имя дубля без префиксов скелета («DogArmature|Idle» → «Idle») */
 export const takeLabel = (n: string) => n.replace(/^.*\|/, "").replace(/_/g, " ");
 
 export function ClipsPanel({ active, body, onTry, dir }: Props) {
   const { hover, bind } = useStickHover();
   const [fitOnly, setFitOnly] = useState(true);
+  const [sellable, setSellable] = useState(() => localStorage.getItem("af.sellable") === "1");
+  useEffect(() => localStorage.setItem("af.sellable", sellable ? "1" : "0"), [sellable]);
   const [packs, setPacks] = useState<ClipPackInfo[]>([]);
   const [q, setQ] = useState("");
   const [kind, setKind] = useState<string | null>(null);
@@ -38,7 +42,7 @@ export function ClipsPanel({ active, body, onTry, dir }: Props) {
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);
   // своё тело: двуногому — люди, четвероногому — звери; крылатым, рыбам и прочим — всё, что не люди
   const fits = (p: ClipPackInfo) => !body || (body === "biped" ? bodyOf(p) === "biped" : body === "quadruped" ? bodyOf(p) === "quadruped" : bodyOf(p) !== "biped");
-  const pool = all.filter((x) => !fitOnly || fits(x.p));
+  const pool = all.filter((x) => (!fitOnly || fits(x.p)) && (!sellable || !nonCommercial(x.p)));
   const shown = pool.filter((x) => (!kind || (KINDS.some((k) => k.id === kind) ? x.kind === kind : bodyOf(x.p) === kind)) && words.every((w) => `${x.t.name} ${x.p.name}`.toLowerCase().includes(w)));
   const bodies = [...new Set(pool.map((x) => bodyOf(x.p)))];
   return (
@@ -64,7 +68,10 @@ export function ClipsPanel({ active, body, onTry, dir }: Props) {
       <label className="fit-only">
         <input type="checkbox" checked={fitOnly} onChange={(e) => setFitOnly(e.target.checked)} /> только для такого тела ({pool.length} из {all.length})
       </label>
-      <p className="muted clips-note">Свободные клипы (CC0 и мокап CMU) — основой клипа на вашей модели; поверх — рецепты из библиотеки.</p>
+      <label className="fit-only" title="скрыть наборы CC BY-NC (Bandai Namco): их нельзя в игру, которую продают">
+        <input type="checkbox" checked={sellable} onChange={(e) => setSellable(e.target.checked)} /> только для коммерческой игры
+      </label>
+      <p className="muted clips-note">Свободные клипы (CC0, мокап CMU, CC BY — с авторами в титрах) — основой клипа на вашей модели; поверх — рецепты из библиотеки. Метка «некоммерч.» — только для игр не на продажу.</p>
       <div className="cards">
         {shown.map(({ p, t }) => (
           <button key={p.id + t.name} className={`card clip-card ${active === takeLabel(t.name) ? "active" : ""}`} onClick={() => onTry(p, t.name)} title={`${p.name} · ${p.author} · ${p.terms ?? p.license} · скелет: ${p.skeleton}`} {...(dir ? bind(`/api/stick?${new URLSearchParams({ dir, pack: p.id, take: t.name })}`, `${takeLabel(t.name)} на вашей модели`) : {})}>
@@ -75,7 +82,11 @@ export function ClipsPanel({ active, body, onTry, dir }: Props) {
               </div>
               <div className="card-tags">
                 <span className="src">{p.name.replace(/^[^·]*·\s*/, "")}</span>
-                <span className="rec">{p.license}</span>
+                {nonCommercial(p) ? (
+                  <span className="rec nc" title={p.terms}>некоммерч.</span>
+                ) : (
+                  <span className="rec" title={p.terms}>{p.license}</span>
+                )}
               </div>
             </div>
           </button>

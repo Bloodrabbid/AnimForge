@@ -1,7 +1,7 @@
-# Несколько BVH одного набора (CMU в переводе cgspeed: у всех одни имена костей) → один glb: скелет первого файла и
+# Несколько BVH одного набора (CMU в переводе cgspeed, Bandai Namco, 100STYLE: у всех файлов набора одни кости) → один glb: скелет первого файла и
 # все дубли. Первый кадр каждого файла — добавленная T-поза, её срезаем. Кадры BVH (120 к/с) приводятся к 30 к/с сцены.
 # blender -b --factory-startup --python merge_bvh.py -- <out.glb> <имя>=<файл.bvh> ...
-import bpy, sys
+import bpy, os, sys
 a = sys.argv[sys.argv.index("--") + 1:]
 out, items = a[0], [x.split("=", 1) for x in a[1:]]
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -23,8 +23,9 @@ for name, path in items:
     arm = [o for o in bpy.data.objects if o not in before and o.type == "ARMATURE"][0]
     act = arm.animation_data.action
     act.name = name
-    # T-поза первого кадра — прочь, клип начинается со второго кадра записи
-    for fc in fcurves(act):
+    # T-поза первого кадра — прочь, клип начинается со второго кадра записи (у CMU; MERGE_KEEP_FIRST=1 — у
+    # наборов без неё, как Bandai Namco и 100STYLE)
+    for fc in ([] if os.environ.get("MERGE_KEEP_FIRST") == "1" else fcurves(act)):
         if len(fc.keyframe_points) > 2:
             fc.keyframe_points.remove(fc.keyframe_points[0])
     act.use_fake_user = True

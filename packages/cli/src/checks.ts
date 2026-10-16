@@ -11,7 +11,7 @@ import { advise, type Advice } from "./advice.ts";
 import { heightOf, loadSkinScene, meshEdges, restVerts, skinFrame, stretchOf, type SkinScene } from "./skin.ts";
 
 export interface Finding {
-  check: "skin" | "floor" | "float" | "slide" | "seam" | "pop" | "limits" | "timing" | "length";
+  check: "skin" | "floor" | "float" | "slide" | "seam" | "pop" | "limits" | "timing" | "length" | "license";
   level: "fail" | "warn";
   msg: string;
   t?: number;
@@ -146,6 +146,21 @@ export function skinBad(project: Project, rig: ReturnType<typeof buildRig>, m: M
   return worst;
 }
 
+/** Лицензия основы клипа (слои поз с source из clip.import): CC0, CMU и без source — молча. */
+export function licenseFinding(clip: Clip): Finding | undefined {
+  const src = clip.layers.flatMap((l) => (l.type === "pose" && l.source?.license && /^cc by/i.test(l.source.license) ? [l.source] : []));
+  if (!src.length) return undefined;
+  const who = [...new Set(src.map((x) => `${x.author ?? x.file} (${x.license})`))].join("; ");
+  const nc = src.some((x) => /\bNC\b/i.test(x.license!));
+  return {
+    check: "license",
+    level: "warn",
+    msg: nc
+      ? `основа клипа — запись под CC BY-NC: только некоммерческое, в игру на продажу нельзя; в титрах — ${who}, ссылка на лицензию и что данные изменены`
+      : `основа клипа — запись под CC BY: в титрах игры — ${who}, ссылка на лицензию и что данные изменены`,
+  };
+}
+
 /** Проверить клип. fix — разрешить чинить: возвращает и правки (команды), которые надо записать в проект. */
 export function checkClip(project: Project, ctx: Ctx, m: Mesh, clip: Clip, fix: boolean, advice = true): { report: ClipReport; steps: { name: string; args: Record<string, unknown> }[] } {
   const rig = buildRig(ctx.skeleton);
@@ -153,6 +168,10 @@ export function checkClip(project: Project, ctx: Ctx, m: Mesh, clip: Clip, fix: 
   const steps: { name: string; args: Record<string, unknown> }[] = [];
   const metrics: Record<string, number> = {};
   let work = structuredClone(clip);
+
+  // 0. происхождение: клип на основе чужой записи — CC BY требует авторов в титрах, CC BY-NC — ещё и не на продажу
+  const lic = licenseFinding(clip);
+  if (lic) findings.push(lic);
 
   // 1–2. кожа и пол — чинятся вместе: постановка на пол меняет позу ног, ослабление слоя — и кожу, и провал
   let s = skinBad(project, rig, m, work);

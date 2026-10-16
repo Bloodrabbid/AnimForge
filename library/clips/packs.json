@@ -472,6 +472,39 @@
       "skeleton": "своё тело, 7 костей",
       "body": "other",
       "file": "quaternius-monsters-yeti.glb"
+    },
+    {
+      "id": "bandai-locomotion",
+      "name": "Bandai Namco · походки, 15 стилей",
+      "author": "Bandai Namco Research Inc.",
+      "license": "CC BY-NC 4.0",
+      "terms": "Bandai Namco Research Inc., Bandai-Namco-Research-Motiondataset-1 (Kobayashi et al., «Motion Capture Dataset for Practical Use of AI-based Motion Editing and Stylization», 2023). CC BY-NC 4.0: только некоммерческое использование; в титрах — автор, ссылка на лицензию и пометка, что данные изменены (перенос на другой скелет). Взято с разрешения владельца AnimForge 16.10.2026.",
+      "url": "https://github.com/BandaiNamcoResearchInc/Bandai-Namco-Research-Motiondataset",
+      "skeleton": "двуногое, 22 костей",
+      "body": "biped",
+      "file": "bandai-locomotion.glb"
+    },
+    {
+      "id": "bandai-gestures",
+      "name": "Bandai Namco · жесты, 15 стилей",
+      "author": "Bandai Namco Research Inc.",
+      "license": "CC BY-NC 4.0",
+      "terms": "Bandai Namco Research Inc., Bandai-Namco-Research-Motiondataset-1 (Kobayashi et al., «Motion Capture Dataset for Practical Use of AI-based Motion Editing and Stylization», 2023). CC BY-NC 4.0: только некоммерческое использование; в титрах — автор, ссылка на лицензию и пометка, что данные изменены (перенос на другой скелет). Взято с разрешения владельца AnimForge 16.10.2026.",
+      "url": "https://github.com/BandaiNamcoResearchInc/Bandai-Namco-Research-Motiondataset",
+      "skeleton": "двуногое, 22 костей",
+      "body": "biped",
+      "file": "bandai-gestures.glb"
+    },
+    {
+      "id": "bandai-action",
+      "name": "Bandai Namco · удары и танцы",
+      "author": "Bandai Namco Research Inc.",
+      "license": "CC BY-NC 4.0",
+      "terms": "Bandai Namco Research Inc., Bandai-Namco-Research-Motiondataset-1 (Kobayashi et al., «Motion Capture Dataset for Practical Use of AI-based Motion Editing and Stylization», 2023). CC BY-NC 4.0: только некоммерческое использование; в титрах — автор, ссылка на лицензию и пометка, что данные изменены (перенос на другой скелет). Взято с разрешения владельца AnimForge 16.10.2026.",
+      "url": "https://github.com/BandaiNamcoResearchInc/Bandai-Namco-Research-Motiondataset",
+      "skeleton": "двуногое, 22 костей",
+      "body": "biped",
+      "file": "bandai-action.glb"
     }
   ]
 }

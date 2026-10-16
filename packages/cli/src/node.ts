@@ -856,19 +856,21 @@ NODE_COMMANDS["clip.import"] = {
 };
 
 NODE_COMMANDS["clips.pack"] = {
-  help: "Положить свободный пак клипов в библиотеку (library/clips): файл с анимациями (FBX, glb, BVH) → glb без меша (скелет и дубли) и запись в packs.json с происхождением. Только CC0, общественное достояние или CMU.",
+  help: "Положить свободный пак клипов в библиотеку (library/clips): файл с анимациями (FBX, glb, BVH) → glb без меша (скелет и дубли) и запись в packs.json с происхождением. CC0, общественное достояние, CMU или CC BY / CC BY-NC (с условиями: кого указать в титрах, NC — только некоммерческое).",
   args: {
     file: { type: "string", required: true, help: "файл с анимациями" },
     id: { type: "string", required: true, help: "id пака (имя файла в library/clips)" },
     name: { type: "string", required: true, help: "название" },
     author: { type: "string", required: true, help: "автор" },
-    license: { type: "string", required: true, help: "лицензия: CC0, «public domain» или CMU (свободно, без перепродажи данных)" },
+    license: { type: "string", required: true, help: "лицензия: CC0, «public domain», CMU (свободно, без перепродажи данных), CC BY 4.0 или CC BY-NC 4.0" },
     url: { type: "string", required: true, help: "откуда скачан" },
     terms: { type: "string", help: "полный текст условий, если лицензия не CC0" },
   },
   async run(_dir, a) {
-    // CMU: «свободно для любых целей, нельзя перепродавать сами данные» — владелец разрешил брать (15.10.2026)
-    if (!/^(cc0|public domain|cmu)/i.test(a.license)) throw new Error("в библиотеку — только CC0, общественное достояние или CMU");
+    // CMU: «свободно для любых целей, нельзя перепродавать сами данные» — владелец разрешил брать (15.10.2026);
+    // CC BY и CC BY-NC — тоже с разрешения (16.10.2026): авторство едет в клип (source) и в проверку check
+    if (!/^(cc0|public domain|cmu|cc by(-nc)? 4\.0)/i.test(a.license)) throw new Error("в библиотеку — только CC0, общественное достояние, CMU, CC BY 4.0 или CC BY-NC 4.0");
+    if (/^cc by/i.test(a.license) && !a.terms) throw new Error("у CC BY нужны terms: кого и как указать в титрах");
     const { readAnimDoc, animSkeleton } = await import("./animfile.ts");
     const { prune, dedup, resample } = await import("@gltf-transform/functions");
     const file = resolve(process.env.INIT_CWD ?? process.cwd(), a.file);
