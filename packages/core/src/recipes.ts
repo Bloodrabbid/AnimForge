@@ -1286,7 +1286,34 @@ const thrustTrail: RecipeDef = {
   },
 };
 
-export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact, "idle-glance": idleGlance, startle, "scare-pose": scarePose, "zero-g-float": zeroGFloat, "power-down": powerDown, "head-look-peck": headLookPeck, "thrust-trail": thrustTrail };
+// ── осмотр предмета в руке (Breathedge A_Explore*, петля 1.67–3.17 с) ────────────────────────────────────────────
+const inspectItem: RecipeDef = {
+  name: "inspect-item",
+  main: ["period", "twist", "forearm", "shoulder"],
+  roles: { arm: { chain: (side) => `arm_${side}` } },
+  help:
+    "Осмотр предмета в руке (Breathedge, инструменты): рука держит предмет перед собой, кисть проворачивает его вокруг оси " +
+    "предплечья до 163°, предплечье ходит на 54–61°, плечо на 20°. Петля; слой кладётся поверх стойки (в игре — смешивание 1.0 с). " +
+    "Размахи измерены, поза «перед лицом» и фазы — на глаз. Если кисти в цепочке нет, проворот — на последней кости.",
+  params: {
+    period: { type: "number", default: 2.4, min: 0.5, max: 8, unit: "с", help: "петля (Breathedge 1.67–3.17)" },
+    twist: { type: "number", default: 163, min: 0, max: 270, unit: "°", help: "проворот кисти, полный размах (до 163)" },
+    forearm: { type: "number", default: 57, min: 0, max: 120, unit: "°", help: "ход предплечья, полный размах (54–61)" },
+    shoulder: { type: "number", default: 20, min: 0, max: 60, unit: "°", help: "ход плеча, полный размах (20)" },
+    raise: { type: "number", default: -65, min: -120, max: 30, unit: "°", help: "рука поднята вперёд — поза держания (на глаз)" },
+    elbow: { type: "number", default: -80, min: -150, max: 0, unit: "°", help: "сгиб локтя — предмет перед лицом (на глаз)" },
+  },
+  evaluate(p, i, n, t) {
+    const w = (2 * Math.PI * t) / p.period, q = Math.PI / 2;
+    const out: Partial<Record<Channel, number>> = {};
+    if (i === 0) out.pitch = p.raise + (p.shoulder / 2) * Math.sin(w + q);
+    if (i === 1) out.pitch = p.elbow + (p.forearm / 2) * Math.sin(w + q);
+    if (i === Math.min(2, n - 1)) out.roll = (p.twist / 2) * Math.sin(w);
+    return out;
+  },
+};
+
+export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact, "idle-glance": idleGlance, startle, "scare-pose": scarePose, "zero-g-float": zeroGFloat, "power-down": powerDown, "head-look-peck": headLookPeck, "thrust-trail": thrustTrail, "inspect-item": inspectItem };
 
 export { QUAD, STARTLE, glancePlan, emergeCurve, strikeCurve, flapProfile, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
 

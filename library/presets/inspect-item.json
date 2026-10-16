@@ -1,0 +1,56 @@
+{
+ "recipe": "inspect-item",
+ "presets": [
+  {
+   "name": "breathedge-inspect-tool",
+   "help": "Осмотр инструмента в руке: кисть проворачивает его на 163°, предплечье ходит на 57°.",
+   "params": {
+    "period": 2.4
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/04-zero-g-first-person.md: §4 Осмотр инструмента — A_ExploreDrill/Saw/Masterkey — кисть до 163°, предплечье 54–61°, плечо 20°, петля 1.67–3.17 с, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: поза держания (рука вперёд −65°, локоть −80°), фазы плеча и предплечья на четверть цикла от кисти"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-inspect-quick",
+   "help": "Быстрый осмотр (1.67 с).",
+   "params": {
+    "period": 1.67
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/04-zero-g-first-person.md: §4 Осмотр инструмента — короткая петля 1.67 с, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: поза держания (рука вперёд −65°, локоть −80°), фазы плеча и предплечья на четверть цикла от кисти"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-inspect-slow",
+   "help": "Неторопливый осмотр (3.17 с).",
+   "params": {
+    "period": 3.17
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/04-zero-g-first-person.md: §4 Осмотр инструмента — длинная петля 3.17 с, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: поза держания (рука вперёд −65°, локоть −80°), фазы плеча и предплечья на четверть цикла от кисти"
+    }
+   ]
+  }
+ ]
+}

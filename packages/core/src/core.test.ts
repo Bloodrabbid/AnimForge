@@ -1460,3 +1460,15 @@ test("thrust-trail: таз ложится на тягу по замерам Brea
   assert.ok(at(0, "leg").pitch! > 0 && at(180, "leg").pitch! < 0, "бёдра против тяги");
   assert.deepEqual(def.evaluate(withDefaults(def, {}), 1, 2, 0), {});
 });
+
+test("inspect-item: размахи Breathedge (кисть 163°, предплечье 57°, плечо 20°), проворот — на кисти или последней кости", () => {
+  const def = RECIPES["inspect-item"];
+  const p = withDefaults(def, {});
+  const range = (i: number, n: number, ch: string) => { let lo = 1e9, hi = -1e9; for (let k = 0; k < 400; k++) { const x = (def.evaluate(p, i, n, (k / 400) * p.period) as any)[ch]; lo = Math.min(lo, x); hi = Math.max(hi, x); } return hi - lo; };
+  close(range(2, 3, "roll"), 163, 0.01, "кисть");
+  close(range(1, 3, "pitch"), 57, 0.01, "предплечье");
+  close(range(0, 3, "pitch"), 20, 0.01, "плечо");
+  close(range(1, 2, "roll"), 163, 0.01, "без кисти — на предплечье");
+  assert.equal((def.evaluate(p, 1, 3, 0.3) as any).roll, undefined);
+  close(def.evaluate(p, 2, 3, p.period).roll!, def.evaluate(p, 2, 3, 0).roll!, 1e-9, "шов");
+});

@@ -6,7 +6,7 @@ extends RefCounted
 
 const RAD := PI / 180.0
 const SECONDARY := ["jiggle"]
-const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble", "hit-react", "idle-glance", "startle", "scare-pose", "zero-g-float", "power-down", "head-look-peck", "thrust-trail"]
+const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble", "hit-react", "idle-glance", "startle", "scare-pose", "zero-g-float", "power-down", "head-look-peck", "thrust-trail", "inspect-item"]
 
 
 static func is_secondary(recipe: String) -> bool:
@@ -39,6 +39,7 @@ static func evaluate(recipe: String, p: Dictionary, i: int, n: int, t: float, in
 		"power-down": return _power_down(p, i, n, t, info)
 		"head-look-peck": return _head_look_peck(p, i, n, t)
 		"thrust-trail": return _thrust_trail(p, i)
+		"inspect-item": return _inspect_item(p, i, n, t)
 	push_error("AFRecipes: нет рецепта «%s»" % recipe)
 	return {}
 
@@ -1050,3 +1051,18 @@ static func _thrust_trail(p: Dictionary, i: int) -> Dictionary:
 	var m2 := f * f + s * s
 	var diag := (2.0 * absf(f * s)) / m2 if m2 > 1e-12 else 0.0
 	return {"pitch": p["forwardTilt"] * f if f >= 0 else p["backTilt"] * f, "bank": p["sideTilt"] * s, "yaw": p["diagYaw"] * diag * signf(f * s) * sqrt(m2)}
+
+
+# ── inspect-item ────────────────────────────────────────────────────────────────────────────────────────────────
+
+static func _inspect_item(p: Dictionary, i: int, n: int, t: float) -> Dictionary:
+	var w: float = (2.0 * PI * t) / p["period"]
+	var q := PI / 2.0
+	var out := {}
+	if i == 0:
+		out["pitch"] = p["raise"] + (p["shoulder"] / 2.0) * sin(w + q)
+	if i == 1:
+		out["pitch"] = p["elbow"] + (p["forearm"] / 2.0) * sin(w + q)
+	if i == mini(2, n - 1):
+		out["roll"] = (p["twist"] / 2.0) * sin(w)
+	return out
