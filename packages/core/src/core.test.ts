@@ -1309,3 +1309,15 @@ test("idle-glance: взгляды Haven — паузы, углы, пределы
   close(yaw(g.b + 0.01), g.to[0], 1e-12, "держит");
   close(yaw(g.b + 0.01 + p.period), g.to[0], 1e-12, "петля: второй круг — тот же взгляд");
 });
+
+test("waddle-walk headNod: голова кивает в мире раз за шаг с амплитудой Haven, поклон груди вычтен", () => {
+  const def = RECIPES["waddle-walk"];
+  const lib = JSON.parse(readFileSync(new URL("../../../library/presets/waddle-walk.json", import.meta.url), "utf8"));
+  const p = withDefaults(def, { ...lib.presets.find((x: any) => x.name === "haven-chirulida-walk").params, chestBow: 8 });
+  const world = (t: number) => ((def.evaluate({ ...p, role: "head" }, 0, 1, t).pitch ?? 0) as number) + ((def.evaluate({ ...p, role: "chest" }, 0, 1, t).pitch ?? 0) as number);
+  let max = 0, zc = 0, prev = world(p.period / 8);
+  for (let k = 1; k <= 1000; k++) { const v = world(p.period / 8 + (k / 1000) * p.period); max = Math.max(max, Math.abs(v)); if (Math.sign(v) !== Math.sign(prev)) zc++; prev = v; }
+  close(max, 9.7, 1e-3, "±9.7° в мире");
+  assert.equal(zc, 4, "два кивка за цикл — раз за шаг");
+  assert.equal(def.evaluate({ ...withDefaults(def, {}), role: "head" }, 0, 1, 0.1).pitch, undefined, "без headNod голова не кивает");
+});

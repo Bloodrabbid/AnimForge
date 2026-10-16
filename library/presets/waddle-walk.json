@@ -330,12 +330,21 @@
     "period": 1.0,
     "pelvisYaw": 27.9,
     "pelvisRoll": 2.5,
-    "bob": 0.032
+    "bob": 0.032,
+    "headNod": 2.1
    },
    "provenance": [
     {
      "source": "research/haven",
      "ref": "analysis/06-animforge-candidates.md A2: NPC_Daikon=RoamingWalk2Idle — измерено"
+    },
+    {
+     "source": "research/haven",
+     "ref": "analysis/04-creatures.md: §4 Двуногие — голова тангаж ±2.1°, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: кивок раз за шаг и его фаза (nodPhase 0)"
     }
    ]
   },
@@ -346,12 +355,21 @@
     "period": 1.333,
     "pelvisYaw": 16.8,
     "pelvisRoll": 12.6,
-    "bob": 0.3
+    "bob": 0.3,
+    "headNod": 30.8
    },
    "provenance": [
     {
      "source": "research/haven",
      "ref": "analysis/06-animforge-candidates.md A2: NPC_Daikon=RoamingRun2Idle — измерено (опора 0.18 цикла)"
+    },
+    {
+     "source": "research/haven",
+     "ref": "analysis/04-creatures.md: §4 Двуногие — голова тангаж ±30.8°, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: кивок раз за шаг и его фаза (nodPhase 0)"
     }
    ]
   },
@@ -400,12 +418,21 @@
     "period": 2.0,
     "pelvisYaw": 7.8,
     "pelvisRoll": 7.6,
-    "bob": 0.119
+    "bob": 0.119,
+    "headNod": 6.1
    },
    "provenance": [
     {
      "source": "research/haven",
      "ref": "analysis/06-animforge-candidates.md A2: NPC_Nokk=RoamingWalk2Idle — измерено"
+    },
+    {
+     "source": "research/haven",
+     "ref": "analysis/04-creatures.md: §4 Двуногие — голова тангаж ±6.1°, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: кивок раз за шаг и его фаза (nodPhase 0)"
     }
    ]
   },
@@ -417,12 +444,21 @@
     "pelvisYaw": 13.9,
     "pelvisRoll": 2.2,
     "bob": 0.008,
-    "armSwing": 0
+    "armSwing": 0,
+    "headNod": 9.7
    },
    "provenance": [
     {
      "source": "research/haven",
      "ref": "analysis/06-animforge-candidates.md A2: NPC_Chirulida=RoamingWalk2Idle — измерено"
+    },
+    {
+     "source": "research/haven",
+     "ref": "analysis/04-creatures.md: §4 Двуногие — голова тангаж ±9.7°, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: кивок раз за шаг и его фаза (nodPhase 0)"
     }
    ]
   },
@@ -434,7 +470,8 @@
     "pelvisYaw": 8.7,
     "pelvisRoll": 1.4,
     "bob": 0.067,
-    "armSwing": 0
+    "armSwing": 0,
+    "headNod": 6.3
    },
    "provenance": [
     {
@@ -444,6 +481,14 @@
     {
      "source": "hand-tuned",
      "ref": "armSwing 0 — на глаз"
+    },
+    {
+     "source": "research/haven",
+     "ref": "analysis/04-creatures.md: §4 Двуногие — голова тангаж ±6.3°, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: кивок раз за шаг и его фаза (nodPhase 0)"
     }
    ]
   },

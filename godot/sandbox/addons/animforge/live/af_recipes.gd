@@ -246,7 +246,13 @@ static func _waddle_walk(p: Dictionary, i: int, _n: int, t: float, info: Diction
 				r["pitch"] = p["chestBow"] * cos(2.0 * w)  # поклон дважды за цикл
 			return r
 		"head":
-			return {} if i > 0 else {"yaw": head["yaw"] - chest["yaw"], "bank": head["bank"] - chest["bank"]}
+			if i > 0:
+				return {}
+			var hr := {"yaw": head["yaw"] - chest["yaw"], "bank": head["bank"] - chest["bank"]}
+			if p.get("headNod", 0.0) != 0:  # в файлах до headNod его нет в схеме
+				# кивок в мире минус поклон груди, на которой сидит голова
+				hr["pitch"] = p["headNod"] * cos(2.0 * w + p.get("nodPhase", 0.0) * RAD) - p["chestBow"] * cos(2.0 * w)
+			return hr
 		"arm_l", "arm_r":
 			if i > 0:
 				return {}

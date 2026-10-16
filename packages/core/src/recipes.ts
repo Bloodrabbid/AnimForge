@@ -204,6 +204,8 @@ const waddleWalk: RecipeDef = {
     legSwing: { type: "number", default: 30, min: 0, max: 60, unit: "°", help: "мах бедра (Witcher: шаг ±24.7, бег ±31.8; TLJ ±14–17)" },
     knee: { type: "number", default: 45, min: 0, max: 120, unit: "°", help: "подгиб колена в переносе ноги (на глаз)" },
     chestBow: { type: "number", default: 0, min: 0, max: 30, unit: "°", help: "поклон груди на каждом шаге, 2-я гармоника (голем Witcher ±15; Tools Up! 0)" },
+    headNod: { type: "number", default: 0, min: 0, max: 45, unit: "°", help: "кивок головы на каждом шаге, в мире (Haven: Chirulida шаг ±9.7 — птичий кивок, Daikon бег прыжками ±30.8, Nokk 6.1, Sunatcha 6.3)" },
+    nodPhase: { type: "number", default: 0, min: -180, max: 180, unit: "°", help: "фаза кивка к поклону груди (на глаз: 0 — голова внизу, когда нога принимает вес)" },
   },
   evaluate(p, i, n, t, info) {
     const w = (2 * Math.PI * t) / p.period;
@@ -226,8 +228,12 @@ const waddleWalk: RecipeDef = {
       case "chest":
         // поклон — дважды за цикл, в низ шага (когда нога принимает вес); фаза — допущение
         return i > 0 ? {} : { ...rel(world.chest, world.pelvis), ...(p.chestBow ? { pitch: p.chestBow * Math.cos(2 * w) } : {}) };
-      case "head":
-        return i > 0 ? {} : rel(world.head, world.chest);
+      case "head": {
+        if (i > 0) return {};
+        // кивок в мире; голова сидит на груди, которая уже кланяется chestBow — отдаём разницу
+        const nod = p.headNod ? { pitch: p.headNod * Math.cos(2 * w + p.nodPhase * rad) - p.chestBow * Math.cos(2 * w) } : {};
+        return { ...rel(world.head, world.chest), ...nod };
+      }
       case "arm_l":
       case "arm_r": {
         if (i > 0) return {};
