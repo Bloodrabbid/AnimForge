@@ -1344,7 +1344,7 @@ const fpAimArms: RecipeDef = {
 const TOOL: Record<string, { t: number[]; r: number[]; tremor: number; ev: [number, string][] }> = {"drill": {"t": [0, 0.33, 0.85, 1.0], "r": [0, 1, 1, 0], "tremor": 1, "ev": [[0.083, "use"]]}, "scissors": {"t": [0, 0.13, 0.3, 0.43, 0.7, 0.83], "r": [0, 0.4, 1, 0.45, 0.15, 0], "tremor": 0, "ev": [[0.26, "use"]]}, "camera": {"t": [0, 0.53, 1.13, 1.67], "r": [0, 1, 1, 0], "tremor": 0, "ev": [[0.075, "use"]]}, "repair": {"t": [0, 0.27, 0.67, 0.73, 1.0], "r": [0, 0.6, 1, 0.9, 0], "tremor": 0, "ev": [[0.159, "use"]]}, "throw": {"t": [0, 0.17, 0.4, 1.0], "r": [0, 1, 0.3, 0], "tremor": 0, "ev": [[0.17, "release"]]}, "scrap": {"t": [0, 0.1, 0.23, 0.47, 1.0], "r": [0, -0.4, 1, 0.5, 0], "tremor": 0, "ev": [[0.389, "hit"]]}};
 const toolUse: RecipeDef = {
   name: "tool-use",
-  main: ["kind", "swing", "speed"],
+  main: ["swing", "bend", "speed"],
   roles: { arm: { chain: (side) => `arm_${side}` } },
   help:
     "Действие инструментом (Breathedge): кисть уходит к дальней точке и возвращается туда же, откуда начала. drill — толчок " +
