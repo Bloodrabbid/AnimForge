@@ -199,7 +199,7 @@ const waddleWalk: RecipeDef = {
     headLag: { type: "number", default: 54, min: 0, max: 120, unit: "°", help: "отставание крена головы по фазе (≈0.07 с)" },
     bob: { type: "number", default: 0.248, min: 0, max: 0.4, help: "подскок таза — доля его высоты (24.8 %; спокойные 14.5–21 %)" },
     armSwing: { type: "number", default: 30, min: 0, max: 60, unit: "°", help: "маятник рук, в противофазе ногам (UpperArm ±30)" },
-    legPhase: { type: "number", default: 0, min: 0, max: 360, unit: "°", help: "сдвиг фазы ног к тазу: у разных пресетов и тел верная разная — подбирает проверка «стопа скользит» (af check --fix)" },
+    legPhase: { type: "number", default: 0, min: 0, max: 360, unit: "°", help: "сдвиг фазы ног к тазу: у пресетов библиотеки — свой, 150–270° (подобран проверкой «стопа скользит» на рабочем и пекаре; 0 даёт «лунную» походку); под другое тело подбирает af check --fix" },
     armLag: { type: "number", default: 0, min: 0, max: 90, unit: "°", help: "руки отстают от шага по фазе — оверлап; нужен, когда мах маленький (колобок), иначе руки «приклеены»" },
     legSwing: { type: "number", default: 30, min: 0, max: 60, unit: "°", help: "мах бедра (Witcher: шаг ±24.7, бег ±31.8; TLJ ±14–17)" },
     knee: { type: "number", default: 45, min: 0, max: 120, unit: "°", help: "подгиб колена в переносе ноги (на глаз)" },

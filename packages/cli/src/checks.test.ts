@@ -222,3 +222,19 @@ test("hit-react из библиотеки: recipe.rig ставит таз и г�
     assert.deepEqual(fails.map((f) => `${f.check}: ${(f as { msg?: string }).msg}`), [], pr.name);
   }
 });
+
+test("waddle-walk: у каждого пресета фаза ног своя — опора едет назад, «лунной» походки нет", async () => {
+  const { gaitSlide } = await import("../../core/src/index.ts");
+  const ctx = await loadCtx(join(ROOT, "projects/worker-demo")), rig = buildRig(ctx.skeleton);
+  const walk = ctx.project.clips.find((c) => c.name === "walk")!;
+  const base = walk.layers.filter((l) => l.type === "recipe" && l.recipe === "waddle-walk") as { params: Record<string, unknown> }[];
+  const lib = JSON.parse(readFileSync(join(ROOT, "library/presets/waddle-walk.json"), "utf8"));
+  const bad: string[] = [];
+  for (const pr of lib.presets) {
+    const at = (legPhase: number) => gaitSlide(ctx.project, rig, { ...walk, duration: pr.params.period ?? 0.479, layers: base.map((l) => ({ ...l, params: { ...pr.params, role: l.params.role, legPhase } })) } as typeof walk)!;
+    const g = at(pr.params.legPhase ?? 0), g0 = at(0);
+    if (g.backward < 0.65) bad.push(`${pr.name}: назад ${(g.backward * 100).toFixed(0)} % опоры`);
+    if (g.backward - 3 * g.mean < g0.backward - 3 * g0.mean) bad.push(`${pr.name}: фаза ${pr.params.legPhase} хуже нуля`);
+  }
+  assert.deepEqual(bad, []);
+});
