@@ -1,0 +1,69 @@
+{
+ "recipe": "tremble",
+ "presets": [
+  {
+   "name": "gm-adult-tremble",
+   "help": "Дрожь взрослого от страха или холода (Ghost Master pe25b): 7.6 Гц, грудь ±3.2°, голова ±4.8°, петля 0.93 с.",
+   "params": {
+    "hz": 7.6,
+    "period": 0.93,
+    "chestAmp": 3.2,
+    "headAmp": 4.8,
+    "irregular": 0.15
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/03-mortal-fear.md: pe25b, pe28b/d — измерено (7.5–7.8 Гц, грудь ±3.1–3.3°, голова ±4.6–5°, чистота 0.83–1.0)"
+    },
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/01-corpus.md: faa_pe25b — петля 0.93 с, измерено"
+    }
+   ]
+  },
+  {
+   "name": "gm-kid-tremble",
+   "help": "Дрожь ребёнка (Ghost Master kid_pe25b): реже, 3 Гц, и крупнее, ±5.5°.",
+   "params": {
+    "hz": 3,
+    "period": 1,
+    "chestAmp": 3.7,
+    "headAmp": 5.5,
+    "irregular": 0.15
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/03-mortal-fear.md: kid_pe25b — 3 Гц, ±5.5°, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: ±5.5° отнесено к голове, грудь = голова / 1.5 по взрослым"
+    }
+   ]
+  },
+  {
+   "name": "gm-sheep-fright",
+   "help": "Овца в испуге (Ghost Master sheep_fri): 5 Гц, хвост хлещет ±31°.",
+   "params": {
+    "hz": 5,
+    "period": 1,
+    "tailAmp": 31,
+    "chestAmp": 2,
+    "headAmp": 3,
+    "irregular": 0.1
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/03-mortal-fear.md: sheep_fri — 5 Гц, хвост ±31°, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: грудь и голова овцы, ось хвоста — рыскание"
+    }
+   ]
+  }
+ ]
+}

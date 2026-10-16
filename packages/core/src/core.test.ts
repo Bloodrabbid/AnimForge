@@ -1213,3 +1213,26 @@ test("clip.set fit: длина удара — до закрытия окна в�
   const open = evOf(0).find((e) => e.name === "window_open")!.t;
   assert.equal((runCommand(ctx, "clip.set", { clip: "hit", fit: true }) as { duration: number }).duration, +(open + 0.3).toFixed(3));
 });
+
+test("tremble: петля без шва, частота Ghost Master, голова сильнее груди", () => {
+  const def = RECIPES.tremble;
+  const lib = JSON.parse(readFileSync(new URL("../../../library/presets/tremble.json", import.meta.url), "utf8"));
+  const adult = lib.presets.find((p: any) => p.name === "gm-adult-tremble").params;
+  const p = withDefaults(def, adult);
+  const at = (role: string, t: number, n = 1) => Object.values(def.evaluate({ ...p, role }, 0, n, t))[0] as number;
+  // шов: значение и скорость в начале и в конце периода совпадают
+  const h = 1e-4;
+  close(at("chest", p.period), at("chest", 0), 1e-9, "шов");
+  close(at("chest", p.period - h), at("chest", -h), 1e-9, "скорость на шве");
+  // частота: 0.93 с · 7.6 Гц → 7 колебаний, 14 пересечений нуля
+  let zc = 0;
+  const t0 = p.period / 7 / 4; // четверть колебания: края не на нуле
+  for (let k = 1, prev = at("chest", t0); k <= 4000; k++) { const v = at("chest", t0 + (k / 4000) * p.period); if (Math.sign(v) !== Math.sign(prev)) zc++; prev = v; }
+  assert.equal(zc, 14);
+  const peak = (role: string) => { let m = 0; for (let k = 0; k < 4000; k++) m = Math.max(m, Math.abs(at(role, (k / 4000) * p.period))); return m; };
+  close(peak("head") / peak("chest"), 1.5, 0.02, "голова ×1.5");
+  close(peak("chest"), 3.2 * 1.15, 0.05, "грудь ±3.2 с неровностью");
+  // цепочка из трёх костей делит амплитуду поровну
+  close(at("chest", 0.05, 3) * 3, at("chest", 0.05), 1e-12, "доля кости");
+  assert.equal(Object.keys(def.evaluate({ ...p, role: "tail" }, 0, 1, 0.1))[0], "yaw");
+});

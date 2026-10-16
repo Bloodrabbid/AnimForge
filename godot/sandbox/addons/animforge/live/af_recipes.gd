@@ -6,7 +6,7 @@ extends RefCounted
 
 const RAD := PI / 180.0
 const SECONDARY := ["jiggle"]
-const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram"]
+const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble"]
 
 
 static func is_secondary(recipe: String) -> bool:
@@ -30,6 +30,7 @@ static func evaluate(recipe: String, p: Dictionary, i: int, n: int, t: float, in
 		"tentacle-strike": return _tentacle_strike(p, i, n, t)
 		"emerge": return _emerge(p, i, t, info)
 		"body-ram": return _body_ram(p, i, t, info)
+		"tremble": return _tremble(p, i, n, t)
 	push_error("AFRecipes: нет рецепта «%s»" % recipe)
 	return {}
 
@@ -710,3 +711,16 @@ static func _body_ram(p: Dictionary, i: int, t: float, info: Dictionary) -> Dict
 static func _ram_events(p: Dictionary) -> Array:
 	var ev: Dictionary = _ram_keys(p)["ev"]
 	return [{"t": ev["a"] * 0.5, "name": "effort"}, {"t": ev["b"] + (ev["c"] - ev["b"]) * 0.3, "name": "whoosh"}, {"t": ev["c"], "name": "hit"}, {"t": ev["d"], "name": "trail_off"}, {"t": ev["f"], "name": "window_open"}, {"t": ev["f"] + p["tail"], "name": "window_close"}]
+
+
+# ── tremble ─────────────────────────────────────────────────────────────────────────────────────────────────────
+
+static func _tremble(p: Dictionary, i: int, n: int, t: float) -> Dictionary:
+	var role: String = p["role"]
+	var amp: float = p["headAmp"] if role == "head" else (p["tailAmp"] if role == "tail" else p["chestAmp"])
+	var lag: float = 0.0 if role == "chest" else p["lag"] * RAD
+	var hz: float = maxf(1.0, round(p["hz"] * p["period"])) / p["period"]
+	var env: float = 1.0 + p["irregular"] * sin(2.0 * PI * (t / p["period"]))
+	var v: float = (amp / maxi(1, n)) * env * sin(2.0 * PI * hz * t - lag)
+	var axis: String = "yaw" if role == "tail" and p["plane"] == "pitch" else p["plane"]
+	return {axis: v}

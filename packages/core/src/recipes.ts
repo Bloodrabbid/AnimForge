@@ -856,7 +856,37 @@ const bodyRam: RecipeDef = {
   },
 };
 
-export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam };
+// ── дрожь страха или холода (Ghost Master pe25b, pe28b/d, kid_pe25b, sheep_fri) ─────────────────────────────────
+/** Частота дрожи, округлённая до целого числа колебаний за период — запечённый цикл замыкается без рывка. */
+const trembleHz = (p: Record<string, any>) => Math.max(1, Math.round(p.hz * p.period)) / p.period;
+const tremble: RecipeDef = {
+  name: "tremble",
+  main: ["hz", "headAmp", "chestAmp", "irregular"],
+  roles: { chest: { chain: "chest", params: { role: "chest" } }, head: { chain: "head", params: { role: "head" }, optional: true }, tail: { chain: "tail", params: { role: "tail" }, optional: true } },
+  help:
+    "Дрожь страха или холода (Ghost Master): почти синус 7.5–7.8 Гц у взрослых, 3 Гц у детей, 5 Гц у овцы. " +
+    "Голова ±4.6–5°, грудь ±3.1–3.3°, хвост овцы ±31°. Слой поверх стойки или испуга; ось и неровность — на глаз.",
+  params: {
+    role: { type: "enum", default: "chest", options: ["chest", "head", "tail"], help: "что дрожит: грудь, голова или хвост" },
+    hz: { type: "number", default: 7.6, min: 0.5, max: 15, unit: "Гц", help: "частота (взрослые 7.5–7.8, дети 3, овца 5); округляется до целого числа колебаний за период" },
+    period: { type: "number", default: 2, min: 0.5, max: 10, unit: "с", help: "длина цикла клипа — за неё же один раз нарастает и спадает неровность" },
+    chestAmp: { type: "number", default: 3.2, min: 0, max: 20, unit: "°", help: "амплитуда груди (взрослые 3.1–3.3)" },
+    headAmp: { type: "number", default: 4.8, min: 0, max: 30, unit: "°", help: "амплитуда головы (взрослые 4.6–5, ≈ 1.5 груди)" },
+    tailAmp: { type: "number", default: 0, min: 0, max: 60, unit: "°", help: "амплитуда хвоста (овца ±31)" },
+    plane: { type: "enum", default: "pitch", options: ["pitch", "bank", "yaw"], help: "ось дрожи (на глаз: кивок; хвост — рыскание)" },
+    irregular: { type: "number", default: 0.15, min: 0, max: 0.5, help: "неровность: доля амплитуды, которая плавает за период (чистота синуса в Ghost Master 0.83–1.0)" },
+    lag: { type: "number", default: 0, min: 0, max: 180, unit: "°", help: "голова и хвост запаздывают от груди по фазе (на глаз)" },
+  },
+  evaluate(p, i, n, t) {
+    const amp = p.role === "head" ? p.headAmp : p.role === "tail" ? p.tailAmp : p.chestAmp;
+    const lag = p.role === "chest" ? 0 : p.lag * (Math.PI / 180);
+    const env = 1 + p.irregular * Math.sin(2 * Math.PI * (t / p.period));
+    const v = (amp / Math.max(1, n)) * env * Math.sin(2 * Math.PI * trembleHz(p) * t - lag);
+    return { [p.role === "tail" && p.plane === "pitch" ? "yaw" : p.plane]: v };
+  },
+};
+
+export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble };
 
 export { QUAD, emergeCurve, strikeCurve, flapProfile, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
 

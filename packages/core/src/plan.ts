@@ -39,7 +39,7 @@ export const CATEGORIES: { id: string; title: string; recipes: string[] }[] = [
   { id: "hover", title: "Парение", recipes: ["hover"] },
   { id: "fight", title: "Удары", recipes: ["melee-strike", "charge-release", "tentacle-strike", "body-ram"] },
   { id: "emerge", title: "Появление", recipes: ["emerge"] },
-  { id: "small", title: "Мелочи", recipes: ["blink", "jiggle"] },
+  { id: "small", title: "Мелочи", recipes: ["blink", "jiggle", "tremble"] },
 ];
 export const categoryOf = (recipe: string) => CATEGORIES.find((c) => c.recipes.includes(recipe))?.id ?? "small";
 

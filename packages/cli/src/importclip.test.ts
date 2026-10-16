@@ -212,10 +212,10 @@ test("петля мокапа замыкается: остаток «начал�
   const ang = (a: number[], b: number[]) => 2 * Math.acos(Math.min(1, Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3]))) * (180 / Math.PI);
   // кость поворачивается за клип на 30°, но запись кончилась на 10° дальше начала цикла; таз уехал на 1 м и поднялся на 4 см
   const keys = [0, 0.5, 1].map((t) => ({ t, rot: { arm: qaxis([1, 0, 0], ((t * 10) * Math.PI) / 180) as [number, number, number, number] }, move: { pelvis: [0, 0.04 * t, t] as [number, number, number] } }));
-  const mid = { ...keys[1].rot.arm };
+  const mid = [...keys[1].rot.arm];
   closeLoop(keys as any, [0, 1, 0]);
   assert.ok(ang(keys[2].rot.arm, keys[0].rot.arm) < 0.01, `конец = начало: ${ang(keys[2].rot.arm, keys[0].rot.arm).toFixed(3)}°`);
-  assert.ok(Math.abs(ang(keys[1].rot.arm, Object.values(mid)) - 5) < 0.01, "середина поправлена на половину остатка");
+  assert.ok(Math.abs(ang(keys[1].rot.arm, mid) - 5) < 0.01, "середина поправлена на половину остатка");
   assert.ok(Math.abs(keys[2].move.pelvis[1] - keys[0].move.pelvis[1]) < 1e-5, "по высоте — замкнуто");
   assert.equal(keys[2].move.pelvis[2], 1, "ход вперёд — как был (in place или root motion решают дальше)");
 });
