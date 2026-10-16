@@ -125,8 +125,8 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   if (req.method === "POST" && path === "/api/upload") {
     // своя модель перетаскиванием: файл телом запроса, имя в заголовке → новый проект в out/uploads (в git не попадает)
     const raw = decodeURIComponent(String(req.headers["x-filename"] ?? ""));
-    const ext = raw.match(/\.(glb|gltf|fbx|dae)$/i)?.[0].toLowerCase();
-    if (!ext) throw new HttpError(400, "нужен файл .glb, .gltf (одним файлом), .fbx или .dae");
+    const ext = raw.match(/\.(glb|gltf|fbx|dae|afproj)$/i)?.[0].toLowerCase();
+    if (!ext) throw new HttpError(400, "нужен файл .glb, .gltf (одним файлом), .fbx, .dae или проект .afproj");
     const chunks: Buffer[] = [];
     let size = 0;
     for await (const c of req) {
@@ -141,6 +141,11 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     try {
       const file = join(tmp, `source${ext}`);
       writeFileSync(file, Buffer.concat(chunks));
+      // проект одним файлом — распаковать как есть; модель — новый проект
+      if (ext === ".afproj") {
+        await serial(() => call(join(ROOT, rel), "project.unpack", { file }));
+        return sendJson(res, 200, { ok: true, dir: rel });
+      }
       const r = (await serial(() => call(join(ROOT, rel), "project.new", { file, name: base }))) as { detect: { body?: string } };
       return sendJson(res, 200, { ok: true, dir: rel, body: r.detect?.body });
     } catch (e: any) {
@@ -241,6 +246,20 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
         "cache-control": "no-store",
       });
       res.end(readFileSync(out));
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+    return;
+  }
+  if (req.method === "GET" && path === "/api/pack") {
+    // проект одним файлом (project.pack) — скачать
+    const dir = projectDir(url.searchParams.get("dir"));
+    const tmp = mkdtempSync(join(tmpdir(), "af-pack-"));
+    try {
+      const r = (await serial(() => call(dir, "project.pack", { out: join(tmp, "p.afproj") }))) as { out: string };
+      const name = `${JSON.parse(readFileSync(projectFile(dir), "utf8")).name || "project"}.afproj`;
+      res.writeHead(200, { "content-type": "application/zip", "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name)}`, "cache-control": "no-store" });
+      res.end(readFileSync(r.out));
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

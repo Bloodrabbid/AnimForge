@@ -31,7 +31,39 @@ export async function loadCtx(dir: string): Promise<Ctx & { dir: string }> {
 
 export function saveProject(dir: string, p: Project) {
   if (sandbox) return void (sandbox.project = structuredClone(p));
-  writeFileSync(projectFile(dir), JSON.stringify(p, null, 2) + "\n");
+  const text = JSON.stringify(p, null, 2) + "\n";
+  autosave(dir, text);
+  writeFileSync(projectFile(dir), text);
+}
+
+// ── автосохранение: перед каждой записью прошлая версия animforge.json ложится в .autosave/ (последние AUTOSAVE_KEEP);
+// project.history — список, project.restore — вернуть любую (текущая тоже уходит в историю, откат откатывается)
+export const AUTOSAVE_KEEP = 60;
+const autosaveDir = (dir: string) => join(dir, ".autosave");
+function autosave(dir: string, next: string) {
+  const f = projectFile(dir);
+  if (!existsSync(f)) return;
+  const prev = readFileSync(f, "utf8");
+  if (prev === next) return;
+  const d = autosaveDir(dir);
+  mkdirSync(d, { recursive: true });
+  // имя — время записи с миллисекундами и счётчик: две записи в одну миллисекунду не затирают друг друга
+  let name = new Date().toISOString().replace(/[:.]/g, "-");
+  for (let i = 1; existsSync(join(d, `${name}.json`)); i++) name = `${name.replace(/~\d+$/, "")}~${i}`;
+  writeFileSync(join(d, `${name}.json`), prev);
+  const all = readdirSync(d).filter((x) => x.endsWith(".json")).sort();
+  for (const old of all.slice(0, Math.max(0, all.length - AUTOSAVE_KEEP))) rmSync(join(d, old), { force: true });
+}
+
+export function projectHistory(dir: string) {
+  const d = autosaveDir(dir);
+  if (!existsSync(d)) return [];
+  return readdirSync(d).filter((x) => x.endsWith(".json")).sort().reverse().map((x) => {
+    let clips: string[] = [];
+    try { clips = (JSON.parse(readFileSync(join(d, x), "utf8")) as Project).clips.map((c) => c.name); } catch { /* битый — покажем без клипов */ }
+    const iso = x.replace(/\.json$/, "").replace(/~\d+$/, "").replace(/T(\d\d)-(\d\d)-(\d\d)-(\d+)Z$/, "T$1:$2:$3.$4Z");
+    return { id: x.replace(/\.json$/, ""), at: iso, clips: clips.length, names: clips.slice(0, 6) };
+  });
 }
 
 type Preset = LibPreset;
@@ -909,6 +941,55 @@ NODE_COMMANDS["export.directions"] = {
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
+  },
+};
+
+NODE_COMMANDS["project.history"] = {
+  help: "Автосохранение: версии animforge.json до каждой правки (последние 60) — время и клипы.",
+  args: {},
+  run: async (dir) => projectHistory(dir),
+};
+
+NODE_COMMANDS["project.restore"] = {
+  help: "Вернуть версию проекта из автосохранения (id из project.history). Текущая уходит в историю — откат можно откатить.",
+  args: { id: { type: "string", required: true, help: "id версии" } },
+  async run(dir, a) {
+    const f = join(autosaveDir(dir), `${a.id}.json`);
+    if (!existsSync(f)) throw new Error(`нет версии «${a.id}»`);
+    const p = JSON.parse(readFileSync(f, "utf8")) as Project;
+    saveProject(dir, p);
+    return { restored: a.id, clips: p.clips.map((c) => c.name) };
+  },
+};
+
+NODE_COMMANDS["project.pack"] = {
+  help: "Проект одним файлом (.afproj — zip): animforge.json, модель, пропы и всё в папке проекта, кроме out/ и автосохранений.",
+  args: { out: { type: "string", help: "куда, по умолчанию out/<имя>.afproj" } },
+  async run(dir, a) {
+    const p = JSON.parse(readFileSync(projectFile(dir), "utf8")) as Project;
+    const out = resolve(dir, a.out ?? `out/${(p.name || "project").replace(/[^\p{L}\p{N}_-]+/gu, "_")}.afproj`);
+    mkdirSync(dirname(out), { recursive: true });
+    rmSync(out, { force: true });
+    execFileSync("zip", ["-q", "-r", "-X", out, ".", "-x", "out/*", ".autosave/*", "*.samples.json", "*.events.json", ".DS_Store"], { cwd: dir });
+    const list = execFileSync("unzip", ["-Z1", out], { encoding: "utf8" }).trim().split("\n");
+    return { out, files: list.length, bytes: readFileSync(out).length };
+  },
+};
+
+NODE_COMMANDS["project.unpack"] = {
+  help: "Открыть проект из .afproj в пустую папку (--project).",
+  args: { file: { type: "string", required: true, help: ".afproj" } },
+  async run(dir, a) {
+    const file = resolve(process.env.INIT_CWD ?? process.cwd(), a.file);
+    if (existsSync(dir) && readdirSync(dir).length) throw new Error(`папка ${dir} не пустая`);
+    const names = execFileSync("unzip", ["-Z1", file], { encoding: "utf8" }).trim().split("\n");
+    if (!names.includes("animforge.json")) throw new Error("в файле нет animforge.json — это не проект AnimForge");
+    if (names.some((n) => n.startsWith("/") || n.split("/").includes(".."))) throw new Error("пути в архиве выходят за папку проекта");
+    mkdirSync(dir, { recursive: true });
+    execFileSync("unzip", ["-q", file, "-d", dir]);
+    const p = JSON.parse(readFileSync(projectFile(dir), "utf8")) as Project;
+    if (!existsSync(resolve(dir, p.model))) throw new Error(`в архиве нет модели ${p.model}`);
+    return { dir, name: p.name, clips: p.clips.length };
   },
 };
 

@@ -6,3 +6,4 @@ godot/verify/.godot/
 .claude/
 godot/*/.godot/
 __pycache__/
+.autosave/

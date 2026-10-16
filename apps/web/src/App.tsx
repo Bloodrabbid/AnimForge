@@ -32,6 +32,7 @@ import { LayersPanel } from "./LayersPanel.tsx";
 import { SimplePanel } from "./SimplePanel.tsx";
 import { LibraryPanel, chainsFor, sourceOf, type Entry } from "./LibraryPanel.tsx";
 import { ClipsPanel, takeLabel } from "./ClipsPanel.tsx";
+import { ProjectMenu } from "./ProjectMenu.tsx";
 import { Timeline } from "./Timeline.tsx";
 import { Viewport, type Trail, type ViewCmd } from "./Viewport.tsx";
 import { GraphPanel, isShown, limbColor, useMotionGraph } from "./GraphPanel.tsx";
@@ -182,7 +183,7 @@ export function App() {
     async (entry: Entry, chain?: string) => {
       if (!project) return;
       // поверх: слои пресета — в текущий клип (тот, что был до примерки), без нового клипа
-      const overlay = overlayOn ? (trial ? trial.prevClip : clipName) : null;
+      const overlay = overlayOn ? ((trial ? trial.prevClip : clipName) ?? project.clips[0]?.name ?? null) : null;
       let name = overlay ?? entry.preset.name;
       if (!overlay) for (let i = 2; project.clips.some((c) => c.name === name); i++) name = `${entry.preset.name}-${i}`;
       const ch = entry.lib.roles ? undefined : (chain ?? chainsFor(entry.lib.recipe, project.chains)[0]);
@@ -261,8 +262,8 @@ export function App() {
 
   /** Своя модель: сервер импортирует её через Blender, распознаёт скелет и создаёт проект — открываем его. */
   const startUpload = useCallback(async (file: File) => {
-    if (!/\.(glb|gltf|fbx|dae)$/i.test(file.name)) {
-      setUpload({ name: file.name, error: "Нужен файл .glb, .gltf (одним файлом), .fbx или .dae" });
+    if (!/\.(glb|gltf|fbx|dae|afproj)$/i.test(file.name)) {
+      setUpload({ name: file.name, error: "Нужен файл .glb, .gltf (одним файлом), .fbx, .dae или проект .afproj" });
       return;
     }
     setUpload({ name: file.name });
@@ -441,13 +442,16 @@ export function App() {
           <input
             ref={fileInput}
             type="file"
-            accept=".glb,.gltf,.fbx,.dae"
+            accept=".glb,.gltf,.fbx,.dae,.afproj"
             hidden
             onChange={(e) => e.target.files?.[0] && startUpload(e.target.files[0])}
           />
-          <button className="btn outline" onClick={() => fileInput.current?.click()} title="или просто перетащите файл в окно">
-            <Icon name="upload" /> Загрузить модель
+          <button className="btn outline" onClick={() => fileInput.current?.click()} title="модель (glb, fbx, dae) или проект .afproj; можно просто перетащить файл в окно">
+            <Icon name="upload" /> Загрузить
           </button>
+          <Menu label="Проект" title="проект одним файлом и автосохранение" align="right">
+            {(close) => <ProjectMenu dir={DIR} close={close} say={say} />}
+          </Menu>
           <button className="ghost" onClick={() => setHelp((v) => !v)} title="горячие клавиши (?)">
             <Icon name="keyboard" />
           </button>
@@ -517,7 +521,7 @@ export function App() {
             <>
             {clip && (
               <label className="fit-only overlay-on" title="слои пресета добавятся в текущий клип — например, уши и дыхание на готовую ходьбу">
-                <input type="checkbox" checked={overlayOn} onChange={(e) => setOverlayOn(e.target.checked)} /> поверх клипа «{trial && overlayOn ? trial.prevClip : clipName}»
+                <input type="checkbox" checked={overlayOn} onChange={(e) => setOverlayOn(e.target.checked)} /> поверх клипа «{(trial && overlayOn ? trial.prevClip : null) ?? clip.name}»
               </label>
             )}
             <LibraryPanel library={library} chains={shown.chains} body={body?.body} active={trial?.label ?? null} onTry={(e) => tryOn(e)} />
