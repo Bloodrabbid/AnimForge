@@ -192,6 +192,29 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     });
     return sendJson(res, 200, { ok: true, parts: result });
   }
+  if (req.method === "POST" && path === "/api/autorig") {
+    // скелет заново по ручным точкам (model.autorig с markers) поверх модели проекта, затем rig.detect.
+    // Прежняя модель — рядом, <модель>.prerig.glb; правленые веса (.orig.glb) к новому скелету уже не относятся
+    const body = await readBody(req);
+    const dir = projectDir(body.dir);
+    const project = JSON.parse(readFileSync(projectFile(dir), "utf8"));
+    const file = resolve(dir, project.model);
+    const r = await serial(async () => {
+      const tmp = mkdtempSync(join(tmpdir(), "af-rig-"));
+      try {
+        const src = join(tmp, "source.glb");
+        copyFileSync(file, src);
+        const out = (await call(dir, "model.autorig", { file: src, out: project.model, markers: body.markers, forward: project.forward ?? [0, 0, 1], count: body.count ?? 5 })) as { log: string };
+        copyFileSync(src, file.replace(/\.glb$/i, ".prerig.glb"));
+        rmSync(file.replace(/\.glb$/i, ".orig.glb"), { force: true });
+        const detect = (await call(dir, "rig.detect", {})) as { body?: string };
+        return { log: out.log, body: detect.body };
+      } finally {
+        rmSync(tmp, { recursive: true, force: true });
+      }
+    });
+    return sendJson(res, 200, { ok: true, ...r });
+  }
   if (req.method === "GET" && path === "/api/library") {
     // пресеты с происхождением и что нужно рецепту от скелета: роли → цепочки
     const lib = loadPresets().map((l) => {

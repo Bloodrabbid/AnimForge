@@ -356,12 +356,24 @@ export const NODE_COMMANDS: Record<string, { help: string; args: Record<string, 
       res: { type: "number", help: "вокселей вдоль длинной стороны, по умолчанию 128 (тоньше — дольше; 64 — если ноги не касаются)" },
       bones: { type: "number", help: "костей вдоль тела, по умолчанию 10" },
       fingers: { type: "boolean", help: "пальцы: кисти вокселит мельче и ищет 4–6 раздельных пальцев (дольше; у сомкнутых пальцев, как у Xbot, не найдёт)" },
+      markers: { type: "json", help: "ручные точки двуногого (как у Mixamo), координаты модели (Y вверх): {chin, groin, wrist_l, wrist_r, elbow_l, elbow_r, knee_l, knee_r} — суставы по ним, имена Mixamo" },
+      forward: { type: "json", help: "куда смотрит персонаж для markers, по умолчанию [0,0,1]" },
+      count: { type: "number", help: "для markers: пальцев на кисти — 0 (без), 1…4 (без большого), 5 (по умолчанию)" },
     },
     async run(dir, a) {
       const src = resolve(process.env.INIT_CWD ?? process.cwd(), a.file);
       const out = resolve(dir, a.out ?? "assets/model.glb");
       mkdirSync(dirname(out), { recursive: true });
-      const log = execFileSync(BLENDER, ["-b", "--factory-startup", "--python", join(ROOT, "bridge/blender/autorig.py"), "--", src, out, String(a.res ?? 128), String(a.bones ?? 10)], { env: { ...BLENDER_ENV, AUTORIG_FINGERS: a.fingers ? "1" : "0" }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 });
+      // точки — из осей glTF (Y вверх) в оси Blender (Z вверх): (x, y, z) → (x, −z, y)
+      let markers: string | undefined;
+      if (a.markers) {
+        const need = ["chin", "groin", "wrist_l", "wrist_r", "elbow_l", "elbow_r", "knee_l", "knee_r"];
+        const miss = need.filter((k) => !Array.isArray(a.markers[k]) || a.markers[k].length !== 3);
+        if (miss.length) throw new Error(`markers: нет точек ${miss.join(", ")}`);
+        const bl = (v: number[]) => [v[0], -v[2], v[1]];
+        markers = JSON.stringify({ ...Object.fromEntries(need.map((k) => [k, bl(a.markers[k])])), forward: bl(a.forward ?? [0, 0, 1]), fingers: a.count ?? 5 });
+      }
+      const log = execFileSync(BLENDER, ["-b", "--factory-startup", "--python", join(ROOT, "bridge/blender/autorig.py"), "--", src, out, String(a.res ?? 128), String(a.bones ?? 10)], { env: { ...BLENDER_ENV, AUTORIG_FINGERS: a.fingers ? "1" : "0", ...(markers ? { AUTORIG_MARKERS: markers } : {}) }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 });
       const ok = log.split("\n").find((l) => l.startsWith("AUTORIG_OK"));
       if (!ok) throw new Error("авториг не удался:\n" + log.split("\n").filter((l) => /AUTORIG|Error|Traceback/.test(l)).join("\n"));
       return { out, log: ok };

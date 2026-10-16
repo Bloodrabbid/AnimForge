@@ -108,3 +108,15 @@ export interface ClipPackInfo {
   takes: { name: string; duration: number }[];
 }
 export const fetchClips = (): Promise<ClipPackInfo[]> => fetch("/api/clips").then((r) => r.json());
+
+/** Скелет заново по ручным точкам (координаты модели) — model.autorig с markers, затем rig.detect. */
+export async function autorigMarkers(dir: string, markers: Record<string, [number, number, number]>, count: number): Promise<{ log: string; body?: string }> {
+  const r = await fetch("/api/autorig", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ dir, markers, count }),
+  });
+  const body = await r.json();
+  if (!body.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+  return body;
+}

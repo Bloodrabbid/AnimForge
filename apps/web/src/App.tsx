@@ -19,6 +19,7 @@ import {
   type Step,
   uploadModel,
   saveWeights,
+  autorigMarkers,
 } from "./api.ts";
 import { WeightsPanel } from "./WeightsPanel.tsx";
 import { LimitsPanel } from "./LimitsPanel.tsx";
@@ -34,6 +35,8 @@ import { LibraryPanel, chainsFor, sourceOf, type Entry } from "./LibraryPanel.ts
 import { ClipsPanel, takeLabel } from "./ClipsPanel.tsx";
 import { ProjectMenu } from "./ProjectMenu.tsx";
 import { MappingPanel, type BoneMap } from "./MappingPanel.tsx";
+import { MarkerPanel } from "./MarkerPanel.tsx";
+import { MARKS, fixSides, leftAxis, placeMark, type MarkKey, type Marks } from "./marks.ts";
 import { Timeline } from "./Timeline.tsx";
 import { Viewport, type Trail, type ViewCmd } from "./Viewport.tsx";
 import { GraphPanel, isShown, limbColor, useMotionGraph } from "./GraphPanel.tsx";
@@ -93,9 +96,9 @@ export function App() {
   // простой режим по умолчанию: модель, клипы, позинг, главные ручки и проверка; остальное — «Расширенное» (запоминается)
   const [advanced, setAdvanced] = useState(() => query.get("adv") === "1" || (query.get("adv") !== "0" && localStorage.getItem("af.advanced") === "1"));
   useEffect(() => localStorage.setItem("af.advanced", advanced ? "1" : "0"), [advanced]);
-  const [rightTab, setRightTab] = useState<"layers" | "keys" | "weights" | "limits" | "targets">((query.get("right") as "weights") ?? "layers");
+  const [rightTab, setRightTab] = useState<"layers" | "keys" | "weights" | "rig" | "limits" | "targets">((query.get("right") as "weights") ?? "layers");
   const [activeTarget, setActiveTarget] = useState<string | null>(query.get("target"));
-  const group = rightTab === "layers" || rightTab === "keys" ? "motion" : rightTab === "weights" ? "skin" : "body";
+  const group = rightTab === "layers" || rightTab === "keys" ? "motion" : rightTab === "weights" || rightTab === "rig" ? "skin" : "body";
   // в группу возвращаемся на ту вкладку, где были
   const lastSub = useRef<{ motion: "layers" | "keys"; body: "targets" | "limits" }>({ motion: "layers", body: "targets" });
   if (group === "motion") lastSub.current.motion = rightTab as "layers";
@@ -105,11 +108,17 @@ export function App() {
   const [brush, setBrush] = useState<Brush>({ mode: "add", radius: 0.06, strength: 0.25 });
   const [strokes, setStrokes] = useState(0);
   const [modelVer, setModelVer] = useState(0);
+  // ручные точки авторига (вкладка «Кожа» → «Скелет»)
+  const [marks, setMarks] = useState<Marks>({});
+  const [markActive, setMarkActive] = useState<MarkKey | null>("chin");
+  const [markMirror, setMarkMirror] = useState(true);
+  const [markCount, setMarkCount] = useState(5);
   const painter = useRef<WeightPainter | null>(null);
   const [status, setStatus] = useState<Status>({ text: "загрузка проекта…", error: false, at: Date.now() });
   const [library, setLibrary] = useState<LibRecipe[]>([]);
   const [projects, setProjects] = useState<string[]>([]);
   const [trial, setTrial] = useState<Trial | null>(null);
+  const markMode = advanced && rightTab === "rig" && !trial;
   const [busy, setBusy] = useState(false);
   const [help, setHelp] = useState(false);
   const [live, setLive] = useState(false);
@@ -542,10 +551,10 @@ export function App() {
             modelUrl={`${modelUrl(DIR, shown.model)}&v=${modelVer}`}
             project={shown}
             rig={rig}
-            clip={clip}
+            clip={markMode ? undefined : clip}
             t={t}
             selectedBone={selectedBone}
-            showSkeleton={showSkeleton}
+            showSkeleton={showSkeleton && !markMode}
             wireframe={wireframe}
             showFloor={showFloor}
             view={view}
@@ -557,6 +566,16 @@ export function App() {
             }}
             onStroke={setStrokes}
             onPickBone={setSelectedBone}
+            onMeshPick={
+              markMode && markActive
+                ? (pt) => {
+                    const r = placeMark(marks, markActive, pt, markMirror, leftAxis(shown.up, shown.forward ?? [0, 0, 1]));
+                    setMarks(r.marks);
+                    setMarkActive(r.next);
+                  }
+                : undefined
+            }
+            dots={markMode ? MARKS.flatMap((m) => (marks[m.key] ? [{ pos: marks[m.key]!, color: m.color, active: m.key === markActive }] : [])) : undefined}
             showTargets={!!clip?.constraints?.length}
             activeTarget={advanced && rightTab === "targets" && !trial ? activeTarget : null}
             onMoveTarget={(id, pos) => {
@@ -820,10 +839,12 @@ export function App() {
             </button>
           )}
         </div>
-        {group !== "skin" && (
+        {(
           <div className="subtabs">
             {(group === "motion"
               ? ([["layers", "Слои"], ["keys", "Ключи"]] as const)
+              : group === "skin"
+              ? ([["weights", "Веса"], ["rig", "Скелет по точкам"]] as const)
               : ([["targets", `Цели${clip?.constraints?.length ? ` · ${clip.constraints.length}` : ""}`], ["limits", `Пределы${shown.limits ? ` · ${Object.keys(shown.limits).length}` : ""}`]] as const)
             ).map(([k, label]) => (
               <button key={k} className={rightTab === k ? "on" : ""} onClick={() => setRightTab(k)}>
@@ -833,7 +854,42 @@ export function App() {
           </div>
         )}
         <div className="tab-body">
-          {!clip ? (
+          {rightTab === "rig" ? (
+            trial ? (
+              <p className="muted pad">Скелет строится после «Применить» или «Отмена» примерки.</p>
+            ) : (
+              <MarkerPanel
+                marks={marks}
+                active={markActive}
+                mirror={markMirror}
+                count={markCount}
+                busy={busy}
+                onActive={setMarkActive}
+                onMirror={setMarkMirror}
+                onCount={setMarkCount}
+                onClear={() => {
+                  setMarks({});
+                  setMarkActive("chin");
+                }}
+                onBuild={async () => {
+                  const fixed = fixSides(marks, leftAxis(shown.up, shown.forward ?? [0, 0, 1]));
+                  if (!confirm("Построить скелет заново по точкам? Прежний скелет и веса заменятся (модель до этого останется рядом, .prerig.glb).")) return;
+                  setBusy(true);
+                  say("строю скелет по точкам… (Blender, до минуты)");
+                  try {
+                    const r = await autorigMarkers(DIR, fixed.marks as Record<string, [number, number, number]>, markCount);
+                    say(`скелет по точкам готов${fixed.swapped ? " (левую и правую стороны поменяли местами — кликнули наоборот)" : ""}${r.body ? `, тело: ${r.body}` : ""}`);
+                    setModelVer((v) => v + 1);
+                    await reload();
+                  } catch (e) {
+                    say(`скелет: ${(e as Error).message}`, true);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              />
+            )
+          ) : !clip ? (
             <div className="empty-state">
               <Icon name="library" size={28} />
               <p>В проекте нет клипов.</p>

@@ -149,7 +149,34 @@ def voxelize(origin, dims, voxel):
 
 occ = voxelize(origin, dims, voxel)
 
-joints, parents, info = skeleton(occ, voxel=voxel, origin=tuple(origin), bones_along=along)
+# ручные точки (AUTORIG_MARKERS — JSON в осях Blender): суставы по точкам и пропорциям, имена Mixamo, пальцы шаблоном
+import json as _json
+_markers = _json.loads(os.environ["AUTORIG_MARKERS"]) if os.environ.get("AUTORIG_MARKERS") else None
+bone_names = None
+if _markers:
+    from autorig_markers import marker_skeleton
+
+    def depth_center(p, axis):
+        """Середина тела на линии через p вдоль axis: первая и последняя стенка; мимо тела — сама p."""
+        d = Vector(tuple(map(float, axis)))
+        far = float(size.max()) * 2
+        o = Vector(tuple(map(float, p))) - d * far
+        hits = []
+        q = o
+        while len(hits) < 64:
+            loc, _n, _i, _d = bvh.ray_cast(q, d, 2 * far)
+            if loc is None:
+                break
+            hits.append(np.array(loc[:]))
+            q = loc + d * (voxel * 1e-3)
+        if len(hits) < 2:
+            return np.asarray(p, float)
+        return (hits[0] + hits[-1]) / 2
+
+    joints, parents, bone_names = marker_skeleton(_markers, V, depth_center, int(_markers.get("fingers", 5)))
+    info = {"voxels": int(occ.sum()), "branches": 0}
+else:
+    joints, parents, info = skeleton(occ, voxel=voxel, origin=tuple(origin), bones_along=along)
 
 
 def sample(c, half, vox):
@@ -160,7 +187,7 @@ def sample(c, half, vox):
 
 # пальцы: у кончиков веток форма мельче (AUTORIG_FINGERS=1 — включить; дольше в полтора раза)
 hands = 0
-if os.environ.get("AUTORIG_FINGERS") == "1":
+if os.environ.get("AUTORIG_FINGERS") == "1" and not _markers:
     joints, parents, hands = refine_tips(joints, parents, sample, log=print if os.environ.get("AUTORIG_DEBUG") else None)
 if os.environ.get("AUTORIG_DEBUG"):
     # отладка: проекции формы и скелета (debug_autorig.py рисует из этого картинку)
@@ -252,7 +279,7 @@ def snap_to_seams(joints, parents):
     return [Vector(tuple(map(float, newJ[i]))) for i in keep_i], parents, snapped, len(drop)
 
 
-def build_armature(joints, parents):
+def build_armature(joints, parents, given=None):
     """Кости: голова — сустав, хвост — к среднему детей (у листа — продолжение от родителя)."""
     arm_data = bpy.data.armatures.new("rig")
     rig = bpy.data.objects.new("rig", arm_data)
@@ -260,7 +287,7 @@ def build_armature(joints, parents):
     bpy.context.view_layer.objects.active = rig
     bpy.ops.object.mode_set(mode="EDIT")
     kids = [[c for c, p in enumerate(parents) if p == i] for i in range(len(joints))]
-    names = ["root" if i == 0 else f"j{i:02d}" for i in range(len(joints))]
+    names = list(given) if given else ["root" if i == 0 else f"j{i:02d}" for i in range(len(joints))]
     ebones = []
     for i, jp in enumerate(joints):
         b = arm_data.edit_bones.new(names[i])
@@ -284,7 +311,7 @@ def build_armature(joints, parents):
 
 
 joints = [Vector(j) for j in joints]
-rig, kids, names = build_armature(joints, parents)
+rig, kids, names = build_armature(joints, parents, bone_names)
 
 # веса: тепло Blender; если часть вершин осталась без веса — считаем сами по расстоянию до костей
 bpy.ops.object.select_all(action="DESELECT")
@@ -308,11 +335,12 @@ if not body.vertex_groups or unweighted > 0.02 * len(mesh.vertices):
     # сборная модель (тепло на сборках и спотыкается): суставы к стыкам деталей и скелет заново —
     # тогда деталь целиком на своей кости. Где тепло справилось, суставы не трогаем: у шаблонов из трубок
     # «детали» — целые лапы, и им нужны суставы посередине
-    j2, p2, snapped, dropped = snap_to_seams(joints, parents)
+    # по ручным точкам суставы стоят где сказано — к стыкам деталей их не двигаем
+    j2, p2, snapped, dropped = (joints, parents, 0, 0) if _markers else snap_to_seams(joints, parents)
     if snapped or dropped:
         old_rig = rig
         joints, parents = j2, p2
-        rig, kids, names = build_armature(joints, parents)
+        rig, kids, names = build_armature(joints, parents, bone_names if len(joints) == len(bone_names or []) else None)
         bpy.data.objects.remove(old_rig)
         body.vertex_groups.clear()
         method = "nearest"
@@ -441,4 +469,4 @@ if len(islands) > 1:
 
 os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
 bpy.ops.export_scene.gltf(filepath=out, export_format="GLB", export_animations=False, export_skins=True, use_selection=False)
-print(f"AUTORIG_OK joints={len(joints)} hands={hands} snapped={snapped} dropped={dropped} weights={method} rigid_parts={rigid} unweighted={unweighted} voxels={info['voxels']} branches={info['branches']} res={res}")
+print(f"AUTORIG_OK joints={len(joints)} markers={1 if _markers else 0} hands={hands} snapped={snapped} dropped={dropped} weights={method} rigid_parts={rigid} unweighted={unweighted} voxels={info['voxels']} branches={info['branches']} res={res}")

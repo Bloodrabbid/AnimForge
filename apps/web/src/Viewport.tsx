@@ -48,6 +48,10 @@ interface Props {
   onTrailTime?(t: number): void;
   /** подсветка цепочки (наведение на кривую графика): её кости и конец */
   highlight?: { bones: string[]; color: string } | null;
+  /** ручные точки авторига: клик по мешу ставит точку (Alt или правая кнопка — камера) */
+  onMeshPick?(point: [number, number, number]): void;
+  /** точки поверх меша; active — крупнее */
+  dots?: { pos: [number, number, number]; color: string; active?: boolean }[];
 }
 
 export interface Trail {
@@ -334,6 +338,16 @@ export function Viewport(props: Props) {
     renderer.domElement.addEventListener("pointermove", poseMove);
     renderer.domElement.addEventListener("pointerup", poseUp);
     renderer.domElement.addEventListener("pointerdown", down, { capture: true });
+    // ручные точки авторига: клик по коже
+    const pickDown = (e: PointerEvent) => {
+      const p = live.current;
+      if (!p.onMeshPick || e.button !== 0 || e.altKey) return;
+      const h = hitAt(e);
+      if (!h) return;
+      e.stopImmediatePropagation();
+      p.onMeshPick([h.point.x, h.point.y, h.point.z].map((x) => +x.toFixed(4)) as [number, number, number]);
+    };
+    renderer.domElement.addEventListener("pointerdown", pickDown, { capture: true });
     renderer.domElement.addEventListener("pointermove", move);
     renderer.domElement.addEventListener("pointerup", up);
 
@@ -399,6 +413,8 @@ export function Viewport(props: Props) {
     // цели констрейнов: шарик (IK — бирюзовый, взгляд — сиреневый) и линия от кончика или головы к цели
     const tgtGeo = new THREE.OctahedronGeometry(1, 1);
     const tgtPool: { mesh: THREE.Mesh; line: THREE.Line }[] = [];
+    const dotGeo = new THREE.SphereGeometry(1, 16, 12);
+    const dotPool: THREE.Mesh[] = [];
     const tgtColor = { ik: 0x3fd0c9, aim: 0xb48cff };
     const handle = new THREE.Object3D(); // за него держит TransformControls
     scene.add(handle);
@@ -552,6 +568,22 @@ export function Viewport(props: Props) {
           pts.forEach((v, k) => (hlDots[k].position.copy(v), hlDots[k].scale.setScalar(m.size * 0.012)));
           hlLine.geometry.setFromPoints(pts);
         }
+        // ручные точки авторига
+        const dots = p.dots ?? [];
+        while (dotPool.length < dots.length) {
+          const d = new THREE.Mesh(dotGeo, new THREE.MeshBasicMaterial({ depthTest: false, transparent: true, opacity: 0.95 }));
+          d.renderOrder = 15;
+          scene.add(d);
+          dotPool.push(d);
+        }
+        dotPool.forEach((d, k) => {
+          const x = dots[k];
+          d.visible = !!x;
+          if (!x) return;
+          d.position.set(...x.pos);
+          d.scale.setScalar(m.size * (x.active ? 0.016 : 0.011));
+          (d.material as THREE.MeshBasicMaterial).color.set(x.color);
+        });
         // цели
         const cons = p.showTargets && clipNow?.constraints ? clipNow.constraints.filter((c) => c.type !== "copy") : [];
         while (tgtPool.length < cons.length) {
@@ -666,6 +698,7 @@ export function Viewport(props: Props) {
       ro.disconnect();
       renderer.domElement.removeEventListener("pointerup", onPointerUp);
       renderer.domElement.removeEventListener("pointerdown", down, { capture: true });
+      renderer.domElement.removeEventListener("pointerdown", pickDown, { capture: true });
       renderer.domElement.removeEventListener("pointerdown", poseDown, { capture: true });
       renderer.domElement.removeEventListener("pointermove", poseMove);
       renderer.domElement.removeEventListener("pointerup", poseUp);
