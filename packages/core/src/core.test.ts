@@ -1354,3 +1354,18 @@ test("startle: времена Ghost Master — пик вздрога 0.27 с и 
   assert.deepEqual(at("jump", "arm_l", 0.63, {}, 2), {});
   assert.deepEqual(at("jump", "pelvis", 0.63, {}, 1), {}, "у таза — только первая кость");
 });
+
+test("scare-pose: выход в позу к rise без возврата, грудь перелетает в overshoot раз, замах — у корпуса, не у рук", () => {
+  const def = RECIPES["scare-pose"];
+  const p = withDefaults(def, { rise: 0.97, anticipation: 0.9, preT: 0.3, keep: 0.73, overshoot: 2.7, duration: 2.4 });
+  const at = (role: string, t: number, i = 0) => def.evaluate({ ...p, role }, i, 2, t, { height: 1 });
+  const L = def.length!(p), peakT = 0.3 + 0.97;
+  close(L, 2.4, 1e-9);
+  close(at("pelvis", peakT).pitch as number, p.lean, 1e-9, "пик позы в rise после замаха");
+  close((at("pelvis", L).pitch as number) / p.lean, 0.73, 1e-9, "в конце 0.73 пика — без возврата");
+  close(at("pelvis", 0.3).pitch as number, -0.9 * p.lean, 1e-9, "замах против хода 0.9");
+  close((at("chest", peakT).pitch as number) / (at("chest", L).pitch as number), 2.7, 1e-9, "грудь в пике ×2.7 конечной");
+  close(at("arm_l", 0.3).pitch as number, 0, 1e-12, "руки без замаха");
+  close(at("arm_l", peakT, 1).pitch as number, p.elbow, 1e-9, "локоть в пике");
+  assert.deepEqual(def.events!(p), [{ t: 1.27, name: "manifest" }]);
+});

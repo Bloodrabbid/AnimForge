@@ -1064,7 +1064,56 @@ const startle: RecipeDef = {
   events: (p) => STARTLE[p.kind].ev.map(([t, name]: [number, string]) => ({ t: +(t / p.speed).toFixed(4), name })),
 };
 
-export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact, "idle-glance": idleGlance, startle };
+// ── пугалка призрака (Ghost Master, 28 клипов *_man) ───────────────────────────────────────────────────────────
+/** Ключи пугалки: замах (если есть), выход в позу к rise, оседание к keep, удержание до конца — без возврата. */
+const SCARE_KEYS = (p: Record<string, any>) => {
+  const pre = p.anticipation > 0 ? p.preT : 0, a = pre + p.rise, b = a + p.settle;
+  return [0, pre, a, b, Math.max(p.duration, b + 0.01)];
+};
+const scarePose: RecipeDef = {
+  name: "scare-pose",
+  main: ["rise", "keep", "overshoot", "arms"],
+  roles: Object.fromEntries(["pelvis", "chest", "head", "arm_l", "arm_r"].map((r) => [r, { chain: r, params: { role: r }, optional: r !== "pelvis" }])),
+  help:
+    "Пугалка призрака (Ghost Master, manifest): выход в страшную позу и долгое удержание без возврата — конец 0.73 от пика. " +
+    "Подъём 0.17–1.0 с (медиана 0.97), грудь в пике проходит в 2.7–3.5 раза дальше, чем останавливается; замах есть у двух третей " +
+    "и почти равен главному ходу (у корпуса; руки идут сразу в позу). Событие manifest (частицы) — в пике. Времена и доли измерены, позы рук — на глаз.",
+  params: {
+    role: { type: "enum", default: "pelvis", options: ["pelvis", "chest", "head", "arm_l", "arm_r"], help: "какую часть тела крутит слой" },
+    duration: { type: "number", default: 2, min: 0.5, max: 8, unit: "с", help: "длина клипа (удержание — 50–80 % клипа)" },
+    rise: { type: "number", default: 0.97, min: 0.05, max: 3, unit: "с", help: "выход в позу (медиана 0.97, boo_man 0.17)" },
+    settle: { type: "number", default: 0.3, min: 0.05, max: 2, unit: "с", help: "оседание из пика в удержание (на глаз)" },
+    keep: { type: "number", default: 0.73, min: 0, max: 1, help: "доля пика, что держится до конца (медиана 0.73; 1 — замер в пике)" },
+    anticipation: { type: "number", default: 0, min: 0, max: 1.2, help: "замах против хода — доля главного (у трети нет, у остальных 0.9+)" },
+    preT: { type: "number", default: 0.3, min: 0.05, max: 1.5, unit: "с", help: "длина замаха (на глаз)" },
+    overshoot: { type: "number", default: 2.7, min: 1, max: 4, help: "перелёт груди: в пике во столько раз дальше конечной позы (2.68–3.46)" },
+    lift: { type: "number", default: 0.1, min: -0.5, max: 1.5, help: "подъём таза — доля его высоты (взлёт в силах до +1.1…1.4 H)" },
+    lean: { type: "number", default: 15, min: -45, max: 60, unit: "°", help: "наклон корпуса к жертве" },
+    chest: { type: "number", default: 8, min: -40, max: 40, unit: "°", help: "наклон груди в удержании (в пике — × overshoot)" },
+    head: { type: "number", default: -15, min: -60, max: 60, unit: "°", help: "голова: минус — подбородок вверх, нависает" },
+    arms: { type: "number", default: -100, min: -180, max: 60, unit: "°", help: "руки: −100 — когти вперёд (boo_man), −170 — вверх, «на дыбы» (harr_man)" },
+    elbow: { type: "number", default: -35, min: -150, max: 30, unit: "°", help: "сгиб локтя (на глаз)" },
+  },
+  length: (p) => +SCARE_KEYS(p)[4].toFixed(3),
+  evaluate(p, i, n, t, info) {
+    const T = SCARE_KEYS(p), ant = p.anticipation;
+    const main = keyCurve(T, [0, -ant, 1, p.keep, p.keep], t);
+    const H = info?.height ?? 1;
+    switch (p.role) {
+      case "pelvis": return i > 0 ? {} : { pitch: p.lean * main, move_up: p.lift * H * main };
+      case "chest": return i > 0 ? {} : { pitch: p.chest * keyCurve(T, [0, -ant * p.overshoot, p.overshoot, 1, 1], t) };
+      case "head": return i > 0 ? {} : { pitch: p.head * main };
+      default: {
+        // руки замаха не делают — корпус замахивается, руки сразу идут в позу (иначе мах на полкруга назад)
+        const arm = keyCurve(T, [0, 0, 1, p.keep, p.keep], t);
+        return i === 0 ? { pitch: p.arms * arm } : i === 1 ? { pitch: p.elbow * arm } : {};
+      }
+    }
+  },
+  events: (p) => [{ t: +SCARE_KEYS(p)[2].toFixed(4), name: "manifest" }],
+};
+
+export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact, "idle-glance": idleGlance, startle, "scare-pose": scarePose };
 
 export { QUAD, STARTLE, glancePlan, emergeCurve, strikeCurve, flapProfile, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
 

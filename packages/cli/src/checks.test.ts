@@ -260,3 +260,20 @@ test("startle на рабочем: пресеты Ghost Master проходят 
     else assert.deepEqual(f, [], pr.name);
   }
 });
+
+test("scare-pose на рабочем: пресеты Ghost Master проходят проверки без брака", async () => {
+  const dir = copy("scare");
+  await smoothWeights(dir);
+  const lib = JSON.parse(readFileSync(join(ROOT, "library/presets/scare-pose.json"), "utf8"));
+  for (const pr of lib.presets) {
+    await call(dir, "clip.add", { name: pr.name, duration: pr.params.duration, loop: false });
+    await call(dir, "recipe.rig", { clip: pr.name, recipe: "scare-pose", preset: pr.name });
+    await call(dir, "clip.ground", { clip: pr.name, bones: "foot_l,foot_r", mode: "floor", ik: true, flat: true });
+  }
+  const ctx = await loadCtx(dir), mesh = await loadMesh(ctx);
+  for (const pr of lib.presets) {
+    const c = ctx.project.clips.find((x) => x.name === pr.name)!;
+    assert.equal(c.layers.filter((l) => l.type === "recipe").length, 5, pr.name);
+    assert.deepEqual(checkClip(ctx.project, ctx, mesh, c, false).report.findings.filter((f) => f.level === "fail").map((f) => f.check), [], pr.name);
+  }
+});

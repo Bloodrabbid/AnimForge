@@ -1,0 +1,76 @@
+{
+ "recipe": "scare-pose",
+ "presets": [
+  {
+   "name": "gm-boo-claws",
+   "help": "Пугалка boo_man: за 0.17 с в позу «руки-когти вперёд» и держит её почти весь клип.",
+   "params": {
+    "rise": 0.17,
+    "settle": 0.15,
+    "keep": 0.78,
+    "duration": 2,
+    "arms": -100,
+    "elbow": -35
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/02-ghosts.md: пугалки п.1 — boo_man: подъём 0.17 с, удержание 78 % клипа; 05-candidates B2 — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: поза рук, длина клипа 2 с, keep = доля удержания"
+    }
+   ]
+  },
+  {
+   "name": "gm-scare-median",
+   "help": "Средняя пугалка: замах почти на весь ход, выход в позу за 0.97 с, перелёт груди ×2.7, в конце 0.73 от пика.",
+   "params": {
+    "rise": 0.97,
+    "anticipation": 0.9,
+    "preT": 0.3,
+    "keep": 0.73,
+    "overshoot": 2.7,
+    "duration": 2.4
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/02-ghosts.md: пугалки п.1, п.5 — медианы 28 клипов *_man: подъём 0.97, конец/пик 0.73, перелёт груди 2.68–2.77, замах 0.9+ — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: длина замаха и клипа"
+    }
+   ]
+  },
+  {
+   "name": "gm-rear-up",
+   "help": "«Встать на дыбы» (harr_man): звериный присед, потом выпрямиться с руками вверх; перелёт груди ×3.46.",
+   "params": {
+    "rise": 1.5,
+    "anticipation": 0.9,
+    "preT": 0.85,
+    "keep": 0.73,
+    "overshoot": 3.46,
+    "duration": 3.5,
+    "lean": -10,
+    "lift": 0.15,
+    "head": -25,
+    "arms": -170,
+    "elbow": -10
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/02-ghosts.md: пугалки п.5, п.6 — harr_man: присед 0.85 с, руки вверх, перелёт груди 3.46 — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: подъём 1.5 с вместо ползания до 5.1 с, позы"
+    }
+   ]
+  }
+ ]
+}

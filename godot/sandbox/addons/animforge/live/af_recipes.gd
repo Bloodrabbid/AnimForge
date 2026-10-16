@@ -6,7 +6,7 @@ extends RefCounted
 
 const RAD := PI / 180.0
 const SECONDARY := ["jiggle"]
-const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble", "hit-react", "idle-glance", "startle"]
+const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble", "hit-react", "idle-glance", "startle", "scare-pose"]
 
 
 static func is_secondary(recipe: String) -> bool:
@@ -34,6 +34,7 @@ static func evaluate(recipe: String, p: Dictionary, i: int, n: int, t: float, in
 		"hit-react": return _hit_react(p, i, t, info)
 		"idle-glance": return _idle_glance(p, n, t)
 		"startle": return _startle(p, i, t, info)
+		"scare-pose": return _scare_pose(p, i, t, info)
 	push_error("AFRecipes: нет рецепта «%s»" % recipe)
 	return {}
 
@@ -47,6 +48,7 @@ static func events(recipe: String, p: Dictionary) -> Array:
 			return [{"t": to_fixed(p["windupT"] + p["strikeT"], 4), "name": "hit"}]
 		"body-ram": return _ram_events(p)
 		"hit-react": return _react_events(p)
+		"scare-pose": return [{"t": to_fixed(_scare_keys(p)[2], 4), "name": "manifest"}]
 		"startle":
 			var sev := []
 			for e in STARTLE[p["kind"]]["ev"]:
@@ -80,6 +82,7 @@ static func length(recipe: String, p: Dictionary) -> float:
 		"tentacle-strike": return to_fixed(p["windupT"] + p["strikeT"] + p["hold"] + p["returnT"] + 0.3, 3)
 		"body-ram": return to_fixed(_ram_keys(p)["ev"]["f"] + p["tail"], 3)
 		"hit-react": return p["duration"]
+		"scare-pose": return to_fixed(_scare_keys(p)[4], 3)
 		"startle":
 			var st: Array = STARTLE[p["kind"]]["t"]
 			return to_fixed(st[st.size() - 1] / p["speed"], 3)
@@ -879,3 +882,30 @@ static func _startle(p: Dictionary, i: int, t: float, info: Dictionary) -> Dicti
 		var drop: float = (1.0 - p["lie"]) if p["kind"] == "faint" and role == "pelvis" and c == "move_up" else 1.0
 		out[c] = _ram_curve(K["t"], K[key][c], t * p["speed"]) * p["amount"] * drop * (H if c.begins_with("move_") else 1.0)
 	return out
+
+
+# ── scare-pose ──────────────────────────────────────────────────────────────────────────────────────────────────
+
+static func _scare_keys(p: Dictionary) -> Array:
+	var pre: float = p["preT"] if p["anticipation"] > 0 else 0.0
+	var a: float = pre + p["rise"]
+	var b: float = a + p["settle"]
+	return [0.0, pre, a, b, maxf(p["duration"], b + 0.01)]
+
+
+static func _scare_pose(p: Dictionary, i: int, t: float, info: Dictionary) -> Dictionary:
+	var T := _scare_keys(p)
+	var ant: float = p["anticipation"]
+	var main := _ram_curve(T, [0.0, -ant, 1.0, p["keep"], p["keep"]], t)
+	var H: float = info.get("height", 1.0)
+	match p["role"]:
+		"pelvis": return {} if i > 0 else {"pitch": p["lean"] * main, "move_up": p["lift"] * H * main}
+		"chest": return {} if i > 0 else {"pitch": p["chest"] * _ram_curve(T, [0.0, -ant * p["overshoot"], p["overshoot"], 1.0, 1.0], t)}
+		"head": return {} if i > 0 else {"pitch": p["head"] * main}
+	# руки замаха не делают — сразу в позу
+	var arm := _ram_curve(T, [0.0, 0.0, 1.0, p["keep"], p["keep"]], t)
+	if i == 0:
+		return {"pitch": p["arms"] * arm}
+	if i == 1:
+		return {"pitch": p["elbow"] * arm}
+	return {}
