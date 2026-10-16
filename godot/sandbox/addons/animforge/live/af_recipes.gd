@@ -679,25 +679,43 @@ static func _wing_flap(p: Dictionary, i: int, n: int, t: float, info: Dictionary
 
 # ── парение (призрак Witcher) ───────────────────────────────────────────────────────────────────────────────────
 
+const HOVER_DIVE := [-0.2951, -0.1694, -0.112, -0.5027, -0.9699, -1.0929, -0.9098, -0.5273, -0.0546, 0.3388, 0.724, 0.9071, 0.8798, 0.7896, 0.6284, 0.4317, 0.2213, 0.0519, -0.1257, -0.2486]
+
+
 static func _hover(p: Dictionary, i: int, t: float, info: Dictionary) -> Dictionary:
-	if i > 0:
-		return {}
 	var s: float = t / p["period"]
 	var c := func(peak: float, k: float = 1.0) -> float: return cos(2.0 * PI * k * (s - peak))
+	# новые параметры читаем через get — в файлах до них их нет в схеме
+	var bp: float = p.get("bobPeak", 0.75)
+	if p["role"] == "arm":
+		var ac: float = p.get("armCounter", 0.0)
+		if ac == 0:
+			return {}
+		# руки-противовес: плечо — пик через 0.49 цикла после верха подскока, локоть в противофазе
+		if i == 0:
+			return {"pitch": ac * c.call(bp + 0.49)}
+		return {"pitch": 1.14 * ac * c.call(bp)} if i == 1 else {}
+	if i > 0:
+		return {}
 	# пики гармоник — из M_walk: подъём 0.75, тангаж 0.93, крен 0.18, рыскание груди 0.78
+	var up: float = periodic(HOVER_DIVE, s) if p.get("shape", "sine") == "dive" else c.call(bp)
 	if p["role"] == "pelvis":
-		return {"move_up": p["bob"] * info.get("height", 0.0) * c.call(0.75), "pitch": p["lean"] + p["pitch"] * c.call(0.93), "bank": p["roll"] * c.call(0.18)}
-	# кивки груди и головы — в мире; слой отдаёт разницу с родителем
+		return {"move_up": p["bob"] * info.get("height", 0.0) * up, "pitch": p["lean"] + p["pitch"] * c.call(0.93), "bank": p["roll"] * c.call(0.18)}
+	# кивки груди и головы — в мире (или от верха подскока); слой отдаёт разницу с родителем
+	var cl: float = p.get("chestLag", -1.0)
+	var hl: float = p.get("headLag", -1.0)
+	var cp: float = bp + cl if cl >= 0 else 0.82
+	var hp: float = bp + hl if hl >= 0 else 0.67
 	if p["role"] == "chest":
 		var r := {"yaw": p["chestYaw"] * c.call(0.78)}
 		if p["chestPitch"] != 0:
-			r["pitch"] = p["chestPitch"] * c.call(0.82) - p["pitch"] * c.call(0.93)
+			r["pitch"] = p["chestPitch"] * c.call(cp) - p["pitch"] * c.call(0.93)
 		return r
 	var r := {}
 	if p["look"] != 0:
 		r["yaw"] = p["look"] * c.call(0.3) + 1.2 * p["look"] * c.call(0.1, 2.0)
 	if p["headPitch"] != 0:
-		r["pitch"] = p["headPitch"] * c.call(0.67) - (p["chestPitch"] * c.call(0.82) if p["chestPitch"] != 0 else p["pitch"] * c.call(0.93))
+		r["pitch"] = p["headPitch"] * c.call(hp) - (p["chestPitch"] * c.call(cp) if p["chestPitch"] != 0 else p["pitch"] * c.call(0.93))
 	return r
 
 

@@ -229,7 +229,11 @@
     "chestYaw": 0,
     "look": 0,
     "chestPitch": 4.8,
-    "headPitch": 7
+    "headPitch": 7,
+    "bobPeak": 0.5,
+    "chestLag": 0,
+    "headLag": 0.37,
+    "armCounter": 21
    },
    "provenance": [
     {
@@ -239,6 +243,10 @@
     {
      "source": "hand-tuned",
      "ref": "headPitch 7 (замер 6–8) — на глаз"
+    },
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/02-ghosts.md: §3 quiv_idl/boo_idl2 — верх подскока 0.50, грудь в фазе, голова отстаёт на 0.37 цикла, плечи ±21° (пик 0.99), локти ±24° (0.49), измерено"
     }
    ]
   },
@@ -402,6 +410,35 @@
     {
      "source": "hand-tuned",
      "ref": "в hover.look есть вторая гармоника, в игре её нет — на глаз"
+    }
+   ]
+  },
+  {
+   "name": "gm-banshee-dive",
+   "help": "«Нырок» банши (Ghost Master brigit_idl3): провал на 0.36 м за 0.6 с, подъём на 0.73 м, долгое оседание; цикл 3.83 с.",
+   "params": {
+    "period": 3.83,
+    "shape": "dive",
+    "bob": 0.38,
+    "lean": 0,
+    "pitch": 0,
+    "roll": 0,
+    "chestYaw": 0,
+    "look": 0,
+    "chestPitch": 12.7,
+    "headPitch": 11,
+    "chestLag": 0.55,
+    "headLag": 0.74,
+    "bobPeak": 0.5
+   },
+   "provenance": [
+    {
+     "source": "research/ghostmaster",
+     "ref": "analysis/02-ghosts.md: §2 brigit_idl3 — curve20 таза, T 3.83 с, грудь 12.7°@0.05, голова 11.0°@0.24, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: bob 0.38 высоты таза (0.366 м при тазе ≈ 0.95 м); фазы груди (0.05) и головы (0.24) записаны от верха подскока 0.5 по модулю цикла"
     }
    ]
   }

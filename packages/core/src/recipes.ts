@@ -714,15 +714,22 @@ const wingFlap: RecipeDef = {
 };
 
 // ── парение (призрак Witcher, cr_wraith) ─────────────────────────────────────────────────────────────────────────
+/** «Нырок» банши (Ghost Master brigit_idl3, T 3.83 с): curve20 таза, делённая на полуразмах 0.366 м — провал за 0.15 цикла, подъём за 0.30, оседание. */
+const HOVER_DIVE: number[] = [-0.2951, -0.1694, -0.112, -0.5027, -0.9699, -1.0929, -0.9098, -0.5273, -0.0546, 0.3388, 0.724, 0.9071, 0.8798, 0.7896, 0.6284, 0.4317, 0.2213, 0.0519, -0.1257, -0.2486];
 const hover: RecipeDef = {
   name: "hover",
   main: ["period", "bob", "lean", "roll"],
-  roles: { pelvis: { chain: "pelvis" }, chest: { chain: "chest", optional: true }, head: { chain: "head", optional: true } },
+  roles: { pelvis: { chain: "pelvis" }, chest: { chain: "chest", optional: true }, head: { chain: "head", optional: true }, arm_l: { chain: "arm_l", params: { role: "arm" }, optional: true }, arm_r: { chain: "arm_r", params: { role: "arm" }, optional: true } },
   help:
     "Парение без ног (призрак Witcher): таз поднимается и опускается почти чистым синусом, корпус кивает и кренится, грудь рыщет, " +
     "в движении наклон вперёд. Скорость перемещения задаёт игра — клип на месте. Руки и полы одежды — jiggle.",
   params: {
-    role: { type: "enum", default: "pelvis", options: ["pelvis", "chest", "head"], help: "таз (подъём, тангаж, крен, наклон), грудь (рыскание) или голова (озирается)" },
+    role: { type: "enum", default: "pelvis", options: ["pelvis", "chest", "head", "arm"], help: "таз (подъём, тангаж, крен, наклон), грудь (рыскание), голова (озирается) или рука (противовес)" },
+    shape: { type: "enum", default: "sine", options: ["sine", "dive"], help: "подъём таза: sine — синус, dive — «нырок» банши Ghost Master (провал за 0.15 цикла, подъём за 0.30, долгое оседание)" },
+    bobPeak: { type: "number", default: 0.75, min: 0, max: 1, help: "где верх подскока, доля цикла (Witcher 0.75, простыня Ghost Master 0.5); у dive не действует" },
+    chestLag: { type: "number", default: -1, min: -1, max: 1, help: "кивок груди от верха подскока, доля цикла (Ghost Master boo_idl2: 0 — в фазе); −1 — пик Witcher" },
+    headLag: { type: "number", default: -1, min: -1, max: 1, help: "кивок головы отстаёт от верха подскока (Ghost Master: 0.25–0.37 цикла); −1 — пик Witcher" },
+    armCounter: { type: "number", default: 0, min: 0, max: 60, unit: "°", help: "руки-противовес: плечо ± (Ghost Master quiv_idl ±21, вдвое больше корпуса), локоть в противофазе ×1.14" },
     period: { type: "number", default: 1.467, min: 0.3, max: 8, unit: "с", help: "цикл (Witcher: движение 1.47, idle 3.07, боевая стойка 3.9)" },
     bob: { type: "number", default: 0.119, min: 0, max: 0.4, help: "подъём таза — доля его высоты (Witcher: движение ±0.196 м при 1.65 м = 11.9 %, idle 8.4 %, стойка 3.6 %)" },
     lean: { type: "number", default: 15, min: -30, max: 45, unit: "°", help: "постоянный наклон вперёд (в движении 15, на месте −6…−9)" },
@@ -734,13 +741,18 @@ const hover: RecipeDef = {
     headPitch: { type: "number", default: 0, min: 0, max: 60, unit: "°", help: "кивок головы (ифрит ±48)" },
   },
   evaluate(p, i, n, t, info) {
-    if (i > 0) return {};
     const s = t / p.period, c = (peak: number, k = 1) => Math.cos(2 * Math.PI * k * (s - peak));
+    const bp = p.bobPeak ?? 0.75;
+    // руки-противовес (Ghost Master quiv_idl): плечо — пик через 0.49 цикла после верха подскока, локоть в противофазе
+    if (p.role === "arm") return !p.armCounter ? {} : i === 0 ? { pitch: p.armCounter * c(bp + 0.49) } : i === 1 ? { pitch: 1.14 * p.armCounter * c(bp) } : {};
+    if (i > 0) return {};
     // пики гармоник — из M_walk: подъём 0.75, тангаж 0.93, крен 0.18, рыскание груди 0.78 (доли цикла)
-    if (p.role === "pelvis") return { move_up: p.bob * (info?.height ?? 0) * c(0.75), pitch: p.lean + p.pitch * c(0.93), bank: p.roll * c(0.18) };
-    // кивки груди и головы — в мире (ифрит: пики 0.82 и 0.67); слой отдаёт разницу с родителем
-    if (p.role === "chest") return { yaw: p.chestYaw * c(0.78), ...(p.chestPitch ? { pitch: p.chestPitch * c(0.82) - p.pitch * c(0.93) } : {}) };
-    return { ...(p.look ? { yaw: p.look * c(0.3) + 1.2 * p.look * c(0.1, 2) } : {}), ...(p.headPitch ? { pitch: p.headPitch * c(0.67) - (p.chestPitch ? p.chestPitch * c(0.82) : p.pitch * c(0.93)) } : {}) };
+    const up = p.shape === "dive" ? periodic(HOVER_DIVE, s) : c(bp);
+    if (p.role === "pelvis") return { move_up: p.bob * (info?.height ?? 0) * up, pitch: p.lean + p.pitch * c(0.93), bank: p.roll * c(0.18) };
+    // кивки груди и головы — в мире (ифрит: пики 0.82 и 0.67, или от верха подскока); слой отдаёт разницу с родителем
+    const cp = (p.chestLag ?? -1) >= 0 ? bp + p.chestLag : 0.82, hp = (p.headLag ?? -1) >= 0 ? bp + p.headLag : 0.67;
+    if (p.role === "chest") return { yaw: p.chestYaw * c(0.78), ...(p.chestPitch ? { pitch: p.chestPitch * c(cp) - p.pitch * c(0.93) } : {}) };
+    return { ...(p.look ? { yaw: p.look * c(0.3) + 1.2 * p.look * c(0.1, 2) } : {}), ...(p.headPitch ? { pitch: p.headPitch * c(hp) - (p.chestPitch ? p.chestPitch * c(cp) : p.pitch * c(0.93)) } : {}) };
   },
 };
 

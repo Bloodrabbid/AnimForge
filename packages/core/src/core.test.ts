@@ -1571,3 +1571,25 @@ test("wing-flap: пауза вверху, гребок вбок и крен пе
   close(mx, 20, 1e-3, "±20°");
   assert.equal(ev({}, 2, 0.3).roll, undefined, "по умолчанию крена нет");
 });
+
+test("hover Ghost Master: нырок банши несимметричный, голова отстаёт на 0.37 цикла, руки-противовес в противофазе", () => {
+  const def = RECIPES.hover;
+  const lib = JSON.parse(readFileSync(new URL("../../../library/presets/hover.json", import.meta.url), "utf8"));
+  const pre = (name: string) => withDefaults(def, lib.presets.find((x: any) => x.name === name).params);
+  const dive = pre("gm-banshee-dive"), T = dive.period;
+  const up = (t: number) => def.evaluate({ ...dive, role: "pelvis" }, 0, 1, t, { height: 1 }).move_up!;
+  let lo = 0, hi = 0; for (let k = 0; k < 2000; k++) { const t = (k / 2000) * T; if (up(t) < up(lo)) lo = t; if (up(t) > up(hi)) hi = t; }
+  // провал быстрый (≈0.15 цикла от начала спуска), подъём вдвое дольше, оседание — почти полцикла
+  close(lo / T, 0.25, 0.03, "низ на 0.25 цикла");
+  close(hi / T, 0.57, 0.04, "верх на ≈0.55");
+  close(up(hi) - up(lo), 0.73 / 0.366 * 0.38, 0.02, "размах подъёма 0.73 м");
+  const sheet = pre("gm-sheet-ghost-idle");
+  const at = (role: string, i: number, t: number) => def.evaluate({ ...sheet, role }, i, 2, t, { height: 1 });
+  let hb = 0, hh = 0; for (let k = 0; k < 2000; k++) { const t = (k / 2000) * sheet.period; if (at("pelvis", 0, t).move_up! > at("pelvis", 0, hb).move_up!) hb = t; if ((at("head", 0, t).pitch ?? 0) + (at("chest", 0, t).pitch ?? 0) > (at("head", 0, hh).pitch ?? 0) + (at("chest", 0, hh).pitch ?? 0)) hh = t; }
+  close(hb / sheet.period, 0.5, 0.002, "верх подскока 0.5");
+  close(((hh - hb) / sheet.period + 1) % 1, 0.37, 0.003, "голова в мире отстаёт на 0.37");
+  close(at("arm", 0, hb + 0.49 * sheet.period).pitch!, 21, 1e-6, "плечо ±21 с пиком через 0.49");
+  close(at("arm", 1, hb).pitch!, 21 * 1.14, 1e-6, "локоть в противофазе");
+  assert.deepEqual(def.evaluate(withDefaults(def, { role: "arm" }), 0, 2, 0.3), {}, "без armCounter руки не трогаем");
+  close(def.evaluate(withDefaults(def, {}), 0, 1, 0.75 * withDefaults(def, {}).period, { height: 1 }).move_up!, withDefaults(def, {}).bob, 1e-9, "Witcher: верх на 0.75 как раньше");
+});
