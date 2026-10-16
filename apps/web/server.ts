@@ -1,16 +1,18 @@
 // Dev-сервер веб-интерфейса AnimForge: Vite (страница) + маленький API поверх тех же адаптеров, что у CLI.
 // Логики анимации здесь нет: проект читается через loadCtx, любое действие — call() из packages/cli/src/node.ts.
-import { copyFileSync, createReadStream, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, watch, writeFileSync, type FSWatcher } from "node:fs";
+import { copyFileSync, createReadStream, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, watch, writeFileSync, type FSWatcher } from "node:fs";
 import { NodeIO } from "@gltf-transform/core";
 import { tmpdir } from "node:os";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer as createVite } from "vite";
-import { buildRig, libRoles } from "../../packages/core/src/index.ts";
-import { RECIPES, ROOT, call, clipPacks, dryRun, exportFile, loadCtx, loadPresets, projectFile } from "../../packages/cli/src/node.ts";
+import { buildRig, clipSteps, libRoles } from "../../packages/core/src/index.ts";
+import { RECIPES, ROOT, call, clipPacks, dryRun, exportFile, findPreset, loadCtx, loadPresets, projectFile } from "../../packages/cli/src/node.ts";
+import { stickAnim } from "../../packages/cli/src/stickpreview.ts";
 
 let clipCache: unknown[] | undefined;
+const stickCache = new Map<string, string>();
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 5178);
@@ -249,6 +251,35 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
+    return;
+  }
+  if (req.method === "GET" && path === "/api/stick") {
+    // живое превью для карточки библиотеки: пресет (preset) или готовый клип (pack + take) на скелете модели проекта —
+    // шаги примерки на копии проекта, кадры суставов в 2D; кэш по проекту и движению
+    const dir = projectDir(url.searchParams.get("dir"));
+    const preset = url.searchParams.get("preset"), pack = url.searchParams.get("pack"), take = url.searchParams.get("take");
+    const key = `${dir}|${statSync(projectFile(dir)).mtimeMs}|${preset}|${pack}|${take}`;
+    let hit = stickCache.get(key);
+    if (!hit) {
+      hit = await serial(async () => {
+        const name = "__preview";
+        let steps: { name: string; args: Record<string, unknown> }[];
+        const ctx = await loadCtx(dir);
+        if (preset) {
+          const { recipe, preset: pr } = findPreset(preset);
+          const det = (await call(dir, "rig.detect", { write: false })) as { paws?: string[] };
+          steps = clipSteps({ recipe, preset: pr, name, chains: ctx.project.chains, paws: det.paws });
+        } else if (pack && take) steps = [{ name: "clip.import", args: { pack, take, as: name } }];
+        else throw new HttpError(400, "нужен preset или pack и take");
+        const r = await dryRun(dir, steps);
+        const clip = r.project.clips.find((c: { name: string }) => c.name === name)!;
+        return JSON.stringify(stickAnim(r.project, ctx.skeleton, clip));
+      });
+      if (stickCache.size > 400) stickCache.clear();
+      stickCache.set(key, hit);
+    }
+    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+    res.end(hit);
     return;
   }
   if (req.method === "GET" && path === "/api/pack") {

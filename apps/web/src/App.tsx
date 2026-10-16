@@ -516,7 +516,7 @@ export function App() {
         </div>
         <div className="tab-body">
           {leftTab === "clips" ? (
-            <ClipsPanel active={trial?.label ?? null} body={body?.body} onTry={tryClip} />
+            <ClipsPanel active={trial?.label ?? null} body={body?.body} onTry={tryClip} dir={DIR} />
           ) : leftTab === "library" || !advanced ? (
             <>
             {clip && (
@@ -524,7 +524,7 @@ export function App() {
                 <input type="checkbox" checked={overlayOn} onChange={(e) => setOverlayOn(e.target.checked)} /> поверх клипа «{(trial && overlayOn ? trial.prevClip : null) ?? clip.name}»
               </label>
             )}
-            <LibraryPanel library={library} chains={shown.chains} body={body?.body} active={trial?.label ?? null} onTry={(e) => tryOn(e)} />
+            <LibraryPanel library={library} chains={shown.chains} body={body?.body} active={trial?.label ?? null} onTry={(e) => tryOn(e)} dir={DIR} />
             </>
           ) : (
             <BoneTree skeleton={data.skeleton} chains={shown.chains} selected={selectedBone} onSelect={setSelectedBone} />

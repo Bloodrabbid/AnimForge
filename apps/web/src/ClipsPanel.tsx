@@ -2,11 +2,14 @@
 // «Применить» записывает клип со слоем основы «base». Поверх него библиотека добавляет рецепты (галочка «поверх»).
 import { useEffect, useMemo, useState } from "react";
 import { fetchClips, type ClipPackInfo } from "./api.ts";
+import { StickPopover, useStickHover } from "./StickPreview.tsx";
 
 interface Props {
   active: string | null;
   /** тип тела модели (rig.detect): по умолчанию показываются паки того же тела */
   body?: string;
+  /** проект — для живого превью на его скелете */
+  dir?: string;
   onTry(pack: ClipPackInfo, take: string): void;
 }
 
@@ -24,7 +27,8 @@ const bodyOf = (p: ClipPackInfo) => p.body ?? "biped";
 /** имя дубля без префиксов скелета («DogArmature|Idle» → «Idle») */
 export const takeLabel = (n: string) => n.replace(/^.*\|/, "").replace(/_/g, " ");
 
-export function ClipsPanel({ active, body, onTry }: Props) {
+export function ClipsPanel({ active, body, onTry, dir }: Props) {
+  const { hover, bind } = useStickHover();
   const [fitOnly, setFitOnly] = useState(true);
   const [packs, setPacks] = useState<ClipPackInfo[]>([]);
   const [q, setQ] = useState("");
@@ -63,7 +67,7 @@ export function ClipsPanel({ active, body, onTry }: Props) {
       <p className="muted clips-note">Свободные клипы (CC0 и мокап CMU) — основой клипа на вашей модели; поверх — рецепты из библиотеки.</p>
       <div className="cards">
         {shown.map(({ p, t }) => (
-          <button key={p.id + t.name} className={`card clip-card ${active === takeLabel(t.name) ? "active" : ""}`} onClick={() => onTry(p, t.name)} title={`${p.name} · ${p.author} · ${p.terms ?? p.license} · скелет: ${p.skeleton}`}>
+          <button key={p.id + t.name} className={`card clip-card ${active === takeLabel(t.name) ? "active" : ""}`} onClick={() => onTry(p, t.name)} title={`${p.name} · ${p.author} · ${p.terms ?? p.license} · скелет: ${p.skeleton}`} {...(dir ? bind(`/api/stick?${new URLSearchParams({ dir, pack: p.id, take: t.name })}`, `${takeLabel(t.name)} на вашей модели`) : {})}>
             <div className="card-body">
               <div className="card-title">{takeLabel(t.name)}</div>
               <div className="card-help">
@@ -78,6 +82,7 @@ export function ClipsPanel({ active, body, onTry }: Props) {
         ))}
         {shown.length === 0 && <p className="muted empty">{packs.length ? "Ничего не нашлось." : "Загрузка…"}</p>}
       </div>
+      <StickPopover hover={hover} />
     </div>
   );
 }

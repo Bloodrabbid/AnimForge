@@ -1,6 +1,7 @@
 // Библиотека пресетов: поиск, разделы по типу существа, карточки с кривой движения и происхождением.
 // Клик по карточке — примерка на свою модель (без записи на диск), «Применить» — команды ядра.
 import { useMemo, useState } from "react";
+import { StickPopover, useStickHover } from "./StickPreview.tsx";
 import { BODY_FIRST, CATEGORIES, RECIPES, missingChains, withDefaults } from "../../../packages/core/src/index.ts";
 export { CATEGORIES, chainsFor } from "../../../packages/core/src/index.ts";
 import type { LibPreset, LibRecipe } from "./api.ts";
@@ -31,9 +32,12 @@ interface Props {
   body?: string;
   active: string | null;
   onTry(e: Entry): void;
+  /** проект — для живого превью на его скелете */
+  dir?: string;
 }
 
-export function LibraryPanel({ library, chains, body, active, onTry }: Props) {
+export function LibraryPanel({ library, chains, body, active, onTry, dir }: Props) {
+  const { hover, bind } = useStickHover();
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string | null>(null);
   const [fitOnly, setFitOnly] = useState(true);
@@ -91,18 +95,19 @@ export function LibraryPanel({ library, chains, body, active, onTry }: Props) {
       </label>
       <div className="cards">
         {shown.map((e) => (
-          <Card key={e.preset.name} e={e} active={active === e.preset.name} onClick={() => onTry(e)} />
+          <Card key={e.preset.name} e={e} active={active === e.preset.name} onClick={() => onTry(e)} hover={dir && !e.missing.length ? bind(`/api/stick?${new URLSearchParams({ dir, preset: e.preset.name })}`, `${e.preset.name} на вашей модели`) : undefined} />
         ))}
         {shown.length === 0 && <p className="muted empty">Ничего не нашлось.</p>}
       </div>
+      <StickPopover hover={hover} />
     </div>
   );
 }
 
-function Card({ e, active, onClick }: { e: Entry; active: boolean; onClick(): void }) {
+function Card({ e, active, onClick, hover }: { e: Entry; active: boolean; onClick(): void; hover?: ReturnType<ReturnType<typeof useStickHover>["bind"]> }) {
   const src = sourceOf(e.preset);
   return (
-    <button className={`card ${active ? "active" : ""} ${e.missing.length ? "unfit" : ""}`} onClick={onClick} title={e.preset.help}>
+    <button className={`card ${active ? "active" : ""} ${e.missing.length ? "unfit" : ""}`} onClick={onClick} title={e.preset.help} {...hover}>
       <MiniCurve lib={e.lib} preset={e.preset} />
       <div className="card-body">
         <div className="card-title">{e.preset.name}</div>
