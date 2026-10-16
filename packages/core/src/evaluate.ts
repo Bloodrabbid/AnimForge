@@ -496,6 +496,66 @@ function applyInPlace(acc: Acc, rig: Rig, project: Project, clip: Clip, tClip: n
   }
 }
 
+// ── микродвижения (clip.micro) ───────────────────────────────────────────────────────────────────────────────
+/** Целочисленный хеш (Томас Ванг, 32 бита): одинаковый в TS и GDScript — случайность совпадает до бита. */
+export function hash32(x: number): number {
+  x = ((x ^ 61) ^ (x >>> 16)) >>> 0;
+  x = (x + ((x << 3) >>> 0)) >>> 0;
+  x = (x ^ (x >>> 4)) >>> 0;
+  x = Math.imul(x, 0x27d4eb2d) >>> 0;
+  return (x ^ (x >>> 15)) >>> 0;
+}
+/** Случайное 0…1 по зерну и трём номерам. */
+export const rand01 = (seed: number, a: number, b: number, c: number) => hash32((hash32((hash32((seed ^ 0x9e37) >>> 0) ^ a) >>> 0) ^ (b * 31 + c)) >>> 0) / 4294967296;
+
+/** Кости микродвижений и доля размаха: таз меньше, голова и плечи больше (на глаз — по живым стойкам мокапа). */
+export function microBones(project: Project): [string, number][] {
+  const out: [string, number][] = [];
+  const add = (b: string | undefined, k: number) => { if (b && !out.some(([x]) => x === b)) out.push([b, k]); };
+  const ch = project.chains;
+  add(ch.pelvis?.[0], 0.5);
+  for (const b of [...(ch.spine ?? []), ...(ch.chest ?? [])]) add(b, 0.5);
+  for (const b of ch.neck ?? []) add(b, 0.8);
+  add(ch.head?.[0], 1);
+  for (const s of ["l", "r"]) { const a = ch[`arm_${s}`] ?? []; const up = a.length >= 3 ? a.slice(1) : a; add(up[0], 1.2); add(up[1], 0.8); }
+  return out;
+}
+
+const MICRO_CH = ["pitch", "yaw", "bank"] as const;
+const MICRO_F = [1, 2.13, 4.37];
+const MICRO_A = [1, 0.5, 0.25];
+
+/** Шум кости по каналу в момент t: три синуса со случайными фазами и частотами, у петли — целое число волн за клип. */
+export function microNoise(clip: Clip, bone: number, ch: number, t: number): number {
+  const m = clip.micro!, seed = m.seed ?? 1, speed = m.speed ?? 0.4;
+  let v = 0;
+  for (let j = 0; j < 3; j++) {
+    let f = speed * MICRO_F[j] * (0.8 + 0.4 * rand01(seed, bone, ch, j + 10));
+    if (clip.loop && clip.duration > 0) f = Math.max(1, Math.round(f * clip.duration)) / clip.duration;
+    v += MICRO_A[j] * Math.sin(2 * Math.PI * (f * t + rand01(seed, bone, ch, j)));
+  }
+  return v / 1.75;
+}
+
+/** Кости, которые ведёт IK клипа: шум на них IK всё равно перебьёт, а у вытянутой руки — дёргал бы её кручение. */
+export function ikBones(rig: Rig, clip: Clip): Set<string> {
+  const out = new Set<string>();
+  for (const c of clip.constraints ?? []) {
+    if (c.type !== "ik" || c.muted || !rig.index.has(c.tip)) continue;
+    for (const i of ikChain(rig, rig.index.get(c.tip)!, c.length ?? 2, !!c.end)) out.add(rig.skel.nodes[i].name);
+  }
+  return out;
+}
+
+function applyMicro(acc: Acc, project: Project, clip: Clip, t: number) {
+  const amount = clip.micro!.amount ?? 1.5;
+  const ik = ikBones(acc.rig, clip);
+  microBones(project).forEach(([bone, k], i) => {
+    if (ik.has(bone)) return;
+    MICRO_CH.forEach((ch, c) => acc.add(bone, ch, amount * k * microNoise(clip, i, c, t), () => ({}) as Record<SemanticAxis, Vec3>));
+  });
+}
+
 /** Пары «левая ↔ правая» для зеркала: цепочки x_l ↔ x_r (и leg_l0 ↔ leg_r0) кость в кость, потом имена с метками
  * сторон (_l/_r, Left/Right, .L/.R, l_/r_), потом дети уже найденных пар — по порядку. Остальные — на оси тела. */
 export function mirrorPairs(project: Project, rig: Rig): Record<string, string> {
@@ -620,6 +680,7 @@ function primary(project: Project, rig: Rig, clip: Clip, t: number, opts: LiveOp
   clip = src;
   if (clip.travel) applyTravel(acc, rig, project, clip.travel);
   if (clip.inPlace?.length) applyInPlace(acc, rig, project, clip, tClip);
+  if (clip.micro) applyMicro(acc, project, clip, tClip);
   // ограничения — до постановки на пол: ноги встают на пол уже в разрешённой позе
   if (project.limits) acc.applyLimits();
   const g = clip.ground;

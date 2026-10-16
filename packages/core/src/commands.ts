@@ -3,7 +3,7 @@
 import { CHANNELS } from "./project.ts";
 import type { Channel, Clip, Constraint, ConstraintTarget, Interp, KeyLayer, Layer, PoseLayer, Project, RecipeLayer, Skeleton } from "./project.ts";
 import { RECIPES, withDefaults } from "./recipes.ts";
-import { addPoseDelta, buildRig, followBones, frameTimes, mirrorPairs, mirrorPose, motionAt, reach } from "./evaluate.ts";
+import { addPoseDelta, buildRig, followBones, frameTimes, microBones, mirrorPairs, mirrorPose, motionAt, reach } from "./evaluate.ts";
 import { LIMIT_AXES, boneAngles, limitFrame, type BoneLimit, type LimitAxis } from "./limits.ts";
 import { DEG, qaxis, qrot, vdot, vsub } from "./math.ts";
 import { bodyFrame } from "./evaluate.ts";
@@ -944,6 +944,31 @@ const defs: CommandDef[] = [
       for (const k of ["lag", "bounce", "loosen"] as const) if (a[k] != null) f[k] = +a[k];
       clip.follow = f;
       return { clip: clip.name, follow: f, chase: followBones(ctx.project) };
+    },
+  },
+  {
+    name: "clip.micro",
+    help: "Микродвижения: мелкие плавные случайные покачивания таза, спины, шеи, головы и рук поверх клипа — «живость» стойки, разговора, ожидания. amount — размах, ° (1.5); speed — частота, Гц (0.4); seed — зерно (1): другое зерно — другие движения, у двух персонажей с одной стойкой — не в унисон. У цикла шва нет. Без аргументов — убрать.",
+    args: {
+      clip: { type: "string", required: true, help: "клип" },
+      amount: { type: "number", help: "0…10 °" },
+      speed: { type: "number", help: "0.05…3 Гц" },
+      seed: { type: "number", help: "целое 0…2³¹" },
+    },
+    mutates: true,
+    run(ctx, a) {
+      const clip = clipOf(ctx, a.clip);
+      if (a.amount == null && a.speed == null && a.seed == null) {
+        delete clip.micro;
+        return { clip: clip.name, micro: null };
+      }
+      const rng = (k: string, lo: number, hi: number) => a[k] == null || (Number.isFinite(+a[k]) && +a[k] >= lo && +a[k] <= hi);
+      need(rng("amount", 0, 10) && rng("speed", 0.05, 3) && rng("seed", 0, 2 ** 31) && (a.seed == null || Number.isInteger(+a.seed)), "amount 0…10, speed 0.05…3, seed — целое 0…2³¹");
+      need(microBones(ctx.project).length, "нужны цепочки тела (rig.detect)");
+      const m = { ...clip.micro };
+      for (const k of ["amount", "speed", "seed"] as const) if (a[k] != null) m[k] = +a[k];
+      clip.micro = m;
+      return { clip: clip.name, micro: m, bones: microBones(ctx.project).map(([b]) => b) };
     },
   },
   {

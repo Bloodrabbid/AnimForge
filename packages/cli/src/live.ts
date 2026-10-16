@@ -97,6 +97,10 @@ export const SYNTHETIC_LAYERS: Clip = { ...SYNTHETIC, name: "synthetic_layers", 
 /** доля опоры: время слоёв ног перекраивается по плану (касание, отрыв) — у ходьбы 0.7, у её же бега 0.35 */
 export const SYNTHETIC_STANCE: Clip = { ...SYNTHETIC_TRAVEL, name: "synthetic_stance", travel: undefined, gait: { stance: 0.7 } };
 export const SYNTHETIC_STANCE_RUN: Clip = { ...SYNTHETIC_GAIT, name: "synthetic_stance_run", gait: { ...SYNTHETIC_GAIT.gait, stance: 0.35 } };
+/** микродвижения: цикл (частоты — целое число волн за клип) и разовый клип; зерно — своё */
+export const SYNTHETIC_MICRO: Clip = { ...SYNTHETIC_TRAVEL, name: "synthetic_micro", micro: { amount: 4, speed: 0.7, seed: 12345 } };
+export const SYNTHETIC_MICRO_IK: Clip = { ...SYNTHETIC, name: "synthetic_micro_ik", micro: { amount: 4, speed: 0.7, seed: 12345 } };
+export const SYNTHETIC_MICRO_ONCE: Clip = { ...SYNTHETIC, name: "synthetic_micro_once", loop: false, micro: { seed: 4000000000 } };
 export const SYNTHETIC_SOLO: Clip = { ...SYNTHETIC, name: "synthetic_solo", layers: [...SYNTHETIC.layers, { ...P2, solo: true, weight: 0.7 }] };
 
 /** Моменты сверки: края, середина и точки между кадрами (живой рецепт считается в любой момент, не по кадрам). */
@@ -113,7 +117,7 @@ export async function liveVerify(dirs?: string[]) {
     const syn = structuredClone(worker);
     syn.project.name = "worker-synthetic";
     syn.project.align = { arm_l: { to: "down", abduct: 8 } };
-    syn.project.clips = [SYNTHETIC, SYNTHETIC_TRAVEL, SYNTHETIC_GAIT, SYNTHETIC_SHAPE, SYNTHETIC_SHAPE_ONCE, SYNTHETIC_FOLLOW, SYNTHETIC_FOLLOW_ONCE, SYNTHETIC_UTIL, SYNTHETIC_UTIL_TRAVEL, SYNTHETIC_LAYERS, SYNTHETIC_SOLO, SYNTHETIC_STANCE, SYNTHETIC_STANCE_RUN];
+    syn.project.clips = [SYNTHETIC, SYNTHETIC_TRAVEL, SYNTHETIC_GAIT, SYNTHETIC_SHAPE, SYNTHETIC_SHAPE_ONCE, SYNTHETIC_FOLLOW, SYNTHETIC_FOLLOW_ONCE, SYNTHETIC_UTIL, SYNTHETIC_UTIL_TRAVEL, SYNTHETIC_LAYERS, SYNTHETIC_SOLO, SYNTHETIC_STANCE, SYNTHETIC_STANCE_RUN, SYNTHETIC_MICRO, SYNTHETIC_MICRO_ONCE, SYNTHETIC_MICRO_IK];
     ctxs.push(syn);
   }
   for (const ctx of ctxs) {

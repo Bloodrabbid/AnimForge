@@ -895,6 +895,81 @@ static func root_bones(rig: Rig) -> Array:
 	return out
 
 
+# ── микродвижения (clip.micro) — как applyMicro ядра; хеш целочисленный, совпадает с TS до бита ──────────────
+static func hash32(x: int) -> int:
+	x = x & 0xFFFFFFFF
+	x = ((x ^ 61) ^ (x >> 16)) & 0xFFFFFFFF
+	x = (x + ((x << 3) & 0xFFFFFFFF)) & 0xFFFFFFFF
+	x = (x ^ (x >> 4)) & 0xFFFFFFFF
+	x = (x * 0x27d4eb2d) & 0xFFFFFFFF
+	return (x ^ (x >> 15)) & 0xFFFFFFFF
+
+static func rand01(seed: int, a: int, b: int, c: int) -> float:
+	return float(hash32((hash32((hash32((seed ^ 0x9e37) & 0xFFFFFFFF) ^ a) & 0xFFFFFFFF) ^ (b * 31 + c)) & 0xFFFFFFFF)) / 4294967296.0
+
+static func micro_bones(rig: Rig) -> Array:
+	var out: Array = []
+	var names := {}
+	var add := func(b, k: float) -> void:
+		if b != null and not names.has(b):
+			names[b] = true
+			out.append([b, k])
+	var ch := rig.chains
+	if ch.has("pelvis") and not ch["pelvis"].is_empty():
+		add.call(ch["pelvis"][0], 0.5)
+	for b in ch.get("spine", []) + ch.get("chest", []):
+		add.call(b, 0.5)
+	for b in ch.get("neck", []):
+		add.call(b, 0.8)
+	if ch.has("head") and not ch["head"].is_empty():
+		add.call(ch["head"][0], 1.0)
+	for sd in ["l", "r"]:
+		var arm: Array = ch.get("arm_" + sd, [])
+		var up: Array = arm.slice(1) if arm.size() >= 3 else arm
+		if up.size() > 0:
+			add.call(up[0], 1.2)
+		if up.size() > 1:
+			add.call(up[1], 0.8)
+	return out
+
+const MICRO_CH := ["pitch", "yaw", "bank"]
+const MICRO_F := [1.0, 2.13, 4.37]
+const MICRO_A := [1.0, 0.5, 0.25]
+
+static func micro_noise(clip: Dictionary, bone: int, ch: int, t: float) -> float:
+	var m: Dictionary = clip["micro"]
+	var seed := int(m.get("seed", 1))
+	var speed := float(m.get("speed", 0.4))
+	var dur := float(clip["duration"])
+	var v := 0.0
+	for j in 3:
+		var f: float = speed * MICRO_F[j] * (0.8 + 0.4 * rand01(seed, bone, ch, j + 10))
+		if clip["loop"] and dur > 0:
+			f = max(1.0, roundf(f * dur)) / dur
+		v += MICRO_A[j] * sin(TAU * (f * t + rand01(seed, bone, ch, j)))
+	return v / 1.75
+
+# кости, которые ведёт IK клипа, — без шума (как ikBones ядра)
+static func ik_bones(rig: Rig, clip: Dictionary) -> Dictionary:
+	var out := {}
+	for c in clip.get("constraints", []) if clip.get("constraints") != null else []:
+		if c["type"] != "ik" or c.get("muted", false) or not rig.index.has(c["tip"]):
+			continue
+		var len: int = int(c["length"]) if c.get("length") != null else 2
+		for i in ik_chain(rig, rig.index[c["tip"]], len, c.get("end", false)):
+			out[rig.names[i]] = true
+	return out
+
+static func apply_micro(acc: Acc, rig: Rig, clip: Dictionary, t: float) -> void:
+	var amount := float(clip["micro"].get("amount", 1.5))
+	var bones := micro_bones(rig)
+	var ik := ik_bones(rig, clip)
+	for i in bones.size():
+		if ik.has(bones[i][0]):
+			continue
+		for c in 3:
+			acc.add(bones[i][0], MICRO_CH[c], amount * bones[i][1] * micro_noise(clip, i, c, t), func(): return {})
+
 static func apply_in_place(acc: Acc, rig: Rig, clip: Dictionary, t_clip: float) -> void:
 	var base := clip.duplicate()
 	for k in ["inPlace", "ground", "constraints"]:
@@ -1055,6 +1130,8 @@ static func primary(rig: Rig, clip: Dictionary, t: float, opts := {}) -> Acc:
 		apply_travel(acc, rig, trv)
 	if clip.get("inPlace") != null and not clip["inPlace"].is_empty():
 		apply_in_place(acc, rig, clip, t_clip)
+	if clip.get("micro") != null:
+		apply_micro(acc, rig, clip, t_clip)
 	if not rig.limits.is_empty():
 		acc.apply_limits()
 	var g = clip.get("ground")

@@ -2,7 +2,7 @@
 // Всё остальное (слои, ключи, цели, пределы, веса) — за «Расширенным». Основная работа идёт словами через агента,
 // здесь — посмотреть и поправить главное мышью.
 import { useEffect, useState } from "react";
-import { GAIT_STYLES, HAND_POSES, STYLE100, RECIPES, fingersOf, followBones, withDefaults, type Clip, type GaitStyle, type ParamSpec, type Project, type RecipeLayer, type Rig } from "../../../packages/core/src/index.ts";
+import { GAIT_STYLES, HAND_POSES, STYLE100, RECIPES, fingersOf, followBones, microBones, withDefaults, type Clip, type GaitStyle, type ParamSpec, type Project, type RecipeLayer, type Rig } from "../../../packages/core/src/index.ts";
 import { command, type Step } from "./api.ts";
 import { Icon } from "./Icon.tsx";
 
@@ -41,6 +41,7 @@ export function SimplePanel({ dir, project, clip, rig, readOnly, runMany }: Prop
       {!byRecipe.size && <p className="muted">У клипа нет рецептов с ручками — только ключи и позы. Они — в «Расширенном».</p>}
       {clip.loop && Object.keys(project.chains).some((c) => c.startsWith("leg_")) && <GaitKnobs clip={clip} readOnly={readOnly} runMany={runMany} />}
       {project.chains.leg_l && project.chains.leg_r && <StyleKnobs clip={clip} readOnly={readOnly} runMany={runMany} />}
+      {microBones(project).length > 0 && <MicroKnobs clip={clip} readOnly={readOnly} runMany={runMany} />}
       {followBones(project).length > 0 && <FollowKnobs clip={clip} readOnly={readOnly} runMany={runMany} />}
       {rig && (fingersOf(project, rig, "l") || fingersOf(project, rig, "r")) && <HandKnobs clip={clip} readOnly={readOnly} runMany={runMany} />}
       <Checks dir={dir} project={project} clip={clip} readOnly={readOnly} runMany={runMany} />
@@ -198,6 +199,52 @@ function FollowKnobs({ clip, readOnly, runMany }: { clip: Clip; readOnly?: boole
                 onKeyUp={() => drag[x.k] != null && set(x.k, +drag[x.k]!.toFixed(3))}
               />
               <span className="k-val">{`${+v.toFixed(2)}${x.unit ? ` ${x.unit}` : ""}`}</span>
+            </label>
+          );
+        })}
+    </section>
+  );
+}
+
+const MICRO: { k: "amount" | "speed"; name: string; def: number; min: number; max: number; unit: string; help: string }[] = [
+  { k: "amount", name: "размах", def: 1.5, min: 0, max: 10, unit: "°", help: "насколько покачиваются таз, спина, голова и руки" },
+  { k: "speed", name: "частота", def: 0.4, min: 0.05, max: 3, unit: "Гц", help: "как часто: 0.2 — сонно, 1 — нервно" },
+];
+
+/** Микродвижения (clip.micro): случайные плавные покачивания поверх клипа; зерно — свой рисунок движений. */
+function MicroKnobs({ clip, readOnly, runMany }: { clip: Clip; readOnly?: boolean; runMany: Props["runMany"] }) {
+  const m = clip.micro;
+  const [drag, setDrag] = useState<Partial<Record<"amount" | "speed", number>>>({});
+  const set = (args: Record<string, number>, label: string) => runMany([{ name: "clip.micro", args: { clip: clip.name, ...m, ...args } }], label).then(() => setDrag({}));
+  return (
+    <section className="knobs">
+      <h3>
+        Микродвижения <span className="muted">clip.micro</span>
+      </h3>
+      <div className="gait-styles">
+        {m ? (
+          <>
+            <button className="chip" disabled={readOnly} title="тот же размах и частота, другой рисунок" onClick={() => set({ seed: ((m.seed ?? 1) * 7 + 13) % 100000 }, "микродвижения: другое зерно")}>
+              другие · зерно {m.seed ?? 1}
+            </button>
+            <button className="chip" disabled={readOnly} onClick={() => runMany([{ name: "clip.micro", args: { clip: clip.name } }], "микродвижения выключены")}>
+              выключить
+            </button>
+          </>
+        ) : (
+          <button className="chip" disabled={readOnly} title="живость стойки: таз, спина, голова и руки чуть покачиваются" onClick={() => set({ amount: 1.5 }, "микродвижения включены")}>
+            включить
+          </button>
+        )}
+      </div>
+      {m &&
+        MICRO.map((x) => {
+          const v = drag[x.k] ?? m[x.k] ?? x.def;
+          return (
+            <label key={x.k} className="knob" title={x.help}>
+              <span className="k-name">{x.name}</span>
+              <input type="range" min={x.min} max={x.max} step={(x.max - x.min) / 100} value={v} disabled={readOnly} onChange={(e) => setDrag({ ...drag, [x.k]: Number(e.target.value) })} onPointerUp={() => drag[x.k] != null && set({ [x.k]: +drag[x.k]!.toFixed(3) }, `микродвижения: ${x.name}`)} onKeyUp={() => drag[x.k] != null && set({ [x.k]: +drag[x.k]!.toFixed(3) }, `микродвижения: ${x.name}`)} />
+              <span className="k-val">{`${+v.toFixed(2)} ${x.unit}`}</span>
             </label>
           );
         })}
