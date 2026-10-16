@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchClips, type ClipPackInfo } from "./api.ts";
 import { StickPopover, useStickHover } from "./StickPreview.tsx";
+import { norm, ruName, searchText, wordHit } from "./clipNames.ts";
 
 interface Props {
   active: string | null;
@@ -22,6 +23,7 @@ const KINDS: { id: string; title: string; re: RegExp }[] = [
 ];
 const kindOf = (n: string) => KINDS.find((k) => k.re.test(n))!.id;
 
+
 const BODY: Record<string, string> = { biped: "Люди", quadruped: "Четвероногие", other: "Прочие" };
 const bodyOf = (p: ClipPackInfo) => p.body ?? "biped";
 /** CC BY-NC: только некоммерческое — в игру на продажу нельзя */
@@ -38,17 +40,17 @@ export function ClipsPanel({ active, body, onTry, dir }: Props) {
   const [q, setQ] = useState("");
   const [kind, setKind] = useState<string | null>(null);
   useEffect(() => void fetchClips().then(setPacks).catch(() => setPacks([])), []);
-  const all = useMemo(() => packs.flatMap((p) => p.takes.filter((t) => !/tpose/i.test(t.name)).map((t) => ({ p, t, kind: kindOf(t.name) }))), [packs]);
-  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const all = useMemo(() => packs.flatMap((p) => p.takes.filter((t) => !/tpose/i.test(t.name)).map((t) => ({ p, t, kind: kindOf(t.name), ru: ruName(t.name), text: norm(searchText(t.name, p.name)) }))), [packs]);
+  const words = norm(q).split(/\s+/).filter(Boolean);
   // своё тело: двуногому — люди, четвероногому — звери; крылатым, рыбам и прочим — всё, что не люди
   const fits = (p: ClipPackInfo) => !body || (body === "biped" ? bodyOf(p) === "biped" : body === "quadruped" ? bodyOf(p) === "quadruped" : bodyOf(p) !== "biped");
   const pool = all.filter((x) => (!fitOnly || fits(x.p)) && (!sellable || !nonCommercial(x.p)));
-  const shown = pool.filter((x) => (!kind || (KINDS.some((k) => k.id === kind) ? x.kind === kind : bodyOf(x.p) === kind)) && words.every((w) => `${x.t.name} ${x.p.name}`.toLowerCase().includes(w)));
+  const shown = pool.filter((x) => (!kind || (KINDS.some((k) => k.id === kind) ? x.kind === kind : bodyOf(x.p) === kind)) && words.every((w) => wordHit(x.text, w)));
   const bodies = [...new Set(pool.map((x) => bodyOf(x.p)))];
   return (
     <div className="library clips-lib">
       <div className="lib-search">
-        <input placeholder="Поиск: walk, sword, zombie…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input placeholder="Поиск: зомби, поклон, бег назад, sword…" value={q} onChange={(e) => setQ(e.target.value)} />
         <span className="count">{shown.length}</span>
       </div>
       <div className="chips">
@@ -73,12 +75,12 @@ export function ClipsPanel({ active, body, onTry, dir }: Props) {
       </label>
       <p className="muted clips-note">Свободные клипы (CC0, мокап CMU, CC BY — с авторами в титрах) — основой клипа на вашей модели; поверх — рецепты из библиотеки. Метка «некоммерч.» — только для игр не на продажу.</p>
       <div className="cards">
-        {shown.map(({ p, t }) => (
+        {shown.map(({ p, t, ru }) => (
           <button key={p.id + t.name} className={`card clip-card ${active === takeLabel(t.name) ? "active" : ""}`} onClick={() => onTry(p, t.name)} title={`${p.name} · ${p.author} · ${p.terms ?? p.license} · скелет: ${p.skeleton}`} {...(dir ? bind(`/api/stick?${new URLSearchParams({ dir, pack: p.id, take: t.name })}`, `${takeLabel(t.name)} на вашей модели`) : {})}>
             <div className="card-body">
-              <div className="card-title">{takeLabel(t.name)}</div>
+              <div className="card-title">{ru}</div>
               <div className="card-help">
-                {t.duration.toFixed(2)} с{/loop/i.test(t.name) ? " · цикл" : ""}{/_RM$/.test(t.name) ? " · с ходом" : ""}
+                <span className="orig">{takeLabel(t.name)}</span> · {t.duration.toFixed(2)} с{/loop/i.test(t.name) ? " · цикл" : ""}{/_RM$/.test(t.name) ? " · с ходом" : ""}
               </div>
               <div className="card-tags">
                 <span className="src">{p.name.replace(/^[^·]*·\s*/, "")}</span>
