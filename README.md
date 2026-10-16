@@ -379,6 +379,7 @@ pnpm af export.directions --clip walk --verify true                    # и св
 - `thrust-trail`: тело отстаёт от тяги в невесомости (Breathedge, 9 клипов полёта) — по углу тяги (`angle`: 0 вперёд, 90 вправо) таз ложится вперёд на 26.6° или откидывается на 38°, кренится вбок на 22.5°, на диагоналях поворачивается на 44°, бёдра отстают. Статичная поза поверх `zero-g-float`; восемь пресетов `breathedge-thrust-f/fr/r/br/b/bl/l/fl` ложатся на восемь направлений.
 - `inspect-item`: осмотр предмета в руке (Breathedge, инструменты) — рука держит предмет перед собой, кисть проворачивает его на 163° вокруг оси предплечья, предплечье ходит на 57°, плечо на 20°; петля 1.67–3.17 с. Без кисти в цепочке проворот ложится на предплечье (у рабочего его режут пределы ±15°). Пресеты `breathedge-inspect-tool`, `-quick`, `-slow`.
 - `fp-aim-arms`: руки от первого лица за тангажом камеры (Breathedge aim offset) — плечо 0.66 тангажа вверх и 0.53 вниз, предплечье и кисть добавляют, вниз сильнее; с инструментом — только плечо. Статичная поза по `pitch`; пресеты-позы `breathedge-fp-look-up/down` и `breathedge-fp-tool-up/down` для aim offset в движке. Пальцы — `hand.pose`.
+- `tool-use`: действие инструментом (Breathedge) — кисть уходит к дальней точке в замеренный момент и возвращается туда же: `drill` (толчок к 0.33 с и удержание с дрожью), `scissors` («щёлк» к 0.43), `camera` (поднёс, подержал 0.6 с), `repair` (ровное ведение), `throw` (бросок за 0.17 с, событие `release`), `scrap` (замах лома и удар, звук `hit` через 0.04–0.07 с после пика). Событие `use` по замеру и `window_open` за 0.04 с до конца. Пресеты `breathedge-drill`, `-scissors`, `-camera`, `-repair`, `-throw`, `-scrap-hit`.
 - `charge-release`: силовая атака — замах, удержание с пружинящим корнем, выпуск двумя ударами (`witcher-power`).
 - События рецептов: `hit`, `whoosh`, `effort`, `trail_on/off`, `window_open/close`.
   Посмотреть их: `af clip.events --clip combo`. При экспорте они пишутся в extras анимации и в `<glb>.events.json`.
@@ -787,6 +788,7 @@ pnpm af model.autorig --project out/uploads/bot --file assets/model.glb --out as
 | `thrust-trail` | полёт в невесомости, джетпак, плавание: поза по направлению тяги | Breathedge: `breathedge-thrust-f` … `-fl` |
 | `inspect-item` | осмотреть предмет, инструмент, находку | Breathedge: `breathedge-inspect-tool`, `-quick`, `-slow` |
 | `fp-aim-arms` | руки от первого лица: позы aim offset вверх и вниз | Breathedge: `breathedge-fp-look-up/down`, `breathedge-fp-tool-up/down` |
+| `tool-use` | использовать предмет: бур, ножницы, камера, ремонт, бросок, удар | Breathedge: `breathedge-drill`, `-scissors`, `-camera`, `-repair`, `-throw`, `-scrap-hit` |
 | прочее | | `melee-strike`: `breathedge-guardian-hit`, `breathedge-fp-crowbar/jab`; `curl`: `haven-creature-breathe`, `breathedge-xeno-tail-walk/angry`; `jiggle`: `breathedge-cow-ragdoll-limb/tongue`; `blink`: `haven-toriko/daikon-blink`; `charge-release`: `gm-ghost-power`; твины камеры `breathedge-camera-hit/bump` |
 
 Шаблоны `template.make`: `quadruped`, `insect`, `spider`, `centipede`, `bird`, `ghost`, `plant`. Разборы, из которых взяты числа:

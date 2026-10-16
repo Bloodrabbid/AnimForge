@@ -331,7 +331,7 @@ test("библиотека: параметры пресетов есть в ре
   assert.deepEqual(problems, []);
 });
 
-import { QUAD as QUADT, glancePlan, periodic, strikePlan, strikePos, swingEase } from "./recipes.ts";
+import { QUAD as QUADT, TOOL, glancePlan, periodic, strikePlan, strikePos, swingEase } from "./recipes.ts";
 import { clipEvents } from "./evaluate.ts";
 
 test("взмах: пик скорости в доле a, края без скорости", () => {
@@ -1481,4 +1481,21 @@ test("fp-aim-arms: плечо 0.66 тангажа вверх и 0.53 вниз, �
   assert.ok(Math.abs(at(-90, 1)) > Math.abs(at(90, 1)) && Math.abs(at(-90, 2)) > Math.abs(at(90, 2)), "вниз сильнее");
   assert.deepEqual([at(90, 1, "tool"), at(90, 2, "tool")], [0, 0]);
   close(at(45, 0), at(90, 0) / 2, 1e-9, "линейно по тангажу");
+});
+
+test("tool-use: дальняя точка в замеренный момент, возврат в исходную, дрожь только у бура в удержании, замах лома", () => {
+  const def = RECIPES["tool-use"];
+  const sh = (kind: string, t: number, extra = {}) => def.evaluate(withDefaults(def, { kind, ...extra }), 0, 2, t).pitch!;
+  const far = (kind: string) => { const p = withDefaults(def, { kind }), L = def.length!(p); let b = 0; for (let k = 0; k <= 1000; k++) if (sh(kind, (k / 1000) * L, { tremor: 0 }) < sh(kind, b, { tremor: 0 })) b = (k / 1000) * L; return b; };
+  close(far("camera"), 0.53, 0.01, "камера");
+  close(far("throw"), 0.17, 0.01, "бросок");
+  close(far("scrap"), 0.23, 0.01, "лом");
+  for (const kind of Object.keys(TOOL)) { const p = withDefaults(def, { kind }); close(sh(kind, def.length!(p)), 0, 1e-12, `${kind}: вернулась`); }
+  assert.ok(sh("scrap", 0.1) > 0, "замах лома назад");
+  assert.notEqual(sh("drill", 0.5), sh("drill", 0.5, { tremor: 0 }), "дрожь в удержании");
+  assert.equal(sh("drill", 0.2), sh("drill", 0.2, { tremor: 0 }), "до удержания — без дрожи");
+  assert.equal(sh("camera", 0.8), sh("camera", 0.8, { tremor: 0 }), "у камеры дрожи нет");
+  const ev = def.events!(withDefaults(def, { kind: "scrap", speed: 2 }));
+  assert.deepEqual(ev, [{ t: 0.1945, name: "hit" }, { t: 0.46, name: "window_open" }]);
+  close(def.evaluate(withDefaults(def, { kind: "camera" }), 1, 2, 0.53).pitch!, 0, 1e-12, "в дальней точке локоть прям");
 });

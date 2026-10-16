@@ -287,3 +287,20 @@ test("zero-g-float на рабочем: висение проходит пров
   assert.ok(c.layers.length >= 4, "ноги и руки");
   assert.deepEqual(checkClip(ctx.project, ctx, await loadMesh(ctx), c, false).report.findings.map((f) => f.check), []);
 });
+
+test("tool-use на рабочем: все действия Breathedge без брака и с окном ввода перед концом", async () => {
+  const dir = copy("tool");
+  await smoothWeights(dir);
+  const lib = JSON.parse(readFileSync(join(ROOT, "library/presets/tool-use.json"), "utf8"));
+  const def = RECIPES["tool-use"];
+  for (const pr of lib.presets) {
+    await call(dir, "clip.add", { name: pr.name, duration: def.length!(withDefaults(def, pr.params)), loop: false });
+    await call(dir, "recipe.rig", { clip: pr.name, recipe: "tool-use", preset: pr.name });
+  }
+  const ctx = await loadCtx(dir), mesh = await loadMesh(ctx);
+  for (const pr of lib.presets) {
+    const c = ctx.project.clips.find((x) => x.name === pr.name)!;
+    assert.equal(c.layers.length, 1, pr.name);
+    assert.deepEqual(checkClip(ctx.project, ctx, mesh, c, false).report.findings.filter((f) => f.level === "fail").map((f) => f.check), [], pr.name);
+  }
+});

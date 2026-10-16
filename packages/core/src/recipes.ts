@@ -1339,9 +1339,44 @@ const fpAimArms: RecipeDef = {
   },
 };
 
-export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact, "idle-glance": idleGlance, startle, "scare-pose": scarePose, "zero-g-float": zeroGFloat, "power-down": powerDown, "head-look-peck": headLookPeck, "thrust-trail": thrustTrail, "inspect-item": inspectItem, "fp-aim-arms": fpAimArms };
+// ── действие инструментом (Breathedge §4: бур, ножницы, камера, ремонт, бросок, лом) ─────────────────────────────
+/** Ход кисти к дальней точке по ключам клипов: времена дальней точки, удержания и звука измерены, доли хода между — на глаз. */
+const TOOL: Record<string, { t: number[]; r: number[]; tremor: number; ev: [number, string][] }> = {"drill": {"t": [0, 0.33, 0.85, 1.0], "r": [0, 1, 1, 0], "tremor": 1, "ev": [[0.083, "use"]]}, "scissors": {"t": [0, 0.13, 0.3, 0.43, 0.7, 0.83], "r": [0, 0.4, 1, 0.45, 0.15, 0], "tremor": 0, "ev": [[0.26, "use"]]}, "camera": {"t": [0, 0.53, 1.13, 1.67], "r": [0, 1, 1, 0], "tremor": 0, "ev": [[0.075, "use"]]}, "repair": {"t": [0, 0.27, 0.67, 0.73, 1.0], "r": [0, 0.6, 1, 0.9, 0], "tremor": 0, "ev": [[0.159, "use"]]}, "throw": {"t": [0, 0.17, 0.4, 1.0], "r": [0, 1, 0.3, 0], "tremor": 0, "ev": [[0.17, "release"]]}, "scrap": {"t": [0, 0.1, 0.23, 0.47, 1.0], "r": [0, -0.4, 1, 0.5, 0], "tremor": 0, "ev": [[0.389, "hit"]]}};
+const toolUse: RecipeDef = {
+  name: "tool-use",
+  main: ["kind", "swing", "speed"],
+  roles: { arm: { chain: (side) => `arm_${side}` } },
+  help:
+    "Действие инструментом (Breathedge): кисть уходит к дальней точке и возвращается туда же, откуда начала. drill — толчок " +
+    "к 0.33 с и удержание с дрожью; scissors — «щёлк» к 0.43 с; camera — поднёс, подержал 0.6 с, опустил; repair — ровное ведение; " +
+    "throw — бросок за 0.17 с; scrap — замах лома и удар (звук через 0.04–0.07 с после пика). События use / hit / release и " +
+    "window_open за 0.04 с до конца. Времена измерены, углы руки — на глаз.",
+  params: {
+    kind: { type: "enum", default: "drill", options: Object.keys(TOOL), help: "какое действие" },
+    swing: { type: "number", default: -60, min: -150, max: 60, unit: "°", help: "плечо в дальней точке (минус — вперёд; на глаз)" },
+    bend: { type: "number", default: -50, min: -120, max: 0, unit: "°", help: "сгиб локтя посреди хода (на глаз)" },
+    tremor: { type: "number", default: 2, min: 0, max: 10, unit: "°", help: "дрожь в удержании у бура (0.3–0.4 м/с)" },
+    tremorHz: { type: "number", default: 12, min: 1, max: 30, unit: "Гц", help: "частота дрожи (на глаз)" },
+    speed: { type: "number", default: 1, min: 0.3, max: 3, help: "темп: 1 — как в игре" },
+  },
+  length: (p) => { const T = TOOL[p.kind].t; return +(T[T.length - 1] / p.speed).toFixed(3); },
+  evaluate(p, i, n, t) {
+    const K = TOOL[p.kind], u = t * p.speed, r = keyCurve(K.t, K.r, u);
+    const T = K.t, shake = K.tremor && u > T[1] && u < T[2] ? K.tremor * p.tremor * Math.sin(2 * Math.PI * p.tremorHz * (u - T[1])) : 0;
+    if (i === 0) return { pitch: p.swing * r + shake };
+    // локоть гнётся посреди хода и в замахе, прямой в дальней точке и в покое
+    if (i === 1) return { pitch: p.bend * (r >= 0 ? 4 * r * (1 - r) : -2 * r) };
+    return {};
+  },
+  events(p) {
+    const K = TOOL[p.kind], end = K.t[K.t.length - 1] / p.speed;
+    return [...K.ev.map(([t, name]) => ({ t: +(t / p.speed).toFixed(4), name })), { t: +(end - 0.04).toFixed(4), name: "window_open" }];
+  },
+};
 
-export { QUAD, STARTLE, glancePlan, emergeCurve, strikeCurve, flapProfile, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
+export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact, "idle-glance": idleGlance, startle, "scare-pose": scarePose, "zero-g-float": zeroGFloat, "power-down": powerDown, "head-look-peck": headLookPeck, "thrust-trail": thrustTrail, "inspect-item": inspectItem, "fp-aim-arms": fpAimArms, "tool-use": toolUse };
+
+export { QUAD, STARTLE, TOOL, glancePlan, emergeCurve, strikeCurve, flapProfile, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
 
 export function withDefaults(def: RecipeDef, params: Record<string, unknown>): Record<string, any> {
   const out: Record<string, any> = {};

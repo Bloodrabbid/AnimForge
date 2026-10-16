@@ -37,7 +37,7 @@ export const CATEGORIES: { id: string; title: string; recipes: string[] }[] = [
   { id: "wing", title: "Крылья и ласты", recipes: ["wing-flap"] },
   { id: "swim", title: "Плавание и хвосты", recipes: ["wave", "curl", "zero-g-float", "thrust-trail"] },
   { id: "hover", title: "Парение", recipes: ["hover", "scare-pose", "power-down"] },
-  { id: "fight", title: "Удары", recipes: ["melee-strike", "charge-release", "tentacle-strike", "body-ram"] },
+  { id: "fight", title: "Удары", recipes: ["melee-strike", "charge-release", "tentacle-strike", "body-ram", "tool-use"] },
   { id: "react", title: "Реакции", recipes: ["hit-react", "startle"] },
   { id: "emerge", title: "Появление", recipes: ["emerge"] },
   { id: "small", title: "Мелочи", recipes: ["blink", "jiggle", "tremble", "idle-glance", "head-look-peck", "inspect-item", "fp-aim-arms"] },
@@ -45,7 +45,7 @@ export const CATEGORIES: { id: string; title: string; recipes: string[] }[] = [
 export const categoryOf = (recipe: string) => CATEGORIES.find((c) => c.recipes.includes(recipe))?.id ?? "small";
 
 /** Рецепты на один раз (удар, появление) — клип не зациклен. */
-export const ONE_SHOT = new Set(["melee-strike", "charge-release", "tentacle-strike", "emerge", "body-ram", "hit-react", "startle", "scare-pose", "power-down"]);
+export const ONE_SHOT = new Set(["melee-strike", "charge-release", "tentacle-strike", "emerge", "body-ram", "hit-react", "startle", "scare-pose", "power-down", "tool-use"]);
 
 /** Цепочки, которые подходят рецепту без ролей, — в порядке предпочтения. */
 const CHAIN_PREF: Record<string, string[]> = {

@@ -6,7 +6,7 @@ extends RefCounted
 
 const RAD := PI / 180.0
 const SECONDARY := ["jiggle"]
-const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble", "hit-react", "idle-glance", "startle", "scare-pose", "zero-g-float", "power-down", "head-look-peck", "thrust-trail", "inspect-item", "fp-aim-arms"]
+const RECIPES := ["wave", "curl", "compass-step", "waddle-walk", "blink", "jiggle", "melee-strike", "charge-release", "quadruped-gait", "multileg-gait", "wing-flap", "hover", "tentacle-strike", "emerge", "body-ram", "tremble", "hit-react", "idle-glance", "startle", "scare-pose", "zero-g-float", "power-down", "head-look-peck", "thrust-trail", "inspect-item", "fp-aim-arms", "tool-use"]
 
 
 static func is_secondary(recipe: String) -> bool:
@@ -41,6 +41,7 @@ static func evaluate(recipe: String, p: Dictionary, i: int, n: int, t: float, in
 		"thrust-trail": return _thrust_trail(p, i)
 		"inspect-item": return _inspect_item(p, i, n, t)
 		"fp-aim-arms": return _fp_aim_arms(p, i)
+		"tool-use": return _tool_use(p, i, t)
 	push_error("AFRecipes: нет рецепта «%s»" % recipe)
 	return {}
 
@@ -55,6 +56,13 @@ static func events(recipe: String, p: Dictionary) -> Array:
 		"body-ram": return _ram_events(p)
 		"hit-react": return _react_events(p)
 		"power-down": return _power_events(p)
+		"tool-use":
+			var tk: Dictionary = TOOL[p["kind"]]
+			var tev := []
+			for e in tk["ev"]:
+				tev.append({"t": to_fixed(e[0] / p["speed"], 4), "name": e[1]})
+			tev.append({"t": to_fixed(tk["t"][tk["t"].size() - 1] / p["speed"] - 0.04, 4), "name": "window_open"})
+			return tev
 		"zero-g-float": return [{"t": to_fixed(0.45 * p["period"], 4), "name": "breath"}]
 		"scare-pose": return [{"t": to_fixed(_scare_keys(p)[2], 4), "name": "manifest"}]
 		"startle":
@@ -97,6 +105,9 @@ static func length(recipe: String, p: Dictionary) -> float:
 				"out": return to_fixed(p["outT"], 3)
 				"hang": return to_fixed(p["bobPeriod"], 3)
 			return to_fixed(p["inT"] + p["hang"] + p["outT"], 3)
+		"tool-use":
+			var tt: Array = TOOL[p["kind"]]["t"]
+			return to_fixed(tt[tt.size() - 1] / p["speed"], 3)
 		"startle":
 			var st: Array = STARTLE[p["kind"]]["t"]
 			return to_fixed(st[st.size() - 1] / p["speed"], 3)
@@ -1082,3 +1093,22 @@ static func _fp_aim_arms(p: Dictionary, i: int) -> Dictionary:
 		elif i == 2:
 			k = p["handUp"] if up else p["handDown"]
 	return {"pitch": -k * p["pitch"]} if k != 0 else {}
+
+
+# ── tool-use ────────────────────────────────────────────────────────────────────────────────────────────────────
+const TOOL := {"drill": {"t": [0, 0.33, 0.85, 1.0], "r": [0, 1, 1, 0], "tremor": 1, "ev": [[0.083, "use"]]}, "scissors": {"t": [0, 0.13, 0.3, 0.43, 0.7, 0.83], "r": [0, 0.4, 1, 0.45, 0.15, 0], "tremor": 0, "ev": [[0.26, "use"]]}, "camera": {"t": [0, 0.53, 1.13, 1.67], "r": [0, 1, 1, 0], "tremor": 0, "ev": [[0.075, "use"]]}, "repair": {"t": [0, 0.27, 0.67, 0.73, 1.0], "r": [0, 0.6, 1, 0.9, 0], "tremor": 0, "ev": [[0.159, "use"]]}, "throw": {"t": [0, 0.17, 0.4, 1.0], "r": [0, 1, 0.3, 0], "tremor": 0, "ev": [[0.17, "release"]]}, "scrap": {"t": [0, 0.1, 0.23, 0.47, 1.0], "r": [0, -0.4, 1, 0.5, 0], "tremor": 0, "ev": [[0.389, "hit"]]}}
+
+
+static func _tool_use(p: Dictionary, i: int, t: float) -> Dictionary:
+	var K: Dictionary = TOOL[p["kind"]]
+	var T: Array = K["t"]
+	var u: float = t * p["speed"]
+	var r := _ram_curve(T, K["r"], u)
+	var shake := 0.0
+	if K["tremor"] != 0 and u > T[1] and u < T[2]:
+		shake = K["tremor"] * p["tremor"] * sin(2.0 * PI * p["tremorHz"] * (u - T[1]))
+	if i == 0:
+		return {"pitch": p["swing"] * r + shake}
+	if i == 1:
+		return {"pitch": p["bend"] * (4.0 * r * (1.0 - r) if r >= 0 else -2.0 * r)}
+	return {}

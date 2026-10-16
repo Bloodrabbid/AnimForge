@@ -1,0 +1,115 @@
+{
+ "recipe": "tool-use",
+ "presets": [
+  {
+   "name": "breathedge-drill",
+   "help": "Бур: толчок вперёд к 0.33 с и долгое удержание с дрожью; звук в начале.",
+   "params": {
+    "kind": "drill"
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/04-zero-g-first-person.md: §4 Инструменты, A_Drill_Use — дальняя точка 16 см в 0.33 с, дрожь 0.3–0.4 м/с, звук 0.083, 1.0 с — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: углы плеча и локтя, доли хода между замеренными точками"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-scissors",
+   "help": "Ножницы: подготовка, быстрый «щёлк» к 0.43 с, возврат.",
+   "params": {
+    "kind": "scissors",
+    "swing": -35
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/04-zero-g-first-person.md: §4 Инструменты, A_UseScissors — 0.83 с, дальняя 21 см в 0.30, пик 2.5 м/с в 0.43, звук 0.26 — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: углы плеча и локтя, доли хода между замеренными точками"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-camera",
+   "help": "Камера: поднёс к 0.53 с, подержал 0.6 с, опустил.",
+   "params": {
+    "kind": "camera",
+    "swing": -75,
+    "bend": -70
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/04-zero-g-first-person.md: §4 Инструменты, A_UseCamera — 1.67 с, дальняя 26 см в 0.53, звук 0.075 — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: углы плеча и локтя, доли хода между замеренными точками"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-repair",
+   "help": "Ремонтный инструмент: ровное ведение к 0.67 с и возврат.",
+   "params": {
+    "kind": "repair",
+    "swing": -45
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/04-zero-g-first-person.md: §4 Инструменты, A_RepairingTool_Use — 1.0 с, дальняя 24 см в 0.67, ведение 0.4 м/с, звук 0.159 — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: углы плеча и локтя, доли хода между замеренными точками"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-throw",
+   "help": "Бросок: рука выброшена за 0.17 с и пуста, событие release.",
+   "params": {
+    "kind": "throw",
+    "swing": -90,
+    "bend": -30
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/04-zero-g-first-person.md: §4 Инструменты, A_Bomb_Throw — дальняя 31 см в 0.17, пики 2.7/2.2 м/с — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: углы плеча и локтя, доли хода между замеренными точками"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-scrap-hit",
+   "help": "Удар ломом: замах, удар к 0.23 с, отдача; звук между двумя пиками скорости.",
+   "params": {
+    "kind": "scrap",
+    "swing": -80,
+    "bend": -60
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/04-zero-g-first-person.md: §4 Инструменты, A_Scrap_Use_1 — дальняя 69 см в 0.23, пики 5.2 м/с в 0.33/0.47, звук 0.389 — измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: углы плеча и локтя, доли хода между замеренными точками"
+    }
+   ]
+  }
+ ]
+}
