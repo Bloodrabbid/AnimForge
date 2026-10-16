@@ -169,8 +169,17 @@ static func _curl(p: Dictionary, i: int, n: int, t: float) -> Dictionary:
 	for j in n:
 		sum += pow(float(j + 1) / n, p["growth"])
 	var share: float = pow(float(i + 1) / n, p["growth"]) / sum
-	var k: float = 1 + p["pulse"] * sin(2.0 * PI * (t / p["period"]) + (p["phase"] * PI) / 180.0)
-	return {p["plane"]: p["angle"] * share * k}
+	# секции (в файлах до них этих параметров нет в схеме): три — границы 0.2 и 0.667 длины, две — пополам
+	var S := int(round(p.get("sections", 1.0)))
+	var sec := 0
+	if S >= 3:
+		sec = 0 if i < round(0.2 * n) else (1 if i < round(0.667 * n) else 2)
+	elif S == 2:
+		sec = 0 if i < round(0.5 * n) else 2
+	var amp: float = 1.0 if sec == 0 else (p.get("midAmp", 1.0) if sec == 1 else p.get("tipAmp", 1.0))
+	var sh: float = (float(sec) if S >= 3 else sec / 2.0) * p.get("sectionPhase", 0.0)
+	var k: float = 1 + p["pulse"] * sin(2.0 * PI * (t / p["period"]) + ((p["phase"] - sh) * PI) / 180.0)
+	return {p["plane"]: p["angle"] * share * k * amp}
 
 
 # ── compass-step: пружина по периодической цели ─────────────────────────────────────────────────────────────────

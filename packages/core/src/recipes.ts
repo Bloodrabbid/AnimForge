@@ -87,14 +87,22 @@ const curl: RecipeDef = {
     pulse: { type: "number", default: 0, min: 0, max: 1, help: "доля изгиба, которая пульсирует (0 — статично, 1 — от 0 до 2·angle)" },
     period: { type: "number", default: 3, min: 0.2, max: 10, unit: "с", help: "период пульсации" },
     phase: { type: "number", default: 0, min: 0, max: 360, unit: "°", help: "сдвиг пульсации (чтобы разнести несколько слоёв или существ)" },
+    sections: { type: "number", default: 1, min: 1, max: 3, help: "секции цепочки (хвост пришельца Breathedge — 3: звенья 0–2 / 3–9 / 10–14 из 15): внутри секции изгиб синхронный, у секций своя фаза и размах" },
+    sectionPhase: { type: "number", default: 120, min: -360, max: 360, unit: "°", help: "запаздывание пульсации от секции к секции, к кончику (на глаз 90–180)" },
+    midAmp: { type: "number", default: 1, min: 0, max: 3, help: "размах средней секции к корневой (хвост пришельца: 12–14° против 20–22° — 0.6)" },
+    tipAmp: { type: "number", default: 1, min: 0, max: 3, help: "размах концевой секции к корневой (16–18° — 0.8)" },
   },
   evaluate(p, i, n, t) {
     // веса костей ∝ ((i+1)/n)^growth, нормированы так, что сумма углов = angle
     let sum = 0;
     for (let j = 0; j < n; j++) sum += Math.pow((j + 1) / n, p.growth);
     const share = Math.pow((i + 1) / n, p.growth) / sum;
-    const k = 1 + p.pulse * Math.sin(2 * Math.PI * (t / p.period) + (p.phase * Math.PI) / 180);
-    return { [p.plane as SemanticAxis]: p.angle * share * k };
+    // секция кости: три — границы 0.2 и 0.667 длины (как 3 / 10 из 15 звеньев), две — пополам
+    const S = Math.round(p.sections ?? 1);
+    const sec = S >= 3 ? (i < Math.round(0.2 * n) ? 0 : i < Math.round(0.667 * n) ? 1 : 2) : S === 2 ? (i < Math.round(0.5 * n) ? 0 : 2) : 0;
+    const amp = sec === 0 ? 1 : sec === 1 ? (p.midAmp ?? 1) : (p.tipAmp ?? 1);
+    const k = 1 + p.pulse * Math.sin(2 * Math.PI * (t / p.period) + ((p.phase - (S >= 3 ? sec : sec / 2) * (p.sectionPhase ?? 0)) * Math.PI) / 180);
+    return { [p.plane as SemanticAxis]: p.angle * share * k * amp };
   },
 };
 

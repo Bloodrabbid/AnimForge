@@ -1430,3 +1430,18 @@ test("head-look-peck: шея S-образно в противофазе, кры�
   assert.equal(peaks, 2, "два подёргивания за цикл");
   close(v("neck", 0, 1), v("neck", 0, 0), 1e-9, "шов");
 });
+
+test("curl секциями: внутри секции синхронно, секции сдвинуты по фазе и со своим размахом; одна секция — как раньше", () => {
+  const def = RECIPES.curl;
+  const p = withDefaults(def, { angle: 150, growth: 0, pulse: 1, period: 1.8, sections: 3, sectionPhase: 120, midAmp: 0.6, tipAmp: 0.8 });
+  const v = (i: number, t: number, q = p) => def.evaluate(q, i, 15, t).vertical ?? def.evaluate(q, i, 15, t).lateral!;
+  const peakT = (i: number) => { let b = 0; for (let k = 0; k < 1800; k++) if (v(i, k / 1000) > v(i, b / 1000)) b = k; return b / 1000; };
+  // секции по 15 звеньям: 0–2, 3–9, 10–14
+  assert.deepEqual([0, 2, 3, 9, 10, 14].map((i) => +peakT(i).toFixed(3)), [0.45, 0.45, 0.45 + 0.6, 0.45 + 0.6, 0.45 + 1.2, 0.45 + 1.2].map((x) => +(x % 1.8).toFixed(3)), "пики: синхронно в секции, сдвиг 120° = 0.6 с");
+  const range = (i: number) => { let lo = 1e9, hi = -1e9; for (let k = 0; k < 180; k++) { const x = v(i, k / 100); lo = Math.min(lo, x); hi = Math.max(hi, x); } return hi - lo; };
+  close(range(5) / range(0), 0.6, 1e-3, "середина 0.6");
+  close(range(12) / range(0), 0.8, 1e-3, "кончик 0.8");
+  // без секций — прежняя формула
+  const old = withDefaults(def, { angle: 40, pulse: 0.5, growth: 1 });
+  close(v(7, 0.3, old), 40 * (8 / 15) / (16 * 15 / 2 / 15) * (1 + 0.5 * Math.sin(2 * Math.PI * (0.3 / old.period))), 1e-9, "одна секция");
+});
