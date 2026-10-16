@@ -67,4 +67,7 @@ test("на месте: ход таза вперёд за клип снимает
   // в середине — как исходный клип без хода (своё качание не тронуто)
   const mid = walk.duration * 0.37;
   assert.ok(Math.abs(fwd(ip, mid) - fwd(walk, mid)) < 1e-3);
+  // ровно в конце петли (последний кадр экспорта) и на втором круге — без прыжка назад на весь ход клипа
+  assert.ok(Math.abs(fwd(ip, walk.duration) - fwd(ip, 0)) < 2e-3, `в t = duration: ${(fwd(ip, walk.duration) - fwd(ip, 0)).toFixed(4)} м`);
+  assert.ok(Math.abs(fwd(ip, walk.duration + mid) - fwd(ip, mid)) < 1e-3, "второй круг — как первый");
 });

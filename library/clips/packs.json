@@ -505,6 +505,50 @@
       "skeleton": "двуногое, 22 костей",
       "body": "biped",
       "file": "bandai-action.glb"
+    },
+    {
+      "id": "100style-walk",
+      "name": "100STYLE · шаг вперёд, назад, вбок — 100 стилей",
+      "author": "Ian Mason, Sebastian Starke, Taku Komura",
+      "license": "CC BY 4.0",
+      "terms": "100STYLE: Ian Mason, Sebastian Starke, Taku Komura, «Real-Time Style Modelling of Human Locomotion via Feature-Wise Transformations and Local Motion Phases» (2022), doi 10.1145/3522618, zenodo.org/record/8127870. CC BY 4.0: можно и в коммерческую игру; в титрах — авторы, ссылка на лицензию и пометка, что данные изменены (из каждой записи вырезан кусок, развёрнут лицом вперёд, перенос на другой скелет). Взято с разрешения владельца AnimForge 16.10.2026.",
+      "url": "https://zenodo.org/record/8127870",
+      "skeleton": "двуногое, 23 костей",
+      "body": "biped",
+      "file": "100style-walk.glb"
+    },
+    {
+      "id": "100style-run",
+      "name": "100STYLE · бег вперёд, назад, вбок — 100 стилей",
+      "author": "Ian Mason, Sebastian Starke, Taku Komura",
+      "license": "CC BY 4.0",
+      "terms": "100STYLE: Ian Mason, Sebastian Starke, Taku Komura, «Real-Time Style Modelling of Human Locomotion via Feature-Wise Transformations and Local Motion Phases» (2022), doi 10.1145/3522618, zenodo.org/record/8127870. CC BY 4.0: можно и в коммерческую игру; в титрах — авторы, ссылка на лицензию и пометка, что данные изменены (из каждой записи вырезан кусок, развёрнут лицом вперёд, перенос на другой скелет). Взято с разрешения владельца AnimForge 16.10.2026.",
+      "url": "https://zenodo.org/record/8127870",
+      "skeleton": "двуногое, 23 костей",
+      "body": "biped",
+      "file": "100style-run.glb"
+    },
+    {
+      "id": "100style-idle",
+      "name": "100STYLE · стойки — 100 стилей",
+      "author": "Ian Mason, Sebastian Starke, Taku Komura",
+      "license": "CC BY 4.0",
+      "terms": "100STYLE: Ian Mason, Sebastian Starke, Taku Komura, «Real-Time Style Modelling of Human Locomotion via Feature-Wise Transformations and Local Motion Phases» (2022), doi 10.1145/3522618, zenodo.org/record/8127870. CC BY 4.0: можно и в коммерческую игру; в титрах — авторы, ссылка на лицензию и пометка, что данные изменены (из каждой записи вырезан кусок, развёрнут лицом вперёд, перенос на другой скелет). Взято с разрешения владельца AnimForge 16.10.2026.",
+      "url": "https://zenodo.org/record/8127870",
+      "skeleton": "двуногое, 23 костей",
+      "body": "biped",
+      "file": "100style-idle.glb"
+    },
+    {
+      "id": "100style-transitions",
+      "name": "100STYLE · переходы шаг ↔ бег — 100 стилей",
+      "author": "Ian Mason, Sebastian Starke, Taku Komura",
+      "license": "CC BY 4.0",
+      "terms": "100STYLE: Ian Mason, Sebastian Starke, Taku Komura, «Real-Time Style Modelling of Human Locomotion via Feature-Wise Transformations and Local Motion Phases» (2022), doi 10.1145/3522618, zenodo.org/record/8127870. CC BY 4.0: можно и в коммерческую игру; в титрах — авторы, ссылка на лицензию и пометка, что данные изменены (из каждой записи вырезан кусок, развёрнут лицом вперёд, перенос на другой скелет). Взято с разрешения владельца AnimForge 16.10.2026.",
+      "url": "https://zenodo.org/record/8127870",
+      "skeleton": "двуногое, 23 костей",
+      "body": "biped",
+      "file": "100style-transitions.glb"
     }
   ]
 }

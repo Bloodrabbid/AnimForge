@@ -482,7 +482,10 @@ function applyInPlace(acc: Acc, rig: Rig, project: Project, clip: Clip, tClip: n
     if (cache.size > 64) cache.clear();
     cache.set(key, drift);
   }
-  const u = clip.duration > 0 ? tClip / (clip.loop ? clip.duration * (1 - 1e-4) : clip.duration) : 0;
+  // у петли время заворачивается, как у слоёв: в t = duration поза — начальная, и снимать уже нечего (иначе последний
+  // кадр прыгает назад на весь ход клипа)
+  const tw = clip.loop && clip.duration > 0 ? ((tClip % clip.duration) + clip.duration) % clip.duration : tClip;
+  const u = clip.duration > 0 ? tw / (clip.loop ? clip.duration * (1 - 1e-4) : clip.duration) : 0;
   const axes = clip.inPlace!;
   for (const [bone, d] of drift) {
     let m = acc.move.get(bone);

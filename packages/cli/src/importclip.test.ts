@@ -30,10 +30,12 @@ test("clip.import своего glb на тот же скелет — кость 
     // цикл узнаётся по совпадению первого и последнего кадра: у удара, вернувшегося в стойку, — тоже цикл
     if (c.loop) assert.ok(m.loop, `${c.name}: цикл не узнан`);
     assert.ok(Math.abs(m.duration - c.duration) < 1e-4, `${c.name}: длина ${m.duration} ≠ ${c.duration}`);
-    // в кадрах запекания (между ними обе стороны — линейные ключи против живого расчёта)
+    // в кадрах запекания (между ними обе стороны — линейные ключи против живого расчёта); клип, который стал циклом
+    // при импорте (не был им в источнике), замкнут: остаток до 3° разложен по клипу — там допуск шире
+    const tol = !c.loop && m.loop ? 3e-3 : 5e-4;
     for (let t = 0; t < c.duration; t += 2 / 30) {
       const a = worldPose(rig, posePartsAt(ctx.project, rig, c, t)).T, b = worldPose(rig, posePartsAt(after.project, rig, m, t)).T;
-      a.forEach((v, i) => assert.ok(Math.hypot(...vsub(v, b[i])) < 5e-4, `${c.name} t=${t.toFixed(2)} ${rig.skel.nodes[i].name}: ${Math.hypot(...vsub(v, b[i])).toFixed(4)} м`));
+      a.forEach((v, i) => assert.ok(Math.hypot(...vsub(v, b[i])) < tol, `${c.name} t=${t.toFixed(2)} ${rig.skel.nodes[i].name}: ${Math.hypot(...vsub(v, b[i])).toFixed(4)} м`));
     }
   }
 });
@@ -203,4 +205,42 @@ test("KayKit: IK и контроллеры (kneeIK, IK-foot, control-…) — н
   const joints = sk.nodes.filter((n) => n.isJoint).map((n) => n.name);
   assert.ok(joints.includes("hand.l") && joints.includes("upperleg.r"));
   assert.deepEqual(joints.filter((n) => /ik|control/i.test(n)), []);
+});
+
+test("петля мокапа замыкается: остаток «начало − конец» разложен по клипу, ход вперёд не тронут", async () => {
+  const { closeLoop, qaxis } = await import("../../core/src/index.ts");
+  const ang = (a: number[], b: number[]) => 2 * Math.acos(Math.min(1, Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3]))) * (180 / Math.PI);
+  // кость поворачивается за клип на 30°, но запись кончилась на 10° дальше начала цикла; таз уехал на 1 м и поднялся на 4 см
+  const keys = [0, 0.5, 1].map((t) => ({ t, rot: { arm: qaxis([1, 0, 0], ((t * 10) * Math.PI) / 180) as [number, number, number, number] }, move: { pelvis: [0, 0.04 * t, t] as [number, number, number] } }));
+  const mid = { ...keys[1].rot.arm };
+  closeLoop(keys as any, [0, 1, 0]);
+  assert.ok(ang(keys[2].rot.arm, keys[0].rot.arm) < 0.01, `конец = начало: ${ang(keys[2].rot.arm, keys[0].rot.arm).toFixed(3)}°`);
+  assert.ok(Math.abs(ang(keys[1].rot.arm, Object.values(mid)) - 5) < 0.01, "середина поправлена на половину остатка");
+  assert.ok(Math.abs(keys[2].move.pelvis[1] - keys[0].move.pelvis[1]) < 1e-5, "по высоте — замкнуто");
+  assert.equal(keys[2].move.pelvis[2], 1, "ход вперёд — как был (in place или root motion решают дальше)");
+});
+
+test("запись из середины зала захвата (100STYLE) начинается над началом координат и идёт вперёд, высота — как есть", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "af-imp-"));
+  cpSync(join(ROOT, "projects/worker-demo"), dir, { recursive: true });
+  await NODE_COMMANDS["clip.import"].run(dir, { pack: "100style-walk", take: "walk_Akimbo_loop", as: "w" });
+  const { project, skeleton } = await loadCtx(dir);
+  const rig = buildRig(skeleton), up = bodyFrame(project).up, pi = rig.index.get(project.chains.pelvis[0])!;
+  const c = project.clips.find((x) => x.name === "w")!;
+  const flat = (v: Vec3) => vsub(v, up.map((u) => u * vdot(v, up)) as Vec3);
+  const at = (t: number) => worldPose(rig, posePartsAt(project, rig, c, t)).T[pi];
+  const d0 = Math.hypot(...flat(vsub(at(0), rig.worldT[pi])));
+  assert.ok(d0 < 1e-3, `таз в начале клипа в ${d0.toFixed(3)} м от покоя по горизонтали`);
+  const go = flat(vsub(at(c.duration * 0.9), at(0)));
+  assert.ok(Math.hypot(...go) > 0.5, "ход вперёд остался");
+  // на полу: поза покоя 100STYLE стоит тазом в нуле — без поправки клип висит на высоту таза
+  const under = (i: number): boolean => i === pi || (rig.parent[i] >= 0 && under(rig.parent[i]));
+  const js = skeleton.nodes.flatMap((n, i) => (n.isJoint && under(i) ? [i] : [])); // неподвижный корень над тазом — не в счёт
+  const lowRest = Math.min(...js.map((i) => vdot(rig.worldT[i], up)));
+  let low = Infinity;
+  for (let t = 0; t <= c.duration; t += c.duration / 20) { const T = worldPose(rig, posePartsAt(project, rig, c, t)).T; low = Math.min(low, ...js.map((i) => vdot(T[i], up))); }
+  const H = Math.max(...js.map((i) => vdot(rig.worldT[i], up))) - lowRest;
+  assert.ok(Math.abs(low - lowRest) < 0.05 * H, `нижний сустав за клип в ${(low - lowRest).toFixed(3)} м от пола покоя`);
+  // пак развёрнут лицом вперёд: ход идёт по «вперёд» модели, а не куда шёл актёр в зале
+  assert.ok(vdot(vnorm(go), bodyFrame(project).forward) > 0.97, `ход под углом ${((Math.acos(vdot(vnorm(go), bodyFrame(project).forward)) * 180) / Math.PI).toFixed(0)}° к «вперёд»`);
 });

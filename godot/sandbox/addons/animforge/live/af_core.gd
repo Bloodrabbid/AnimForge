@@ -918,7 +918,9 @@ static func apply_in_place(acc: Acc, rig: Rig, clip: Dictionary, t_clip: float) 
 			rig.lock_cache.clear()
 		rig.lock_cache[key] = drift
 	var dur := float(clip["duration"])
-	var u := t_clip / (dur * (1.0 - 1e-4) if clip["loop"] else dur) if dur > 0 else 0.0
+	# у петли время заворачивается, как у слоёв: в t = duration поза — начальная, снимать уже нечего
+	var tw := fposmod(t_clip, dur) if clip["loop"] and dur > 0 else t_clip
+	var u := tw / (dur * (1.0 - 1e-4) if clip["loop"] else dur) if dur > 0 else 0.0
 	var axes: Array = clip["inPlace"]
 	for bone in drift:
 		var d: Dictionary = drift[bone]

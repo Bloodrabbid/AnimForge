@@ -8,7 +8,7 @@
 // по направлению кости источника. Итог: W_цели = A·D·A⁻¹ · O · W_покоя_цели — направления костей в кадре совпадают
 // с источником при любых осях костей у обоих скелетов. Таз получает и сдвиг: путь таза источника в осях тела цели,
 // масштабированный по росту. Кости над тазом (root) остаются в покое: их поворот и ход уходят в таз.
-import { qinv, qmul, qnorm, qrot, vdot, vsub, type Quat, type Vec3 } from "./math.ts";
+import { qaxis, qinv, qmul, qnorm, qrot, vadd, vdot, vscale, vsub, type Quat, type Vec3 } from "./math.ts";
 
 const vlen = (v: Vec3) => Math.hypot(v[0], v[1], v[2]);
 import type { Clip, PoseKey, PoseLayer } from "./project.ts";
@@ -150,6 +150,32 @@ export function importPlan(src: Side, dst: Side, overrides: BoneOverrides = {}) 
 }
 
 /** Клип цели из кадров источника: слой поз «base» с ключом на кадр. */
+/** Замкнуть цикл записи: мокап никогда не сходится точно, остаток «начало − конец» каждой кости раскладывается по
+ * клипу долей t/T — последний кадр равен первому, шва нет, а за секунды движения поправка не видна. Ход таза вперёд и
+ * вбок не трогаем (это ход клипа: in place или root motion), только по высоте. */
+export function closeLoop(keys: PoseKey[], up: Vec3): void {
+  const a = keys[0], b = keys[keys.length - 1], T = b.t - a.t;
+  if (T <= 0) return;
+  const bones = new Set([...Object.keys(a.rot ?? {}), ...Object.keys(b.rot ?? {})]);
+  for (const bone of bones) {
+    const err = qnorm(qmul(qinv(b.rot?.[bone] ?? [0, 0, 0, 1]), a.rot?.[bone] ?? [0, 0, 0, 1]));
+    const e: Quat = err[3] < 0 ? (err.map((x) => -x) as Quat) : err;
+    const ang = 2 * Math.acos(Math.min(1, e[3]));
+    if (ang < 1e-7) continue;
+    const axis = vscale([e[0], e[1], e[2]], 1 / Math.sin(ang / 2));
+    for (const k of keys) {
+      const q = k.rot?.[bone] ?? ([0, 0, 0, 1] as Quat);
+      (k.rot ??= {})[bone] = qnorm(qmul(q, qaxis(axis, (ang * (k.t - a.t)) / T))).map(r5) as Quat;
+    }
+  }
+  for (const bone of Object.keys(a.move ?? {})) {
+    const m0 = a.move![bone], m1 = b.move?.[bone];
+    if (!m1) continue;
+    const dz = vdot(vsub(m0, m1), up);
+    for (const k of keys) if (k.move?.[bone]) k.move[bone] = vadd(k.move[bone], vscale(up, (dz * (k.t - a.t)) / T)).map(r5) as Vec3;
+  }
+}
+
 export function importClip(
   src: Side,
   dst: Side,
@@ -163,6 +189,18 @@ export function importClip(
   const sp = src.project.chains.pelvis?.[0], dp = dst.project.chains.pelvis?.[0];
   const spi = sp != null ? src.rig.index.get(sp) : undefined, dpi = dp != null ? dst.rig.index.get(dp) : undefined;
   const Ai = qinv(A);
+  // пол записи: у BVH, где поза покоя стоит тазом в нуле (100STYLE), высота таза зашита в ход корня, и клип висит на
+  // рост таза над полом. Нижний сустав за клип против нижнего в покое: разошлись больше чем на четверть роста — это не
+  // прыжок, а другой ноль; опускаем на пол покоя
+  const ups = bodyFrame(src.project).up;
+  const joints = src.rig.skel.nodes.flatMap((n, i) => (n.isJoint ? [i] : []));
+  const restLow = Math.min(...joints.map((i) => vdot(src.rig.worldT[i], ups)));
+  let low = Infinity;
+  for (let fi = 0; fi < frames.length; fi += Math.max(1, Math.floor(frames.length / 60))) {
+    const T = fk(src.rig, frames[fi]).T;
+    for (const i of joints) low = Math.min(low, vdot(T[i], ups));
+  }
+  const lift: Vec3 = Number.isFinite(low) && Math.abs(restLow - low) > 0.25 * ms.height ? vscale(ups, restLow - low) : [0, 0, 0];
   const keys: PoseKey[] = frames.map((f) => {
     const s = fk(src.rig, f);
     const W: Quat[] = [];
@@ -180,12 +218,21 @@ export function importClip(
       if (1 - Math.abs(d[3]) > 1e-9) (key.rot ??= {})[n.name] = d.map(r5) as Quat;
     });
     if (spi != null && dpi != null) {
-      const v = qrot(A, vsub(s.T[spi], src.rig.worldT[spi]));
+      const v = qrot(A, vadd(vsub(s.T[spi], src.rig.worldT[spi]), lift));
       key.move = { [dp!]: v.map((x) => r5(x * k)) as Vec3 };
     }
     return key;
   });
   const duration = frames.length ? frames[frames.length - 1].t : 0;
+  // запись начинается где угодно в зале захвата (100STYLE — в метрах от центра): клип — от начала координат по
+  // горизонтали, высота как есть
+  const up = bodyFrame(dst.project).up;
+  const m0 = dp ? keys[0]?.move?.[dp] : undefined;
+  if (m0) {
+    const h = vsub(m0, vscale(up, vdot(m0, up)));
+    for (const key of keys) if (key.move?.[dp!]) key.move[dp!] = vsub(key.move[dp!], h).map(r5) as Vec3;
+  }
+  if (opts.loop && keys.length > 2) closeLoop(keys, up);
   const layer: PoseLayer = { id: "base", type: "pose", keys, ...(opts.source ? { source: opts.source } : {}) };
   const clip: Clip = { name: opts.name, duration: r5(Math.max(duration, 1 / (opts.fps ?? 30))), fps: opts.fps ?? 30, loop: opts.loop, layers: [layer] };
   const mapped: Record<string, string> = {};
