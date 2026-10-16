@@ -1213,7 +1213,41 @@ const powerDown: RecipeDef = {
   },
 };
 
-export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact, "idle-glance": idleGlance, startle, "scare-pose": scarePose, "zero-g-float": zeroGFloat, "power-down": powerDown };
+// ── птица вертит головой (Breathedge A_ChickenKeeper / A_ChickenSafe1/2, 1.0 с) ──────────────────────────────────
+const headLookPeck: RecipeDef = {
+  name: "head-look-peck",
+  main: ["period", "head", "neck", "tail"],
+  roles: { neck: { chain: "neck", params: { role: "neck" } }, head: { chain: "head", params: { role: "head" } }, tail: { chain: "tail", params: { role: "tail" }, optional: true }, wing_l: { chain: "wing_l", params: { role: "wing" }, optional: true }, wing_r: { chain: "wing_r", params: { role: "wing" }, optional: true } },
+  help:
+    "Птица озирается (курица Breathedge): цикл 1 с, шея из двух звеньев в противофазе (±17.8 / ±22.2°) — S-образно, " +
+    "голова ±10.8° (спокойно) … ±30.2° (тревожно), хвостовые перья ±18.7°, крылья подёргиваются дважды за цикл (±5.8°). " +
+    "Амплитуды измерены; ось (рыскание) и фазы головы и хвоста к шее — на глаз.",
+  params: {
+    role: { type: "enum", default: "head", options: ["neck", "head", "tail", "wing"], help: "что крутит слой" },
+    period: { type: "number", default: 1, min: 0.2, max: 5, unit: "с", help: "цикл (1.0)" },
+    neck: { type: "number", default: 17.8, min: 0, max: 45, unit: "°", help: "первое звено шеи; второе — в противофазе с neck2" },
+    neck2: { type: "number", default: 22.2, min: 0, max: 45, unit: "°", help: "второе звено шеи (противофаза)" },
+    head: { type: "number", default: 10.8, min: 0, max: 60, unit: "°", help: "голова (Keeper 10.8, Safe1 30.2, Safe2 6.8)" },
+    headPhase: { type: "number", default: 0, min: -180, max: 180, unit: "°", help: "фаза головы к первому звену шеи (на глаз)" },
+    tail: { type: "number", default: 18.7, min: 0, max: 60, unit: "°", help: "хвост (перья ±18.7)" },
+    tailPhase: { type: "number", default: 180, min: -180, max: 180, unit: "°", help: "фаза хвоста — против головы (на глаз)" },
+    wing: { type: "number", default: 5.8, min: 0, max: 30, unit: "°", help: "подёргивание крыльев (ключицы ±5.8, A2/A1 0.82 — дважды за цикл)" },
+  },
+  evaluate(p, i, n, t) {
+    const w = (2 * Math.PI * t) / p.period, rad = Math.PI / 180;
+    switch (p.role) {
+      case "neck": return i === 0 ? { yaw: p.neck * Math.sin(w) } : i === 1 ? { yaw: -p.neck2 * Math.sin(w) } : {};
+      case "head": return i > 0 ? {} : { yaw: p.head * Math.sin(w + p.headPhase * rad) };
+      case "tail": return { yaw: (p.tail / Math.max(1, n)) * Math.sin(w + p.tailPhase * rad) };
+      // первая и вторая гармоники 1 : 0.82, нормированы к размаху ±wing
+      default: return i > 0 ? {} : { pitch: (p.wing * (Math.sin(w) + 0.82 * Math.sin(2 * w))) / WING_TWITCH_PEAK };
+    }
+  },
+};
+/** Пик |sin w + 0.82·sin 2w| — чтобы подёргивание крыльев было ровно ±wing. */
+const WING_TWITCH_PEAK = (() => { let m = 0; for (let k = 0; k < 20000; k++) { const w = (2 * Math.PI * k) / 20000; m = Math.max(m, Math.abs(Math.sin(w) + 0.82 * Math.sin(2 * w))); } return m; })();
+
+export const RECIPES: Record<string, RecipeDef> = { wave, curl, "compass-step": compassStep, "waddle-walk": waddleWalk, blink, jiggle, "melee-strike": meleeStrike, "charge-release": chargeRelease, "quadruped-gait": quadrupedGait, "multileg-gait": multilegGait, "wing-flap": wingFlap, hover, "tentacle-strike": tentacleStrike, emerge, "body-ram": bodyRam, tremble, "hit-react": hitReact, "idle-glance": idleGlance, startle, "scare-pose": scarePose, "zero-g-float": zeroGFloat, "power-down": powerDown, "head-look-peck": headLookPeck };
 
 export { QUAD, STARTLE, glancePlan, emergeCurve, strikeCurve, flapProfile, legProfile, multilegPhase, periodic, strikePlan, strikePos, swingEase };
 

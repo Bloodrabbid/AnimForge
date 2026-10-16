@@ -1410,3 +1410,23 @@ test("power-down: провал за 0.27 с (10→90 % около 0.17), вис�
   const limb = (i: number) => def.evaluate(withDefaults(def, { mode: "hang", role: "limb" }), i, 2, 0.5).pitch;
   assert.deepEqual([limb(0), limb(1), def.evaluate(withDefaults(def, { mode: "hang", role: "limb" }), 2, 2, 0.5).pitch], [60, 30, undefined]);
 });
+
+test("head-look-peck: шея S-образно в противофазе, крылья дёргаются дважды за цикл ровно на ±wing", () => {
+  const def = RECIPES["head-look-peck"];
+  const p = withDefaults(def, {});
+  const v = (role: string, i: number, t: number, ch = "yaw") => (def.evaluate({ ...p, role }, i, 2, t) as any)[ch] as number;
+  close(v("neck", 0, 0.25), 17.8, 1e-9, "первое звено");
+  close(v("neck", 1, 0.25), -22.2, 1e-9, "второе — в противофазе");
+  close(v("head", 0, 0.25), 10.8, 1e-9);
+  close(v("tail", 0, 0.25) * 2, -18.7, 1e-9, "хвост против головы, поровну на кости");
+  let max = 0, peaks = 0, prev = 0, prev2 = 0;
+  for (let k = 0; k <= 2000; k++) {
+    const x = v("wing", 0, k / 2000, "pitch");
+    max = Math.max(max, Math.abs(x));
+    if (k > 1 && prev > prev2 && prev > x) peaks++;
+    prev2 = prev; prev = x;
+  }
+  close(max, 5.8, 1e-3, "±5.8°");
+  assert.equal(peaks, 2, "два подёргивания за цикл");
+  close(v("neck", 0, 1), v("neck", 0, 0), 1e-9, "шов");
+});

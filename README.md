@@ -374,6 +374,7 @@ pnpm af export.directions --clip walk --verify true                    # и св
 - `scare-pose`: пугалка призрака (Ghost Master, 28 клипов `*_man`) — выход в страшную позу за `rise` (0.17–1.0 с) и удержание без возврата (в конце 0.73 пика), грудь в пике перелетает в 2.7–3.5 раза, замах корпуса (руки идут сразу в позу), событие `manifest` в пике для частиц. Пресеты `gm-boo-claws` (когти вперёд за 0.17 с), `gm-scare-median`, `gm-rear-up` (присед и «на дыбы»). Позу за один кадр (`pose-snap` из разбора) делают обычные ключи с интерполяцией `step`.
 - `zero-g-float`: висение в скафандре (Breathedge `A_Idle_Fly`, 4.03 с) по замеренным кривым curve20 — ноги педалируют (колено сгибается с бедром назад, сгиб медленный, разгиб быстрый), вторая нога 0.45 первой со сдвигом 167°, одна рука гребёт синусом, другая делает отмашку, корпус проворачивается звеньями в противофазе ±1–2°; событие `breath`. Средняя поза поджатых ног — на глаз, `lift` поднимает таз над полом предпросмотра. Пресет `breathedge-suit-idle`.
 - `power-down`: отключение и включение парящего робота (Breathedge, охранник) — за 0.27 с корпус проваливается на 0.2 роста и клонится на 31.5°, руки и голова обвисают и остаются; выключенный висит, покачиваясь на ±0.55 % роста за 2 с; за 0.33 с включается. `mode`: `in`, `hang` (петля), `out`, `full`; события `power_off` / `power_on`. Пресеты `breathedge-guardian-shutdown/off/dead-hang/on`.
+- `head-look-peck`: птица озирается (курица Breathedge, 1 с) — шея из двух звеньев в противофазе ±17.8 / ±22.2° (S-образно), голова ±10.8…30.2°, хвост ±18.7° против головы, крылья подёргиваются дважды за цикл ровно на ±5.8°. Пресеты `breathedge-chicken-keeper`, `-alert`, `-calm`.
 - `charge-release`: силовая атака — замах, удержание с пружинящим корнем, выпуск двумя ударами (`witcher-power`).
 - События рецептов: `hit`, `whoosh`, `effort`, `trail_on/off`, `window_open/close`.
   Посмотреть их: `af clip.events --clip combo`. При экспорте они пишутся в extras анимации и в `<glb>.events.json`.
@@ -778,6 +779,7 @@ pnpm af model.autorig --project out/uploads/bot --file assets/model.glb --out as
 | `scare-pose` | пугалки призраков и монстров: выйти в позу и держать | Ghost Master: `gm-boo-claws`, `gm-scare-median`, `gm-rear-up` |
 | `zero-g-float` | невесомость, плавание под водой на месте | Breathedge: `breathedge-suit-idle` |
 | `power-down` | роботы и механизмы: выключиться, повиснуть, включиться | Breathedge: `breathedge-guardian-shutdown`, `-off`, `-dead-hang`, `-on` |
+| `head-look-peck` | птицы и мелкие звери: вертит головой | Breathedge: `breathedge-chicken-keeper`, `-alert`, `-calm` |
 | прочее | | `melee-strike`: `breathedge-guardian-hit`, `breathedge-fp-crowbar/jab`; `curl`: `haven-creature-breathe`, `breathedge-xeno-tail-walk/angry`; `jiggle`: `breathedge-cow-ragdoll-limb/tongue`; `blink`: `haven-toriko/daikon-blink`; `charge-release`: `gm-ghost-power`; твины камеры `breathedge-camera-hit/bump` |
 
 Шаблоны `template.make`: `quadruped`, `insect`, `spider`, `centipede`, `bird`, `ghost`, `plant`. Разборы, из которых взяты числа:

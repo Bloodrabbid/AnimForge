@@ -1,0 +1,58 @@
+{
+ "recipe": "head-look-peck",
+ "presets": [
+  {
+   "name": "breathedge-chicken-keeper",
+   "help": "Курица на объекте вертит головой спокойно: голова ±10.8°.",
+   "params": {
+    "head": 10.8
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/03-creatures-robots.md: §4 Курица, A_ChickenKeeper — шея ±17.8/22.2 в противофазе, голова ±10.8, перья ±18.7, ключицы ±5.8 (A2/A1 0.82), измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: ось рыскания, фазы головы (0) и хвоста (180) к шее"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-chicken-alert",
+   "help": "Курица тревожно озирается: голова ±30.2°.",
+   "params": {
+    "head": 30.2
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/03-creatures-robots.md: §4 Курица, A_ChickenSafe1 — голова ±30.2, остальное как Keeper, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: ось рыскания, фазы головы (0) и хвоста (180) к шее"
+    }
+   ]
+  },
+  {
+   "name": "breathedge-chicken-calm",
+   "help": "Спокойнее: шея ±15…18°, голова ±6.8°.",
+   "params": {
+    "neck": 15,
+    "neck2": 18,
+    "head": 6.8
+   },
+   "provenance": [
+    {
+     "source": "research/breathedge",
+     "ref": "analysis/03-creatures-robots.md: §4 Курица, A_ChickenSafe2 — шея ±15…18, голова ±6.8, измерено"
+    },
+    {
+     "source": "hand-tuned",
+     "note": "на глаз: ось рыскания, фазы головы (0) и хвоста (180) к шее"
+    }
+   ]
+  }
+ ]
+}
