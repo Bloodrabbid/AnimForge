@@ -12,7 +12,8 @@
     "site": "tsx apps/web/build-site.ts",
     "site:check": "tsx apps/web/site-check.ts",
     "demo:video": "tsx apps/web/demo-video.ts",
-    "i18n:extract": "tsx apps/web/i18n/extract.ts"
+    "i18n:extract": "tsx apps/web/i18n/extract.ts",
+    "screens": "tsx apps/web/screenshots.ts"
   },
   "devDependencies": {
     "@babel/parser": "^8.0.7",

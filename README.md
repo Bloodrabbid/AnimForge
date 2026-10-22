@@ -8,6 +8,15 @@
 
 <sub>45 секунд; клик по картинке — то же видео в полном качестве (MP4). Записано скриптом: `pnpm site && pnpm demo:video`.</sub>
 
+### Что внутри
+
+<table>
+<tr><td width="50%"><a href="docs/screens/1-rig-hierarchy.png"><img src="docs/screens/1-rig-hierarchy.png" alt="Риг: каркас, скелет и все 53 кости, у каждой — её цепочка"></a><br><sub>Риг: каркас, скелет и все 53 кости, у каждой — её цепочка</sub></td><td width="50%"><a href="docs/screens/2-weight-paint.png"><img src="docs/screens/2-weight-paint.png" alt="Веса кожи кистью: красное — кость тянет кожу полностью"></a><br><sub>Веса кожи кистью: красное — кость тянет кожу полностью</sub></td></tr>
+<tr><td width="50%"><a href="docs/screens/3-layers-limb-curves.png"><img src="docs/screens/3-layers-limb-curves.png" alt="Ходьба из 11 слоёв; график: таз, ноги и руки — каждая своей фазой, полосы — опора"></a><br><sub>Ходьба из 11 слоёв; график: таз, ноги и руки — каждая своей фазой, полосы — опора</sub></td><td width="50%"><a href="docs/screens/4-bone-mapping.png"><img src="docs/screens/4-bone-mapping.png" alt="Перенос клипа на чужой скелет: 22 пары костей найдены сами"></a><br><sub>Перенос клипа на чужой скелет: 22 пары костей найдены сами</sub></td></tr>
+<tr><td width="50%"><a href="docs/screens/5-limb-trails.png"><img src="docs/screens/5-limb-trails.png" alt="Следы конечностей: траектория рук и ног за весь удар"></a><br><sub>Следы конечностей: траектория рук и ног за весь удар</sub></td><td width="50%"><a href="docs/screens/6-preset-preview.png"><img src="docs/screens/6-preset-preview.png" alt="Наведи на пресет — превью на скелете вашей модели"></a><br><sub>Наведи на пресет — превью на скелете вашей модели</sub></td></tr>
+<tr><td width="50%"><a href="docs/screens/7-rig-by-points.png"><img src="docs/screens/7-rig-by-points.png" alt="Скелет по 8 точкам на коже: подбородок, пах, запястья, локти, колени"></a><br><sub>Скелет по 8 точкам на коже: подбородок, пах, запястья, локти, колени</sub></td><td></td></tr>
+</table>
+
 Инструмент анимации под любую игру: рецепты с параметрами + ручной слой правок + клипы, экспорт в glTF, проверка в Godot.
 Одно ядро команд (`packages/core`) — его вызывают CLI, MCP и веб-интерфейс.
 
@@ -49,6 +58,7 @@ dev-сервер (`apps/web/routes.ts`), а диск ему заменяет ф�
 ```bash
 pnpm site          # собрать в out/site
 pnpm site:check    # проверить сборку в Chrome из подпапки /AnimForge/, как на GitHub Pages
+pnpm screens       # скриншоты для README (docs/screens); AF_LANG=en — английские
 ```
 
 Демо-модели: манекены-люди `human-demo` (открывается по умолчанию) и `human-female-demo` — Quaternius, Universal Animation Library, CC0; рабочий, робот Biped, рыба, змея, щупальце и четвероногое — наши шаблоны тел.

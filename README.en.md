@@ -8,6 +8,15 @@
 
 <sub>45 seconds; click the image for the same video in full quality (MP4). Recorded by a script: `pnpm site && pnpm demo:video`.</sub>
 
+### What's inside
+
+<table>
+<tr><td width="50%"><a href="docs/screens/en/1-rig-hierarchy.png"><img src="docs/screens/en/1-rig-hierarchy.png" alt="Rig: wireframe, skeleton and all 53 bones, each with its chain"></a><br><sub>Rig: wireframe, skeleton and all 53 bones, each with its chain</sub></td><td width="50%"><a href="docs/screens/en/2-weight-paint.png"><img src="docs/screens/en/2-weight-paint.png" alt="Skin weight painting: red — the bone fully drives the skin"></a><br><sub>Skin weight painting: red — the bone fully drives the skin</sub></td></tr>
+<tr><td width="50%"><a href="docs/screens/en/3-layers-limb-curves.png"><img src="docs/screens/en/3-layers-limb-curves.png" alt="A walk built from 11 layers; the graph shows pelvis, legs and arms each in its own phase, bars — foot contact"></a><br><sub>A walk built from 11 layers; the graph shows pelvis, legs and arms each in its own phase, bars — foot contact</sub></td><td width="50%"><a href="docs/screens/en/4-bone-mapping.png"><img src="docs/screens/en/4-bone-mapping.png" alt="Retargeting a clip to a different skeleton: 22 bone pairs matched automatically"></a><br><sub>Retargeting a clip to a different skeleton: 22 bone pairs matched automatically</sub></td></tr>
+<tr><td width="50%"><a href="docs/screens/en/5-limb-trails.png"><img src="docs/screens/en/5-limb-trails.png" alt="Limb trails: hand and foot paths over the whole strike"></a><br><sub>Limb trails: hand and foot paths over the whole strike</sub></td><td width="50%"><a href="docs/screens/en/6-preset-preview.png"><img src="docs/screens/en/6-preset-preview.png" alt="Hover a preset — preview on your model's skeleton"></a><br><sub>Hover a preset — preview on your model's skeleton</sub></td></tr>
+<tr><td width="50%"><a href="docs/screens/en/7-rig-by-points.png"><img src="docs/screens/en/7-rig-by-points.png" alt="Skeleton from 8 points on the skin: chin, groin, wrists, elbows, knees"></a><br><sub>Skeleton from 8 points on the skin: chin, groin, wrists, elbows, knees</sub></td><td></td></tr>
+</table>
+
 An animation tool for any game: parametric recipes + a hand-edit layer + clips, glTF export, verification in Godot.
 One command core (`packages/core`) — called by the CLI, MCP and the web UI.
 
@@ -49,6 +58,7 @@ Blender or Godot are needed only locally (`pnpm web`): FBX/OBJ/DAE import, auto-
 ```bash
 pnpm site          # build into out/site
 pnpm site:check    # check the build in Chrome from the /AnimForge/ subfolder, as on GitHub Pages
+pnpm screens       # README screenshots (docs/screens); AF_LANG=en for English ones
 ```
 
 Demo models: the human mannequins `human-demo` (opens by default) and `human-female-demo` — Quaternius, Universal Animation Library, CC0; the worker, the Biped robot, fish, snake, tentacle and quadruped are our own body templates.

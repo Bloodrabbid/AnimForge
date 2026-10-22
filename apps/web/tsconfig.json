@@ -12,5 +12,5 @@
     "noEmit": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "server.ts", "routes.ts", "build-site.ts", "site-check.ts", "demo-video.ts", "i18n/extract.ts", "vite.site.config.ts", "vite.sw.config.ts", "screenshot.ts", "vite.config.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "server.ts", "routes.ts", "build-site.ts", "site-check.ts", "demo-video.ts", "screenshots.ts", "i18n/extract.ts", "vite.site.config.ts", "vite.sw.config.ts", "screenshot.ts", "vite.config.ts"]
 }
