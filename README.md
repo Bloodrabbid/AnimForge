@@ -834,3 +834,9 @@ pnpm af model.autorig --project out/uploads/bot --file assets/model.glb --out as
 
 Шаблоны `template.make`: `quadruped`, `insect`, `spider`, `centipede`, `bird`, `ghost`, `plant`. Разборы, из которых взяты числа:
 контур «Исследование» (Witcher — главы 05–06, DREDGE — глава 04, TLJ, Biped и Tools Up! — главы 05), Haven (2020) — главы 04 и 06, Ghost Master (2003) — глава 05, Breathedge (2021) — глава 05. Разборы — в закрытом контуре, вне этого репозитория; в библиотеку попадают только числа и ссылки на главы. Диапазоны рецептов расширены под них: период `quadruped-gait` до 5 с, `waddle-walk` до 3 с, у `body-ram` замах до 5 с, бросок до 1.5, откат до 3.5.
+
+## Лицензия
+
+Код — MIT (`LICENSE`). Паки клипов в `library/clips/` — под своими лицензиями: CC0, CMU, CC BY 4.0, CC BY-NC 4.0.
+Автор, лицензия и источник каждого пака — в `library/clips/packs.json` и в карточке редактора. Паки CC BY-NC
+(Bandai Namco) — только для некоммерческого использования.
