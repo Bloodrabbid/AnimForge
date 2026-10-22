@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit && tsc -p apps/web/sw/tsconfig.json --noEmit",
     "mcp": "tsx packages/mcp/src/server.ts",
     "site": "tsx apps/web/build-site.ts",
-    "site:check": "tsx apps/web/site-check.ts"
+    "site:check": "tsx apps/web/site-check.ts",
+    "demo:video": "tsx apps/web/demo-video.ts"
   },
   "devDependencies": {
     "@gltf-transform/core": "^4.5.1",
