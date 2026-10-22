@@ -76,7 +76,7 @@ export function ClipsPanel({ active, body, onTry, dir }: Props) {
       <p className="muted clips-note">Свободные клипы (CC0, мокап CMU, CC BY — с авторами в титрах) — основой клипа на вашей модели; поверх — рецепты из библиотеки. Метка «некоммерч.» — только для игр не на продажу.</p>
       <div className="cards">
         {shown.map(({ p, t, ru }) => (
-          <button key={p.id + t.name} className={`card clip-card ${active === takeLabel(t.name) ? "active" : ""}`} onClick={() => onTry(p, t.name)} title={`${p.name} · ${p.author} · ${p.terms ?? p.license} · скелет: ${p.skeleton}`} {...(dir ? bind(`/api/stick?${new URLSearchParams({ dir, pack: p.id, take: t.name })}`, `${takeLabel(t.name)} на вашей модели`) : {})}>
+          <button key={p.id + t.name} className={`card clip-card ${active === takeLabel(t.name) ? "active" : ""}`} onClick={() => onTry(p, t.name)} title={`${p.name} · ${p.author} · ${p.terms ?? p.license} · скелет: ${p.skeleton}`} {...(dir ? bind(`api/stick?${new URLSearchParams({ dir, pack: p.id, take: t.name })}`, `${takeLabel(t.name)} на вашей модели`) : {})}>
             <div className="card-body">
               <div className="card-title">{ru}</div>
               <div className="card-help">

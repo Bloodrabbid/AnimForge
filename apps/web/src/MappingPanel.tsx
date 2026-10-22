@@ -25,7 +25,7 @@ export function MappingPanel({ dir, pack, initial, onApply, onClose }: { dir: st
   const [pick, setPick] = useState<number | null>(null);
   const [hot, setHot] = useState<{ side: "src" | "dst"; i: number } | null>(null);
   useEffect(() => {
-    fetch("/api/mapping", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dir, pack, map }) })
+    fetch("api/mapping", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dir, pack, map }) })
       .then((r) => r.json())
       .then((b) => (b.ok ? (setM(b), setErr(null)) : setErr(b.error)));
   }, [dir, pack, map]);

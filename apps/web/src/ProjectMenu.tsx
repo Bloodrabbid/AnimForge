@@ -24,7 +24,7 @@ export function ProjectMenu({ dir, close, say }: { dir: string; close(): void; s
   };
   return (
     <div className="project-menu">
-      <a className="menu-item" href={`/api/pack?${new URLSearchParams({ dir })}`} onClick={close} title="модель, клипы, пропы — одним файлом; открыть — перетащить в окно">
+      <a className="menu-item" href={`api/pack?${new URLSearchParams({ dir })}`} onClick={close} title="модель, клипы, пропы — одним файлом; открыть — перетащить в окно">
         Сохранить проект одним файлом (.afproj)
       </a>
       <div className="menu-sep" />

@@ -95,7 +95,7 @@ export function LibraryPanel({ library, chains, body, active, onTry, dir }: Prop
       </label>
       <div className="cards">
         {shown.map((e) => (
-          <Card key={e.preset.name} e={e} active={active === e.preset.name} onClick={() => onTry(e)} hover={dir && !e.missing.length ? bind(`/api/stick?${new URLSearchParams({ dir, preset: e.preset.name })}`, `${e.preset.name} на вашей модели`) : undefined} />
+          <Card key={e.preset.name} e={e} active={active === e.preset.name} onClick={() => onTry(e)} hover={dir && !e.missing.length ? bind(`api/stick?${new URLSearchParams({ dir, preset: e.preset.name })}`, `${e.preset.name} на вашей модели`) : undefined} />
         ))}
         {shown.length === 0 && <p className="muted empty">Ничего не нашлось.</p>}
       </div>

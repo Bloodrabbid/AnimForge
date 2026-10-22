@@ -20,6 +20,7 @@ import {
   uploadModel,
   saveWeights,
   autorigMarkers,
+  WEB,
 } from "./api.ts";
 import { WeightsPanel } from "./WeightsPanel.tsx";
 import { LimitsPanel } from "./LimitsPanel.tsx";
@@ -275,8 +276,8 @@ export function App() {
 
   /** Своя модель: сервер импортирует её через Blender, распознаёт скелет и создаёт проект — открываем его. */
   const startUpload = useCallback(async (file: File) => {
-    if (!/\.(glb|gltf|fbx|dae|afproj)$/i.test(file.name)) {
-      setUpload({ name: file.name, error: "Нужен файл .glb, .gltf (одним файлом), .fbx, .dae или проект .afproj" });
+    if (WEB ? !/\.(glb|afproj)$/i.test(file.name) : !/\.(glb|gltf|fbx|dae|afproj)$/i.test(file.name)) {
+      setUpload({ name: file.name, error: WEB ? "На сайте — .glb со скелетом или проект .afproj. FBX, DAE и авториг — в локальной версии (нужен Blender)" : "Нужен файл .glb, .gltf (одним файлом), .fbx, .dae или проект .afproj" });
       return;
     }
     setUpload({ name: file.name });
@@ -448,23 +449,35 @@ export function App() {
           {data.skeleton.nodes.filter((n) => n.isJoint).length} костей · {Object.keys(shown.chains).length} цепочек · {project!.clips.length} клипов
         </span>
         <div className="top-right">
-          <span className={`live ${live ? "on" : ""}`} title="сервер следит за animforge.json: правки агента через CLI видны сразу">
-            <span className="led" />
-            {live ? "синхронно с диском" : "нет связи с диском"}
-          </span>
+          {WEB ? (
+            <span className="live on" title="проекты и правки хранятся только в этом браузере; «Проект» → одним файлом — забрать с собой">
+              <span className="led" />
+              хранится в браузере
+            </span>
+          ) : (
+            <span className={`live ${live ? "on" : ""}`} title="сервер следит за animforge.json: правки агента через CLI видны сразу">
+              <span className="led" />
+              {live ? "синхронно с диском" : "нет связи с диском"}
+            </span>
+          )}
           <input
             ref={fileInput}
             type="file"
-            accept=".glb,.gltf,.fbx,.dae,.afproj"
+            accept={WEB ? ".glb,.afproj" : ".glb,.gltf,.fbx,.dae,.afproj"}
             hidden
             onChange={(e) => e.target.files?.[0] && startUpload(e.target.files[0])}
           />
-          <button className="btn outline" onClick={() => fileInput.current?.click()} title="модель (glb, fbx, dae) или проект .afproj; можно просто перетащить файл в окно">
+          <button className="btn outline" onClick={() => fileInput.current?.click()} title={WEB ? "модель .glb со скелетом или проект .afproj; можно просто перетащить файл в окно" : "модель (glb, fbx, dae) или проект .afproj; можно просто перетащить файл в окно"}>
             <Icon name="upload" /> Загрузить
           </button>
           <Menu label="Проект" title="проект одним файлом и автосохранение" align="right">
             {(close) => <ProjectMenu dir={DIR} close={close} say={say} />}
           </Menu>
+          {WEB && (
+            <a className="ghost" href="https://github.com/Bloodrabbid/AnimForge" target="_blank" rel="noreferrer" title="исходники и локальная версия с Blender: импорт FBX, авториг, FBX, рендер, Godot">
+              GitHub
+            </a>
+          )}
           <button className="ghost" onClick={() => setHelp((v) => !v)} title="горячие клавиши (?)">
             <Icon name="keyboard" />
           </button>
@@ -479,10 +492,10 @@ export function App() {
           <a className="btn accent" href={downloadUrl(DIR)} title="запечь все клипы в glb — для Godot, Blender, Unity, Unreal">
             <Icon name="download" /> Скачать GLB
           </a>
-          <Menu label="FBX" title="FBX с именами костей стандартного скелета — авто-ретаргет в движке" align="right">
+          <Menu label={WEB ? "Ещё" : "FBX"} title={WEB ? "восемь направлений из цикла; FBX — в локальной версии (нужен Blender)" : "FBX с именами костей стандартного скелета — авто-ретаргет в движке"} align="right">
             {(close) => (
               <>
-                {([
+                {!WEB && ([
                   ["Unreal (UE5 Manny: pelvis, thigh_l…)", { units: "unreal", names: "unreal" }],
                   ["Unity / Mixamo (mixamorig:Hips…)", { units: "unity", names: "mixamo" }],
                   ["Blender / Godot, свои имена", { units: "blender" }],
@@ -494,11 +507,11 @@ export function App() {
                 {clip?.loop && !clip.travel && Object.keys(project!.chains).some((c) => c.startsWith("leg_")) && (
                   <>
                     <div className="menu-sep" />
-                    {(["glb", "fbx"] as const).map((f) => (
+                    {(WEB ? (["glb"] as const) : (["glb", "fbx"] as const)).map((f) => (
                       <a
                         key={f}
                         className="menu-item"
-                        href={`/api/directions?${new URLSearchParams({ dir: DIR, clip: clip.name, format: f })}`}
+                        href={`api/directions?${new URLSearchParams({ dir: DIR, clip: clip.name, format: f })}`}
                         onClick={close}
                         title="8 направлений из этого цикла: по файлу на направление, общий файл и BlendSpace2D для Godot"
                       >
@@ -604,7 +617,7 @@ export function App() {
             onStatus={say}
             trails={trails}
             followCam={followCam}
-            props={(shown?.props ?? []).map((pr) => ({ id: pr.id, bone: pr.bone, url: `/api/prop?dir=${encodeURIComponent(DIR)}&id=${encodeURIComponent(pr.id)}&v=${encodeURIComponent(JSON.stringify(pr))}` }))}
+            props={(shown?.props ?? []).map((pr) => ({ id: pr.id, bone: pr.bone, url: `api/prop?dir=${encodeURIComponent(DIR)}&id=${encodeURIComponent(pr.id)}&v=${encodeURIComponent(JSON.stringify(pr))}` }))}
             onTrailTime={(v) => {
               setT(v);
               setPlaying(false);
@@ -989,7 +1002,7 @@ export function App() {
             {drag ? (
               <>
                 <h3>Отпустите, чтобы загрузить модель</h3>
-                <p className="muted">FBX, GLB, glTF или DAE со скелетом — любое тело: человек, зверь, паук, рыба</p>
+                <p className="muted">{WEB ? "GLB со скелетом — любое тело: человек, зверь, паук, рыба (FBX и авториг — в локальной версии)" : "FBX, GLB, glTF или DAE со скелетом — любое тело: человек, зверь, паук, рыба"}</p>
               </>
             ) : upload?.error ? (
               <>

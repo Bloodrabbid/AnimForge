@@ -7,14 +7,17 @@
     "test": "tsx --test packages/core/src/*.test.ts packages/cli/src/*.test.ts apps/web/src/*.test.ts && python3 -m unittest discover -s bridge/blender -p \"test_*.py\"",
     "web": "tsx apps/web/server.ts",
     "web:shot": "tsx apps/web/screenshot.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit",
-    "mcp": "tsx packages/mcp/src/server.ts"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit && tsc -p apps/web/sw/tsconfig.json --noEmit",
+    "mcp": "tsx packages/mcp/src/server.ts",
+    "site": "tsx apps/web/build-site.ts",
+    "site:check": "tsx apps/web/site-check.ts"
   },
   "devDependencies": {
     "@gltf-transform/core": "^4.5.1",
     "@gltf-transform/extensions": "4.5.1",
     "@gltf-transform/functions": "^4.5.1",
     "@types/node": "^26.6.4",
+    "playwright-core": "^1.64.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   },

@@ -8,14 +8,14 @@ export interface Loaded {
 }
 
 export async function fetchProject(dir: string): Promise<Loaded> {
-  const r = await fetch(`/api/project?dir=${encodeURIComponent(dir)}`);
+  const r = await fetch(`api/project?dir=${encodeURIComponent(dir)}`);
   const body = await r.json();
   if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
   return body;
 }
 
 export async function command<T = unknown>(dir: string, name: string, args: Record<string, unknown>): Promise<T> {
-  const r = await fetch("/api/command", {
+  const r = await fetch("api/command", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ dir, name, args }),
@@ -25,11 +25,18 @@ export async function command<T = unknown>(dir: string, name: string, args: Reco
   return body.result as T;
 }
 
-export const modelUrl = (dir: string, model: string) => `/api/model?dir=${encodeURIComponent(dir)}&m=${encodeURIComponent(model)}`;
+export const modelUrl = (dir: string, model: string) => `api/model?dir=${encodeURIComponent(dir)}&m=${encodeURIComponent(model)}`;
+
+/** Сайт (сборка для GitHub Pages): «сервер» — Service Worker в браузере, без Blender, Godot и слежения за диском. */
+export const WEB = import.meta.env.VITE_AF_WEB === "1";
 
 /** Подписка на изменения animforge.json на диске (в том числе от агента через CLI). */
 export function watchProject(dir: string, onChange: () => void, onState: (live: boolean) => void) {
-  const es = new EventSource(`/api/events?dir=${encodeURIComponent(dir)}`);
+  if (WEB) {
+    onState(true); // на сайте проект меняет только сама страница — ждать нечего
+    return () => {};
+  }
+  const es = new EventSource(`api/events?dir=${encodeURIComponent(dir)}`);
   es.addEventListener("hello", () => onState(true));
   es.addEventListener("change", () => onChange());
   es.onerror = () => onState(false);
@@ -48,7 +55,7 @@ export interface Step {
 
 /** Примерка: шаги на копии проекта; сервер возвращает получившийся проект и ничего не пишет. */
 export async function preview(dir: string, steps: Step[], project?: Project): Promise<Project> {
-  const r = await fetch("/api/preview", {
+  const r = await fetch("api/preview", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ dir, steps, project }),
@@ -71,14 +78,14 @@ export interface LibRecipe {
   presets: LibPreset[];
 }
 
-export const fetchLibrary = (): Promise<LibRecipe[]> => fetch("/api/library").then((r) => r.json());
-export const fetchProjects = (): Promise<string[]> => fetch("/api/projects").then((r) => r.json());
+export const fetchLibrary = (): Promise<LibRecipe[]> => fetch("api/library").then((r) => r.json());
+export const fetchProjects = (): Promise<string[]> => fetch("api/projects").then((r) => r.json());
 export const downloadUrl = (dir: string, opts: { format?: "fbx"; units?: string; names?: string } = {}) =>
-  `/api/download?${new URLSearchParams({ dir, ...opts })}`;
+  `api/download?${new URLSearchParams({ dir, ...opts })}`;
 
 /** Своя модель → новый проект в out/uploads (импорт через Blender и rig.detect на сервере). */
 export async function uploadModel(file: File): Promise<{ dir: string; body?: string }> {
-  const r = await fetch("/api/upload", { method: "POST", headers: { "x-filename": encodeURIComponent(file.name) }, body: file });
+  const r = await fetch("api/upload", { method: "POST", headers: { "x-filename": encodeURIComponent(file.name) }, body: file });
   const body = await r.json();
   if (!body.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
   return body;
@@ -86,7 +93,7 @@ export async function uploadModel(file: File): Promise<{ dir: string; body?: str
 
 /** Веса кожи из редактора → в glb модели (первый раз сервер сохранит исходник рядом). restore — вернуть исходные. */
 export async function saveWeights(dir: string, parts: unknown[] | null): Promise<void> {
-  const r = await fetch("/api/weights", {
+  const r = await fetch("api/weights", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(parts ? { dir, parts } : { dir, restore: true }),
@@ -107,11 +114,11 @@ export interface ClipPackInfo {
   body?: string;
   takes: { name: string; duration: number }[];
 }
-export const fetchClips = (): Promise<ClipPackInfo[]> => fetch("/api/clips").then((r) => r.json());
+export const fetchClips = (): Promise<ClipPackInfo[]> => fetch("api/clips").then((r) => r.json());
 
 /** Скелет заново по ручным точкам (координаты модели) — model.autorig с markers, затем rig.detect. */
 export async function autorigMarkers(dir: string, markers: Record<string, [number, number, number]>, count: number): Promise<{ log: string; body?: string }> {
-  const r = await fetch("/api/autorig", {
+  const r = await fetch("api/autorig", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ dir, markers, count }),

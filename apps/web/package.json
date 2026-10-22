@@ -7,11 +7,16 @@
   },
   "dependencies": {
     "@gltf-transform/core": "^4.5.1",
+    "buffer": "^6.0.3",
+    "events": "^3.3.0",
+    "memfs": "^4.80.0",
+    "path-browserify": "^1.0.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "three": "^0.180.0"
   },
   "devDependencies": {
+    "@types/path-browserify": "^1.0.3",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/three": "^0.180.0",
