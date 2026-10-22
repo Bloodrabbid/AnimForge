@@ -51,6 +51,8 @@ pnpm site          # собрать в out/site
 pnpm site:check    # проверить сборку в Chrome из подпапки /AnimForge/, как на GitHub Pages
 ```
 
+Демо-модели: манекены-люди `human-demo` (открывается по умолчанию) и `human-female-demo` — Quaternius, Universal Animation Library, CC0; рабочий, робот Biped, рыба, змея, щупальце и четвероногое — наши шаблоны тел.
+
 Выкладка — `.github/workflows/site.yml` при каждом пуше в master.
 ## make: от модели до файла одним вызовом
 

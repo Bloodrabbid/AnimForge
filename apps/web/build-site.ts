@@ -1,5 +1,6 @@
 // Сборка сайта в out/site: страница (vite.site.config.ts), Service Worker (vite.sw.config.ts) и данные.
-// Данные — только то, что лежит в git: библиотека рецептов, твинов и клипов, демо-проекты. Паки клипов — «ленивые».
+// Данные — только то, что лежит в git: библиотека рецептов, твинов и клипов, демо-проекты. Паки клипов и демо-проекты —
+// «ленивые»: качаются, когда нужны.
 //   pnpm site            — собрать;  pnpm site:serve — собрать и открыть локально как на GitHub Pages
 import { execFileSync } from "node:child_process";
 import { copyFileSync, mkdirSync, statSync, writeFileSync } from "node:fs";
@@ -20,7 +21,8 @@ const eager: string[] = [], lazy: string[] = [];
 for (const f of tracked) {
   mkdirSync(dirname(join(OUT, "data", f)), { recursive: true });
   copyFileSync(join(ROOT, f), join(OUT, "data", f));
-  (f.startsWith("library/clips/") && f.endsWith(".glb") ? lazy : eager).push(f);
+  // паки клипов и демо-проекты — по требованию: проект качается целиком, когда его открывают
+  (f.startsWith("projects/") || (f.startsWith("library/clips/") && f.endsWith(".glb")) ? lazy : eager).push(f);
 }
 // дубли паков заранее: иначе первый показ библиотеки клипов качал бы все паки ради имён
 writeFileSync(join(OUT, "data/library/clips/takes.json"), JSON.stringify(await clipTakes()));

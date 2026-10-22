@@ -51,6 +51,8 @@ pnpm site          # build into out/site
 pnpm site:check    # check the build in Chrome from the /AnimForge/ subfolder, as on GitHub Pages
 ```
 
+Demo models: the human mannequins `human-demo` (opens by default) and `human-female-demo` — Quaternius, Universal Animation Library, CC0; the worker, the Biped robot, fish, snake, tentacle and quadruped are our own body templates.
+
 Deployed by `.github/workflows/site.yml` on every push to master.
 ## make: from model to file in one call
 

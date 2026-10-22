@@ -100,6 +100,15 @@ env.ensure = async (abs) => {
   await loading.get(rel);
 };
 env.changed = save;
+// демо-проекты: папки из списка «по требованию»; открытый или правленный (восстановлен из IndexedDB) — уже на месте
+const lazyDirs = () => [...new Set(manifest.lazy.filter((f) => f.startsWith("projects/")).map((f) => f.split("/").slice(0, 2).join("/")))];
+env.projects = lazyDirs;
+const dirLoading = new Map<string, Promise<void>>();
+env.ensureDir = async (rel) => {
+  if (!lazyDirs().includes(rel) || existsSync(join(ROOT, rel, "animforge.json"))) return;
+  if (!dirLoading.has(rel)) dirLoading.set(rel, Promise.all(manifest.lazy.filter((f) => f.startsWith(rel + "/")).map(fetchInto)).then(() => {}).finally(() => dirLoading.delete(rel)));
+  await dirLoading.get(rel);
+};
 // своя модель без Blender: готовый glb со скелетом — как есть, остальное (FBX, OBJ, авториг) — только локально
 env.newProject = async (dir, file, name) => {
   const { call } = await import("../../../packages/cli/src/node.ts");

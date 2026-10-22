@@ -32,6 +32,10 @@ export const env = {
   /** новый проект из файла модели (на маке — project.new через Blender) */
   newProject: async (dir: string, file: string, name: string): Promise<{ detect?: { body?: string } }> =>
     (await call(dir, "project.new", { file, name })) as { detect?: { body?: string } },
+  /** проекты, которых ещё нет на «диске», но которые можно открыть (сайт докачивает демо-проекты по требованию) */
+  projects: (): string[] => [],
+  /** папка проекта нужна на «диске» целиком (сайт докачивает демо-проект при первом открытии) */
+  ensureDir: async (_rel: string): Promise<void> => {},
   /** проект изменился (сайт сохраняет его в хранилище браузера) */
   changed: async (_dir: string): Promise<void> => {},
 };
@@ -79,6 +83,9 @@ async function ensureSteps(steps: { name: string; args?: Record<string, any> }[]
 
 export async function handle(req: Req): Promise<Reply> {
   const { url } = req;
+  // проект из запроса (dir в адресе или в теле) — докачать, если это ещё не открытый демо-проект
+  const rawDir = url.searchParams.get("dir") ?? (req.body.length && req.body[0] === 123 ? (() => { try { return JSON.parse(new TextDecoder().decode(req.body)).dir; } catch { return undefined; } })() : undefined);
+  if (typeof rawDir === "string" && !rawDir.includes("..")) await env.ensureDir(rawDir.replace(/^\/+|\/+$/g, ""));
   const path = url.pathname.replace(/^.*\/api\//, "/api/");
   const q = (k: string) => url.searchParams.get(k);
   if (req.method === "GET" && path === "/api/project") {
@@ -229,7 +236,8 @@ export async function handle(req: Req): Promise<Reply> {
     };
     scan("projects", 1);
     scan("out", 2);
-    found.sort((a, b) => Number(b.startsWith("out/uploads/")) - Number(a.startsWith("out/uploads/"))); // свои модели — первыми
+    for (const d of env.projects()) if (!found.includes(d)) found.push(d);
+    found.sort((a, b) => Number(b.startsWith("out/uploads/")) - Number(a.startsWith("out/uploads/")) || (a < b ? -1 : 1)); // свои модели — первыми
     return json(200, found);
   }
   if (req.method === "GET" && path === "/api/download") {

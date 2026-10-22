@@ -44,7 +44,7 @@ import { Viewport, type Trail, type ViewCmd } from "./Viewport.tsx";
 import { GraphPanel, isShown, limbColor, useMotionGraph } from "./GraphPanel.tsx";
 
 const query = new URLSearchParams(location.search);
-const DIR = query.get("dir") ?? "projects/fish-demo";
+const DIR = query.get("dir") ?? "projects/human-demo"; // по умолчанию — манекен-человек Quaternius (CC0)
 const BODY_RU: Record<string, string> = { quadruped: "четвероногое", multileg: "многоногое", winged: "крылатое", biped: "двуногое", finned: "с ластами", other: "без ног" };
 
 export interface Status {
