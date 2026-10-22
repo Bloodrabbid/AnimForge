@@ -7,3 +7,6 @@ godot/verify/.godot/
 godot/*/.godot/
 __pycache__/
 .autosave/
+
+# контур «Исследование» — в закрытом репозитории Bloodrabbid/animforge-research (папка animforge-research), здесь — ссылка
+/research
