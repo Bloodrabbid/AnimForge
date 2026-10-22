@@ -34,6 +34,7 @@ import { LayersPanel } from "./LayersPanel.tsx";
 import { SimplePanel } from "./SimplePanel.tsx";
 import { LibraryPanel, chainsFor, sourceOf, type Entry } from "./LibraryPanel.tsx";
 import { ClipsPanel, takeLabel } from "./ClipsPanel.tsx";
+import { EN, setLang } from "./i18n/lang.ts";
 import { ProjectMenu } from "./ProjectMenu.tsx";
 import { MappingPanel, type BoneMap } from "./MappingPanel.tsx";
 import { MarkerPanel } from "./MarkerPanel.tsx";
@@ -473,6 +474,9 @@ export function App() {
           <Menu label="Проект" title="проект одним файлом и автосохранение" align="right">
             {(close) => <ProjectMenu dir={DIR} close={close} say={say} />}
           </Menu>
+          <button className="ghost" onClick={() => setLang(EN ? "ru" : "en")} title={EN ? "Переключить на русский" : "Switch to English"}>
+            {EN ? "RU" : "EN"}
+          </button>
           {WEB && (
             <a className="ghost" href="https://github.com/Bloodrabbid/AnimForge" target="_blank" rel="noreferrer" title="исходники и локальная версия с Blender: импорт FBX, авториг, FBX, рендер, Godot">
               GitHub

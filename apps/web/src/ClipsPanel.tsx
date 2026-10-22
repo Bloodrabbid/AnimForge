@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchClips, type ClipPackInfo } from "./api.ts";
 import { StickPopover, useStickHover } from "./StickPreview.tsx";
 import { norm, ruName, searchText, wordHit } from "./clipNames.ts";
+import { EN } from "./i18n/lang.ts";
 
 interface Props {
   active: string | null;
@@ -40,7 +41,7 @@ export function ClipsPanel({ active, body, onTry, dir }: Props) {
   const [q, setQ] = useState("");
   const [kind, setKind] = useState<string | null>(null);
   useEffect(() => void fetchClips().then(setPacks).catch(() => setPacks([])), []);
-  const all = useMemo(() => packs.flatMap((p) => p.takes.filter((t) => !/tpose/i.test(t.name)).map((t) => ({ p, t, kind: kindOf(t.name), ru: ruName(t.name), text: norm(searchText(t.name, p.name)) }))), [packs]);
+  const all = useMemo(() => packs.flatMap((p) => p.takes.filter((t) => !/tpose/i.test(t.name)).map((t) => ({ p, t, kind: kindOf(t.name), ru: EN ? takeLabel(t.name) : ruName(t.name), text: norm(searchText(t.name, p.name)) }))), [packs]);
   const words = norm(q).split(/\s+/).filter(Boolean);
   // своё тело: двуногому — люди, четвероногому — звери; крылатым, рыбам и прочим — всё, что не люди
   const fits = (p: ClipPackInfo) => !body || (body === "biped" ? bodyOf(p) === "biped" : body === "quadruped" ? bodyOf(p) === "quadruped" : bodyOf(p) !== "biped");

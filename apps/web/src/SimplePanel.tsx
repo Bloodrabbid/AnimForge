@@ -2,6 +2,8 @@
 // Всё остальное (слои, ключи, цели, пределы, веса) — за «Расширенным». Основная работа идёт словами через агента,
 // здесь — посмотреть и поправить главное мышью.
 import { useEffect, useState } from "react";
+import { EN, humanize } from "./i18n/lang.ts";
+import { t } from "./i18n/translate.ts";
 import { GAIT_STYLES, HAND_POSES, STYLE100, RECIPES, fingersOf, followBones, microBones, withDefaults, type Clip, type GaitStyle, type ParamSpec, type Project, type RecipeLayer, type Rig } from "../../../packages/core/src/index.ts";
 import { command, type Step } from "./api.ts";
 import { Icon } from "./Icon.tsx";
@@ -261,8 +263,8 @@ function StyleKnobs({ clip, readOnly, runMany }: { clip: Clip; readOnly?: boolea
   const [style, setStyle] = useState(cur?.[2] ?? "Zombie");
   const [from, setFrom] = useState(cur?.[1] ?? "walk");
   const [amount, setAmount] = useState(1);
-  const names = Object.entries(STYLE100).filter(([k]) => k !== "Neutral").sort((a, b) => a[1].localeCompare(b[1], "ru"));
-  const apply = (st = style, fr = from, am = amount) => runMany([{ name: "clip.style", args: { clip: clip.name, style: st, from: fr, amount: am } }], `стиль: ${STYLE100[st]}`);
+  const names = Object.entries(STYLE100).filter(([k]) => k !== "Neutral").map(([k, v]) => [k, EN ? humanize(k) : v] as const).sort((a, b) => a[1].localeCompare(b[1], EN ? "en" : "ru"));
+  const apply = (st = style, fr = from, am = amount) => runMany([{ name: "clip.style", args: { clip: clip.name, style: st, from: fr, amount: am } }], `стиль: ${EN ? humanize(st) : STYLE100[st]}`);
   return (
     <section className="knobs">
       <h3>
@@ -339,7 +341,7 @@ function HandKnobs({ clip, readOnly, runMany }: { clip: Clip; readOnly?: boolean
 
 /** Подпись ручки — начало подсказки («крен таза «вразвалку»»); если там формула или символ (ζ: 0.2…) — имя параметра. */
 const label = (k: string, spec: ParamSpec) => {
-  const h = spec.help.split(/[(,—:]/)[0].trim();
+  const h = t(spec.help).split(/[(,—:]/)[0].trim(); // на английском — начало переведённой подсказки
   return h.length >= 4 ? h : k;
 };
 

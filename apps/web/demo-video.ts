@@ -1,6 +1,7 @@
 // Демо-ролик возможностей: запись собранного сайта (out/site) в Chrome по сценарию, с подписями и курсором на странице.
-// Результат — docs/demo.mp4 (полный ролик) и docs/demo.gif (для README).
-//   pnpm site && pnpm demo:video
+// Результат — docs/demo.mp4 (полный ролик) и docs/demo.gif (для README); AF_LANG=en — английский интерфейс и подписи,
+// docs/demo-en.mp4 и docs/demo-en.gif (для README.en.md).
+//   pnpm site && pnpm demo:video && AF_LANG=en pnpm demo:video
 import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -8,6 +9,14 @@ import { tmpdir } from "node:os";
 import { extname, join, normalize } from "node:path";
 import { chromium, type Page } from "playwright-core";
 import { ROOT } from "../../packages/cli/src/node.ts";
+import { tr } from "./src/i18n/translate.ts";
+
+const EN = process.env.AF_LANG === "en";
+/** подпись на языке ролика */
+const L = (ru: string, en: string) => (EN ? en : ru);
+/** надпись интерфейса: на английском — как её покажет переводчик */
+const ui = (ru: string) => (EN ? tr(ru) ?? ru : ru);
+const SUFFIX = EN ? "-en" : "";
 
 const SITE = join(ROOT, "out/site");
 const TYPES: Record<string, string> = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".glb": "model/gltf-binary" };
@@ -85,7 +94,7 @@ async function card(html: string, ms: number) {
   await page.evaluate(() => { const c = document.getElementById("demo-card")!; c.style.opacity = "0"; setTimeout(() => c.remove(), 600); });
 }
 async function open(dir: string, extra = "") {
-  await page.goto(`${BASE}?dir=${dir}${extra}`);
+  await page.goto(`${BASE}?dir=${dir}${extra}&lang=${EN ? "en" : "ru"}`);
   await page.waitForFunction(() => document.body?.dataset.modelLoaded === "1", null, { timeout: 90000 });
   await wait(400);
 }
@@ -120,18 +129,18 @@ try {
   // прогрев: Service Worker и данные — до записи заставки
   await open("projects/worker-demo");
   recording = true;
-  await card(`AnimForge<p>Анимация любой 3D-модели — прямо в браузере<br>рецепты движений по замерам из настоящих игр</p>`, 3200);
+  await card(L(`AnimForge<p>Анимация любой 3D-модели — прямо в браузере<br>рецепты движений по замерам из настоящих игр</p>`, `AnimForge<p>Animate any 3D model — right in the browser<br>motion recipes measured from real games</p>`), 3200);
 
   // 1. библиотека и примерка
-  await caption("Библиотека: 222 пресета движений", "наведите — превью на вашем скелете, клик — примерка без записи");
+  await caption(L("Библиотека: 222 пресета движений", "Library: 222 motion presets"), L("наведите — превью на вашем скелете, клик — примерка без записи", "hover — preview on your skeleton, click — try it without saving"));
   await hover(".cards .card:nth-child(3)", 1600);
   await click(page.locator(".cards .card", { hasText: "toolsup-heavy" }));
   await wait(2600);
-  await click('button:has-text("Применить")');
+  await click(`button:has-text("${ui("Применить")}")`);
   await wait(800);
 
   // 2. ручки
-  await caption("Главные ручки: правка движения ползунками", "темп, крен, подскок — сразу на модели");
+  await caption(L("Главные ручки: правка движения ползунками", "Main controls: tune the motion with sliders"), L("темп, крен, подскок — сразу на модели", "tempo, roll, bounce — live on the model"));
   const sliders = page.locator('.k-row input[type="range"], label input[type="range"]');
   await slide(sliders.nth(1), 0.35, 0.85);
   await wait(1300);
@@ -139,41 +148,41 @@ try {
   await wait(1800);
 
   // 3. разные тела
-  await caption("Любое тело: рыба, змея, щупальце, четвероногое", "шаблоны тел и автоматический поиск цепочек скелета");
+  await caption(L("Любое тело: рыба, змея, щупальце, четвероногое", "Any body: fish, snake, tentacle, quadruped"), L("шаблоны тел и автоматический поиск цепочек скелета", "body templates and automatic skeleton chain detection"));
   await open("projects/fish-demo");
-  await caption("Любое тело: рыба, змея, щупальце, четвероногое", "волна по позвоночнику — рецепт wave");
+  await caption(L("Любое тело: рыба, змея, щупальце, четвероногое", "Any body: fish, snake, tentacle, quadruped"), L("волна по позвоночнику — рецепт wave", "a wave along the spine — the wave recipe"));
   await wait(2400);
   await open("projects/snake-demo");
-  await caption("Любое тело: рыба, змея, щупальце, четвероногое", "змея — тот же рецепт с другими пресетами");
+  await caption(L("Любое тело: рыба, змея, щупальце, четвероногое", "Any body: fish, snake, tentacle, quadruped"), L("змея — тот же рецепт с другими пресетами", "snake — same recipe, different presets"));
   await wait(2200);
   await open("projects/quadruped-demo");
-  await caption("Любое тело: рыба, змея, щупальце, четвероногое", "походка четвероногого: шаг и галоп");
+  await caption(L("Любое тело: рыба, змея, щупальце, четвероногое", "Any body: fish, snake, tentacle, quadruped"), L("походка четвероногого: шаг и галоп", "quadruped gait: walk and gallop"));
   await click('.clip-tabs button:has-text("gallop")');
   await wait(2600);
 
   // 4. паки клипов
   await open("projects/worker-demo", "&left=clips");
-  await caption("Паки готовых клипов: CC0, CMU, 100STYLE, Bandai", "перенос на любой скелет — автор и лицензия в карточке");
-  await click('input[placeholder^="Поиск: зомби"]');
+  await caption(L("Паки готовых клипов: CC0, CMU, 100STYLE, Bandai", "Ready-made clip packs: CC0, CMU, 100STYLE, Bandai"), L("перенос на любой скелет — автор и лицензия в карточке", "retargeted to any skeleton — author and license on every card"));
+  await click(".tab-body input[placeholder]");
   await page.keyboard.type("Dance_Loop", { delay: 70 });
   await wait(700);
   await click(page.locator(".clip-card", { hasText: "UAL" }).first().or(page.locator(".clip-card").first()));
   await page.waitForTimeout(3500);
-  await click('button:has-text("Применить")');
+  await click(`button:has-text("${ui("Применить")}")`);
   await wait(800);
 
   // 5. проверки
   await open("projects/worker-demo");
-  await caption("Автопроверки: пол, кожа, скольжение ног, рывки", "и починка одной кнопкой");
-  await click('section.checks button:has-text("Проверить")');
+  await caption(L("Автопроверки: пол, кожа, скольжение ног, рывки", "Auto-checks: floor, skin, foot sliding, pops"), L("и починка одной кнопкой", "and one-click fixes"));
+  await click(`section.checks button:has-text("${ui("Проверить")}")`);
   await wait(3200);
 
   // 6. выгрузка
-  await caption("Скачать GLB — в Godot, Blender, Unity, Unreal", "локальная версия: ещё FBX, авториг, аддон Godot с живыми рецептами");
-  await hover('a:has-text("Скачать GLB")', 2600);
+  await caption(L("Скачать GLB — в Godot, Blender, Unity, Unreal", "Download GLB — for Godot, Blender, Unity, Unreal"), L("локальная версия: ещё FBX, авториг, аддон Godot с живыми рецептами", "local version adds FBX, auto-rig and a Godot addon with live recipes"));
+  await hover(`a:has-text("${ui("Скачать GLB")}")`, 2600);
 
   await page.evaluate(() => document.getElementById("demo-cap")?.style.setProperty("opacity", "0"));
-  await page.evaluate(() => document.body.append(Object.assign(document.createElement("div"), { id: "demo-card", innerHTML: `<div>Попробовать<p>bloodrabbid.github.io/AnimForge<br>github.com/Bloodrabbid/AnimForge</p></div>` })));
+  await page.evaluate((t: string) => document.body.append(Object.assign(document.createElement("div"), { id: "demo-card", innerHTML: `<div>${t}<p>bloodrabbid.github.io/AnimForge<br>github.com/Bloodrabbid/AnimForge</p></div>` })), L("Попробовать", "Try it"));
   await wait(3500); // финальная заставка остаётся до конца ролика
 } finally {
   recording = false;
@@ -188,9 +197,9 @@ const ff = (args: string[]) => execFileSync("ffmpeg", ["-y", "-loglevel", "error
 // список для concat: каждый кадр держится до следующего, последний — полсекунды
 const list = frames.map((f, i) => `file '${f.file}'\nduration ${((frames[i + 1]?.ts ?? f.ts + 0.5) - f.ts).toFixed(4)}`).join("\n") + `\nfile '${frames.at(-1)!.file}'\n`;
 writeFileSync(join(tmp, "list.txt"), list);
-ff(["-f", "concat", "-safe", "0", "-i", join(tmp, "list.txt"), "-vf", "fps=30,format=yuv420p", "-c:v", "libx264", "-crf", "20", "-preset", "slow", "-movflags", "+faststart", join(out, "demo.mp4")]);
-ff(["-i", join(out, "demo.mp4"), "-vf", "fps=10,scale=880:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle", join(tmp, "demo.gif")]);
-execFileSync("gifsicle", ["-O3", "--lossy=60", join(tmp, "demo.gif"), "-o", join(out, "demo.gif")]);
+ff(["-f", "concat", "-safe", "0", "-i", join(tmp, "list.txt"), "-vf", "fps=30,format=yuv420p", "-c:v", "libx264", "-crf", "20", "-preset", "slow", "-movflags", "+faststart", join(out, `demo${SUFFIX}.mp4`)]);
+ff(["-i", join(out, `demo${SUFFIX}.mp4`), "-vf", "fps=10,scale=880:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle", join(tmp, `demo${SUFFIX}.gif`)]);
+execFileSync("gifsicle", ["-O3", "--lossy=60", join(tmp, `demo${SUFFIX}.gif`), "-o", join(out, `demo${SUFFIX}.gif`)]);
 rmSync(tmp, { recursive: true, force: true });
 const mb = (f: string) => (statSync(join(out, f)).size / 1e6).toFixed(1);
-console.log(`DEMO_OK docs/demo.mp4 ${mb("demo.mp4")} МБ, docs/demo.gif ${mb("demo.gif")} МБ`);
+console.log(`DEMO_OK docs/demo${SUFFIX}.mp4 ${mb(`demo${SUFFIX}.mp4`)} МБ, docs/demo${SUFFIX}.gif ${mb(`demo${SUFFIX}.gif`)} МБ`);

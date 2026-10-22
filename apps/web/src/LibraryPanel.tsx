@@ -1,13 +1,15 @@
 // Библиотека пресетов: поиск, разделы по типу существа, карточки с кривой движения и происхождением.
 // Клик по карточке — примерка на свою модель (без записи на диск), «Применить» — команды ядра.
 import { useMemo, useState } from "react";
+import { EN } from "./i18n/lang.ts";
+import { t } from "./i18n/translate.ts";
 import { StickPopover, useStickHover } from "./StickPreview.tsx";
 import { BODY_FIRST, CATEGORIES, RECIPES, missingChains, withDefaults } from "../../../packages/core/src/index.ts";
 export { CATEGORIES, chainsFor } from "../../../packages/core/src/index.ts";
 import type { LibPreset, LibRecipe } from "./api.ts";
 
 const SOURCES: Record<string, string> = {
-  "research/witcher": "Witcher 3",
+  "research/witcher": "The Witcher",
   "research/dredge": "DREDGE",
   "research/tlj": "Longest Journey",
   "research/toolsup": "Tools Up!",
@@ -57,7 +59,7 @@ export function LibraryPanel({ library, chains, body, active, onTry, dir }: Prop
     .filter((e) => !cat || e.category === cat)
     .filter((e) => !fitOnly || e.missing.length === 0)
     .filter((e) => {
-      const hay = `${e.preset.name} ${e.preset.help} ${e.lib.recipe} ${sourceOf(e.preset).join(" ")}`.toLowerCase();
+      const hay = `${e.preset.name} ${e.preset.help} ${EN ? t(e.preset.help) : ""} ${e.lib.recipe} ${sourceOf(e.preset).join(" ")}`.toLowerCase();
       return words.every((w) => hay.includes(w));
     });
   // сначала рецепты с ролями, которым скелета хватает: это движения именно для такого тела

@@ -60,6 +60,32 @@ try {
   console.log(`${p.includes("site-test") ? "✓" : "✗"} клипы после перезапуска: ${p.join(", ")}`);
   if (!p.includes("site-test") && !failed) failed = "сохранение в браузере";
   await page.screenshot({ path: join(ROOT, "out/site-check.png") });
+  // английский интерфейс: на экране (текст, title, placeholder) — ни одной русской строки, в том числе в «Расширенном»
+  const cyr = async () => page.evaluate(() => {
+    const out: string[] = [];
+    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      if (n.nodeType === 3) { if (/[а-яё]/i.test((n as Text).data)) out.push((n as Text).data.trim()); }
+      else for (const a of ["title", "placeholder"]) { const v = (n as Element).getAttribute(a); if (v && /[а-яё]/i.test(v)) out.push(v); }
+    }
+    return out;
+  });
+  const left = new Set<string>();
+  for (const dir of ["worker-demo", "fish-demo"]) {
+    await page.goto(`${base}?dir=projects/${dir}&lang=en`);
+    await page.waitForFunction(() => document.body?.dataset.modelLoaded === "1", null, { timeout: 60000 });
+    await page.waitForTimeout(800);
+    (await cyr()).forEach((x) => left.add(x));
+    await page.locator(".tabs button").nth(1).click();
+    await page.waitForTimeout(800);
+    (await cyr()).forEach((x) => left.add(x));
+    await page.locator("button.adv").click();
+    await page.waitForTimeout(800);
+    (await cyr()).forEach((x) => left.add(x));
+  }
+  console.log(`${left.size ? "✗" : "✓"} английский интерфейс: русских строк на экране ${left.size}${left.size ? " — " + [...left].slice(0, 3).join(" | ") : ""}`);
+  if (left.size && !failed) failed = "английский интерфейс";
+  await page.goto(`${base}?dir=projects/worker-demo&lang=ru`); // вернуть язык профиля
 } catch (e: any) {
   failed ||= String(e?.message ?? e).split("\n")[0];
 } finally {

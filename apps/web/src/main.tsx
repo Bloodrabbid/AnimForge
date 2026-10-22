@@ -1,6 +1,8 @@
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import { WEB } from "./api.ts";
+import { EN } from "./i18n/lang.ts";
+import { startTranslator } from "./i18n/translate.ts";
 import "./styles.css";
 
 /** Сайт: дождаться, пока Service Worker (sw/sw.ts) возьмёт страницу под себя, — до этого запросам api/ некому ответить. */
@@ -11,6 +13,7 @@ async function serviceWorker() {
   await new Promise<void>((ok) => navigator.serviceWorker.addEventListener("controllerchange", () => ok(), { once: true }));
 }
 
+if (EN) startTranslator(); // английский — перевод поверх русского интерфейса (i18n/translate.ts)
 const root = createRoot(document.getElementById("root")!);
 if (WEB) {
   root.render(<div className="boot">AnimForge загружается…</div>);

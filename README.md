@@ -1,5 +1,7 @@
 # AnimForge
 
+**Русский** · [English](README.en.md)
+
 **[▶ Открыть в браузере](https://bloodrabbid.github.io/AnimForge/)** — без установки: рецепты, паки клипов, правка, выгрузка GLB.
 
 [![Демо AnimForge: библиотека, ползунки, разные тела, паки клипов, проверки, выгрузка](docs/demo.gif)](docs/demo.mp4)
